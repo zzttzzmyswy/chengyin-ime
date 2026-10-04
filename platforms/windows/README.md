@@ -12,7 +12,8 @@
 
 ## 单文件安装与卸载
 
-交付一个离线 EXE：`chengyin-windows-x64-0.1.0-preview7-gnu.exe`。
+原生 Windows 构建交付一个离线 EXE：`chengyin-windows-x64-0.1.0-preview7-msvc.exe`。
+开发者的 MinGW 交叉构建文件以 `-gnu.exe` 结尾；同版不同工具链的负载不能相互修复覆盖。
 双击安装向导并接受 UAC；无需解压、PowerShell、Rust、额外运行库或联网下载。
 安装后的 DLL、说明和卸载程序由安装器管理，单文件指交付的安装包。
 
@@ -166,7 +167,9 @@ Wine 10 + Xvfb 的六个 CTest 覆盖原子词库导入、按键/UTF-16/候选�
 隔离用户词库、设置与学习写盘，防止依赖开发者设置；该 DLL 与故障 DLL 不进入安装包。
 
 安装器回归覆盖安装/修复/升级/回滚/卸载、文件校验、外来注册、占用 DLL、
-词库/设置/学习文件保留和旧 ZIP 布局迁移。原生 MSVC CI 已配置，尚未远程执行。
+词库/设置/学习文件保留和旧 ZIP 布局迁移。原生 MSVC 构建、六个 CTest 和隔离安装回归
+由 [GitHub Actions](https://github.com/zzttzzmyswy/myswyIm/actions/workflows/ci.yml) 执行，
+每次提交的实际结果见对应运行记录及源码 `docs/STATUS.md`。
 只有 x64 DLL；ARM64、32 位应用、安全模式、实际 WinUI/UWP、RDP、管理员应用
 仍待专门验收。核心零分配和 Linux 微基准不等同于 Windows 端到端延迟。
 

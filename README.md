@@ -28,11 +28,12 @@
 
 ## 安装和体验
 
-Windows 交付文件为 `chengyin-windows-x64-0.1.0-preview7-gnu.exe`，原生 MSVC 构建名以
-`-msvc.exe` 结尾。安装包自包含，不需要用户安装 Rust、Python 或额外运行库。
+Windows 原生构建文件为 `chengyin-windows-x64-0.1.0-preview7-msvc.exe`；开发者的 MinGW
+交叉构建以 `-gnu.exe` 结尾。安装包自包含，不需要用户安装 Rust、Python 或额外运行库。
 安装后注销并重新登录，Win+Space 选择澄音；开始菜单打开设置。
 使用、升级、卸载和集中实测步骤见 [Windows 指南](platforms/windows/README.md)。
-构建产物不提交到源码库；GitHub Actions 的 Windows 构建会保存安装 EXE。
+构建产物不提交到源码库；[GitHub Actions](https://github.com/zzttzzmyswy/myswyIm/actions/workflows/ci.yml)
+通过 Windows 构建及安装回归后保存安装 EXE，可在对应运行的 Artifacts 中下载。
 
 Linux 安装与构建见 [Fcitx 5 指南](platforms/fcitx5/README.md)。
 

@@ -69,6 +69,8 @@ Service 停用先停止/join watcher，再释放词典与 Profile；快照和后
 Edit/RichEdit/密码测试框保持 HWND，不因切换页、窗口大小或 DPI 改变而丢失内容；设置主程序激活
 TSF，并先投递真实键事件，再处理对话框 Tab 导航。测试框没有自动保存功能。
 候选用矩形边框、系统高亮色、被动 HWND 与复用绘图缓冲区；不可逐键重建窗口或抢输入焦点。
+候选的离屏 DC/bitmap 在首次绘制时创建。GDI 回归以首次绘制后的对象数为基准，
+连续 150 次重绘不允许对象数增长；Wine 的 GetGuiResources 返回 0，资源计数结论以原生 Windows 为准。
 
 六个 CTest 分别覆盖 live config/语言栏、UI 布局、设置与词库、键位/候选、COM、TSF 编辑。
 TSF fixture 只在测试 DLL 编译私有配置接口，使用相同生产发布逻辑，验证中途更新保留原组合、
