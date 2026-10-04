@@ -96,7 +96,9 @@ def build_installer(stage: Path, output: Path, makensis: str, version: str, revi
             "SIZE_KIB": str(sum(p.stat().st_size for p in stage.iterdir()) // 1024 + 256),
         }
         # Paths are structured argv entries; no shell interpolation.
-        subprocess.run([makensis, prefix + "WX", prefix + "V2",
+        # The script and generated include are UTF-8. Windows otherwise reads
+        # BOM-less source in the system code page, corrupting Chinese labels.
+        subprocess.run([makensis, prefix + "INPUTCHARSET", "UTF8", prefix + "WX", prefix + "V2",
                         *[prefix + "D" + key + "=" + value for key, value in options.items()],
                         str(ROOT / "platforms/windows/installer.nsi")], check=True)
     validate_pe(output, False)

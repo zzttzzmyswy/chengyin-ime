@@ -91,7 +91,9 @@ def main() -> None:
         assert location and host_path(location) == expected, "Uninstall entry points at the wrong directory"
         assert read(CLASS) == location + "\\myswy_tsf.dll", "COM path does not match install entry"
         assert (expected / "myswy-install.txt").read_text().strip() == version
-        assert read(ARP, "DisplayName") == product_name, "Installed Apps product name must be Chengyin"
+        actual_name = read(ARP, "DisplayName")
+        assert actual_name == product_name, (
+            f"Installed Apps product name mismatch: {ascii(actual_name)} != {ascii(product_name)}")
         if menu_root:
             menu = menu_root / "澄音输入法"
             assert all((menu / (name + ".lnk")).is_file() for name in ["设置", "使用说明", "卸载"]), "New Start menu actions missing"
