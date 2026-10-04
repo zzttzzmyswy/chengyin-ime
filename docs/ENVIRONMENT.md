@@ -51,3 +51,10 @@ BUILD_INFO.json 记录工具链与构建信息，SHA256SUMS.txt 覆盖完整安�
 多显示器缩放和端到端延迟仍需实机。GitHub Actions 的 Windows job 使用 Windows 2022 +
 VS 2022/MSVC，能补原生构建与回归证据，不能代表 Windows 11 桌面验收。
 远程 CI 的执行状态单独更新，不能仅依据 workflow 文件声称通过。
+
+Windows 构建安装 NSIS 3.11 后，Build.ps1 自动补齐其缺失的 AMD64 stubs/plugins；
+固定来源为 `https://deb.debian.org/debian/pool/main/n/nsis/nsis-common_3.11-1_all.deb`，
+SHA-256 为 `103a3284c1a5356efa0aba90fdfc391c3cde8e7df8726377cef0f98471584047`，
+已与 Debian trixie 签名 Packages 索引核对。只复制固定目录的 Windows PE 文件，
+不执行 Debian 包维护脚本；工具链在忽略的 `build/nsis-amd64`，构建不改系统 NSIS。
+`build/nsis-compiler-path.txt` 供后续安装回归使用同一编译器；来源/组件哈希包含在安装负载中。

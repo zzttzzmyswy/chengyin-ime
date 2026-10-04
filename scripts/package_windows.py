@@ -32,7 +32,7 @@ def validate_pe(path: Path, dll: bool) -> None:
         raise ValueError(f"Expected x64 {'DLL' if dll else 'EXE'}: {path}")
 
 
-def make_runtime_licenses(stage: Path, sysroot: Path, notices: list[Path]) -> None:
+def make_runtime_licenses(stage: Path, sysroot: Path, notices: list[Path], makensis: str) -> None:
     docs = sysroot / "share/doc/rust"
     rust_copyright = docs / "COPYRIGHT-library.html"
     licenses = sorted((docs / "licenses").glob("*.txt"))
@@ -51,6 +51,9 @@ def make_runtime_licenses(stage: Path, sysroot: Path, notices: list[Path]) -> No
             if not notice.is_file():
                 raise ValueError(f"Missing runtime notice: {notice}")
             archive.write(notice, f"toolchain/{index + 1}-{notice.parent.name}-{notice.name}")
+        components = Path(makensis).resolve().parent / "CHENGYIN_AMD64_COMPONENTS.json"
+        if components.is_file():
+            archive.write(components, "installer/AMD64_COMPONENTS.json")
 
 
 def verify_archive(path: Path) -> None:
@@ -133,7 +136,7 @@ def main() -> None:
         subprocess.run([args.cmake, "--install", str(args.build_dir.resolve()), "--config", "Release", "--prefix", str(stage)], check=True)
         for name, dll in BINARIES.items():
             validate_pe(stage / name, dll)
-        make_runtime_licenses(stage, sysroot, args.runtime_notice)
+        make_runtime_licenses(stage, sysroot, args.runtime_notice, args.makensis)
         (stage / "INSTALLER_LICENSE.txt").write_bytes(args.nsis_notice.read_bytes())
         info = {
             "product": "澄音输入法 / Chengyin IME", "version": tag, "architecture": "x64", "toolchain": args.toolchain,

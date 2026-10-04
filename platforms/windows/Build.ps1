@@ -16,6 +16,19 @@ try {
     if ($nsisVersion -notmatch '^v(\d+\.\d+)' -or [version]$Matches[1] -lt [version]'3.11') {
         throw 'Native x64 installers require NSIS 3.11+.'
     }
+    $nsisRoot = Split-Path -Parent $MakeNsis
+    if (-not (Test-Path (Join-Path $nsisRoot 'Stubs\zlib-amd64-unicode')) -or
+        -not (Test-Path (Join-Path $nsisRoot 'Plugins\amd64-unicode\System.dll'))) {
+        # The official Windows installer omits AMD64 stubs/plugins. Prepare a
+        # private toolchain with pinned Debian Windows components; leave the
+        # system NSIS installation intact. No download occurs on the user's PC.
+        $preparedNsis = Join-Path $root 'build\nsis-amd64'
+        & python scripts/prepare_windows_nsis.py --makensis $MakeNsis --output-dir $preparedNsis
+        if ($LASTEXITCODE -ne 0) { throw 'NSIS AMD64 component preparation failed' }
+        $MakeNsis = Join-Path $preparedNsis 'makensis.exe'
+    }
+    New-Item -ItemType Directory -Force -Path (Join-Path $root 'build') > $null
+    $MakeNsis | Set-Content -LiteralPath (Join-Path $root 'build\nsis-compiler-path.txt') -Encoding UTF8
     & rustup target add x86_64-pc-windows-msvc
     if ($LASTEXITCODE -ne 0) { throw 'rustup failed' }
     & rustup component add rust-docs

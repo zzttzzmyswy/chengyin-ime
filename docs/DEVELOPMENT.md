@@ -25,6 +25,10 @@ Rust 1.82+：`cargo test --workspace --locked`；Linux 完整检查为 `bash scr
 Windows 使用 [平台指南](../platforms/windows/README.md) 的 `Build.ps1`，同时运行六个 CTest
 并输出单个安装 EXE。需要 Rust MSVC target、VS 2022 C++/Windows SDK、CMake 3.20+、
 Python 3.11+、NSIS 3.11+；生产 DLL 与设置 EXE 静态链接运行库。
+官方 NSIS 3.11 Windows 安装缺少 AMD64 stubs/plugins。Build.ps1 自动在
+`build/nsis-amd64` 复制私有工具链，并用固定 SHA-256 的 Debian `nsis-common 3.11-1`
+补齐 Windows PE 组件，不修改系统 NSIS。来源与组件哈希随包保存在 RUNTIME_LICENSES.zip。
+该下载只发生在构建机；离线准备可给 `scripts/prepare_windows_nsis.py` 传 `--package`。
 MinGW 交叉构建可指定 `MYSWY_CORE_LIBRARY` 与标准 CMake toolchain，注意 Rust target 必须匹配。
 跨编译的 CTest 通过 `CMAKE_CROSSCOMPILING_EMULATOR` 启动 Wine；这不代替 Windows 实机。
 
@@ -81,7 +85,7 @@ TSF fixture 只在测试 DLL 编译私有配置接口，使用相同生产发布
 安装器测试会实际改变注册和文件，仅在隔离 Windows runner 或独立 Wine prefix 运行：
 
 ```powershell
-python scripts/test_windows_installer.py --package build/packages/chengyin-windows-x64-0.1.0-preview7-msvc.exe --build-dir build/windows-msvc --makensis "C:\Program Files (x86)\NSIS\makensis.exe"
+python scripts/test_windows_installer.py --package build/packages/chengyin-windows-x64-0.1.0-preview7-msvc.exe --build-dir build/windows-msvc --makensis (Get-Content -LiteralPath build/nsis-compiler-path.txt -Raw).Trim()
 ```
 
 加 `--previous-package <旧版EXE>` 检查真实旧包升级。测试覆盖同版修复、外来注册保护、

@@ -188,10 +188,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platforms\windows\Buil
 ```
 
 生成 `build/packages/chengyin-windows-x64-0.1.0-preview7-msvc.exe`。CTest 不改系统注册。
+官方 NSIS 3.11 安装缺少 AMD64 组件时，Build.ps1 从固定哈希的 Debian 软件包补齐
+Windows PE stubs/plugins，复制到 `build/nsis-amd64`，不修改系统工具链。
+构建机需要联网准备组件；用户安装 EXE 时不下载任何文件。
 下列安装器测试会改变注册和文件，只用于干净的隔离 runner：
 
 ```powershell
-python scripts/test_windows_installer.py --package build/packages/chengyin-windows-x64-0.1.0-preview7-msvc.exe --build-dir build/windows-msvc --makensis "C:\Program Files (x86)\NSIS\makensis.exe"
+python scripts/test_windows_installer.py --package build/packages/chengyin-windows-x64-0.1.0-preview7-msvc.exe --build-dir build/windows-msvc --makensis (Get-Content -LiteralPath build/nsis-compiler-path.txt -Raw).Trim()
 ```
 
 GNU 包需 GCC/MinGW 许可文件；NSIS 来源见 packaging/windows/README.md。
