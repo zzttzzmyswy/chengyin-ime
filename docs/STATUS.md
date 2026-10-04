@@ -1,0 +1,307 @@
+# 开发记录 / 下次从这里继续
+
+更新：2026-10-04。当前阶段：**澄音 preview7 的配置同步、内嵌输入测试、经典原生界面与布局、中/英语言栏及中文标点已实现。核心检查、六个 Windows/Wine CTest、六页/DPI 截图检查、真实 preview6 升级和完整安装生命周期通过。源码与文档准备推送指定 GitHub main 分支；远程 CI 结果单独记录。真实 Win11/Notepad3 桌面验收仍待完成。**
+
+## 最新批次：preview7
+
+本轮七项任务见 [WINDOWS_TASKLIST](WINDOWS_TASKLIST.md)。设置改为六个经典原生选项卡，
+按文字实际高度布局；修复字号标签重叠、Tab 背景盖住内容面板、分组框黑底和跨页残影。
+候选保留稳定 HWND/双缓冲，改为矩形边框与系统高亮色。
+输入测试移入设置，保留标准 Edit/RichEdit/密码框和真正的 TSF 消息循环；升级删除旧独立 EXE/入口。
+
+配置成功保存后发布共享版本号，后台读取后回 TSF 主线程应用；旧应用不需要重开。
+当前拼音保留原词库/候选策略完成；下一次输入使用新词库。默认模式不覆盖当前状态。
+增加语言栏 INPUTMODE 按钮、SYSTRAY 注册类别、澄音图标和中/英状态通知；
+中文标点只在宿主成功写入后推进引号配对，保留手工音节分隔及翻页。
+
+最新包：`build/packages/chengyin-windows-x64-0.1.0-preview7-gnu.exe`，7,534,770 bytes，
+SHA-256 `9d6c5fdc8d36d1095eab3a53f97f1dd8099e73e5923185071876ffde7bb6f0c2`。
+验证日志位于忽略的 `build/core-check-preview7.txt`、`build/windows-test-preview7-final.txt`、
+`build/ui-preview7.txt`、`build/installer-preview7-final.txt`；截图位于 `build/ui-preview7/`。
+原有 preview3/4/5/6 安装包保留。README、DEVELOPMENT、ENVIRONMENT、AGENTS 与路线图已更新。
+
+后续优先：Win11 任务栏与 Notepad3 实机、多屏 DPI/现代宿主、原生 MSVC CI 证据、
+首拼/上下文性能与独立语料质量；随后双拼、ARM64/x86 与 Android。以下保留历史开发记录。
+
+## 用户已确定
+
+- 长期目标：极致性能与兼容性，覆盖 Windows、Linux X11、Linux Wayland、Android。
+- 全拼优先，随后双拼。最初优先 Linux 桌面；用户当前方便使用 Windows，已改为优先 Windows 桌面试用版。
+- 可以详细规划并分阶段持续开发。用户测试机会很少：首个集中实测包必须包含日常词库、整句、翻页、中间编辑、分段、Windows 设置和宿主候选接口；先完成实现及内部回归，不再交付小演示包等待反馈。
+- Windows 交付必须为单文件或单文件安装包；当前选择单个离线安装 EXE。
+- 已要求：预载许可明确的开源常用词，兼容搜狗词库，增加智能联想与连续首拼组词组句。
+- 本轮九项反馈：完整美化设置、中文字体、候选闪烁/样式、习惯排序、传统输入框触发、左 Shift、显示分隔及 xi'an 手工分隔。
+- 用户定位反馈：本项目输入测试与 Notepad3 无候选，ChatGPT 应用可以触发；未给 Notepad3 版本/架构。实际 Windows 复测不能由 Wine 模拟代替。
+
+## 已落地
+
+- Rust workspace：`myswy-core`、`myswy-ffi`、`myswy-cli`；没有第三方 crate。
+- 扁平 UTF-8 池、连续 trie、完整同音 terminal、最优后代游标按需分页、完整匹配优先、文本去重；支持显式/省略/部分省略音节分隔符。
+- 有界会话状态机，预留缓冲区，输入/歧义超限保留原状态；Ctrl/Alt/Super、取消、原文上屏、选择和 ASCII 标点透传。
+- C ABI v1：静态库/动态库、词典共享、会话生命周期、UTF-8 缓冲区、空指针处理、panic 隔离。
+- 87,540 条开源日常词条：65,125 条 Rime/Apache-2.0，加 22,415 条 jieba/MIT；固定来源/哈希与原始许可，离线转换/二进制编译。98 条手写 MIT 示例保留用于回归。
+- 有界 unigram Viterbi 整句、未完音节预测、原文尾部回退、前后页/中间编辑/分段选择和撤回。
+- 首拼、zh/ch/sh 声母、全拼混输、连续缩写组句；小型离线搭配与词库续词、上下文排序、会话内最近选词偏好，失焦/重置清除，不保存输入历史。
+- 安全 Rust 导入器：经典搜狗 SCEL 0x44/0x45、Unicode 文本及 v1/v2 二进制；Windows 额外支持 GBK，追加/替换/恢复与原子保存；C ABI v1 增加导入/合并/导出与联想 getter。
+- Fcitx 5 C++ 插件：逐上下文状态、候选 UI/鼠标选择、client/panel preedit、释放事件、重置/停用、敏感输入、陈旧候选保护、长度提示。
+- Fcitx 原生词典配置：单工作线程读取和构建、最新请求优先、加载失败保留旧词典且不覆盖磁盘设置、活跃组合结束后切换、旧词典后台回收。
+- C ABI v1 新增演示词典句柄与空闲会话换词典函数，复用缓冲区并保留上一事件 commit；活跃组合返回 BUSY。
+- Debian 原生打包脚本：自动解析实际 ELF 依赖；隔离根目录中验证完整安装/卸载生命周期；不改系统输入法或用户配置。
+- Windows x64 TSF：COM 工厂/生命周期、同步编辑锁、逐上下文会话、预编辑与选词、ASCII 标点一次写入、焦点/宿主失败处理、密码/私密/PIN/只读绕过。
+- Windows 不抢焦点的候选窗、鼠标选词及延迟/陈旧点击保护、Ctrl+Space 中英文切换、布局通知后的只读刷新、DPI 字体缓存、拥有者窗口销毁后重建。
+- Windows 原子词库导入/恢复设置、激活时共享快照、无效加载回退；宿主候选接口支持读取、重排、高亮、提交、取消和重入保护。
+- Windows 单 EXE 离线安装器、系统卸载/开始菜单入口、版本目录升级、同版修复、故障回滚、文件校验及用户文件保护；COM/模拟编辑探测、双编辑框/密码框程序、原生 MSVC CI。旧 PowerShell/ZIP 仅保留历史预览。
+- 路线图、架构、兼容矩阵、性能预算、Linux/Windows 指南、CI 配置。
+
+## 本地验证证据
+
+环境：Debian 13 x86_64，GCC 14.2，CMake 3.31.6，Fcitx 5.1.12-2。
+
+| 检查 | 结果 |
+| --- | --- |
+| `cargo fmt --all -- --check` | 通过 |
+| `cargo clippy --workspace --all-targets -- -D warnings` | 通过，Rust 1.99 |
+| `cargo test --workspace --locked` | 38 项集成测试通过（含首拼/SCEL/上下文、深页持久学习、分隔与长历史排序） |
+| `cargo +1.82.0 test --workspace --locked` | 同样通过，最低 Rust 版本已实际检查 |
+| `bash scripts/check.sh` | 通过，含 release 构建、C ABI 程序、CLI 演示 |
+| 核心堆分配计数 | 初始化后 100 轮示例与真实词库整句/局部编辑/前后页/首拼/联想/reset，共 0 次分配；会话小于 64 KiB |
+| 参考实现对照 | 300 条生成词典，多种拼写及所有非空前缀与全量扫描结果一致 |
+| C ABI 程序 | 空句柄、非法 UTF-8/字段/候选索引、小缓冲区不写、上屏生命周期、自定义词典引用存活；导入/合并/导出与首拼/联想 |
+| `cargo check`：Android arm64、Linux arm64 | 通过；仅构建检查，未链接/运行原生平台组件 |
+| Windows GNU x64 TSF | Rust 1.99 / MinGW GCC 14.2 实际链接 PE64 DLL/EXE；静态链接核心与工具链运行时，仅依赖 Windows 系统 DLL |
+| Windows 原生代码在 Wine 中 | Wine 10 + Xvfb，CTest 5/5：Unicode/GBK/SCEL 追加与失败保留、按键/UTF-16/候选窗生命周期、COM/TSF、模拟编辑/首拼/联想/隐私/宿主 UI 与故障回归 |
+| Windows 注册与注销入口 | 隔离 Wine 前缀中通过首次注册、已注册 COM 创建、重复拒绝、不同 DLL 路径拒绝卸载、注入缺失 TSF profile COM 类时的失败回滚、清理和 regsvr32 往返；不代表真实 Windows 系统列表验收 |
+| PowerShell 语法 | PowerShell 7.4.7 Linux parser 通过四个脚本；Windows 5.1 的实际安装/卸载尚待验证 |
+| Windows 单 EXE | NSIS 3.11 原生 amd64，PE64/依赖校验与完整负载 SHA-256；隔离 Wine 中完整安装生命周期通过；preview1 ZIP 为历史产物 |
+| Fcitx 原生模块与无头集成测试 | CTest 2/2 通过：事件测试及 14 阶段异步热切换/保存失败回归 |
+| Fcitx 暂存安装 | 三个原生文件和两个文档文件；没有安装到系统或更改输入法配置 |
+| C++ ASan / UBSan | 同样 CTest 2/2 通过；Rust 静态库和系统库未插桩 |
+| Debian 测试包 | 隔离 dpkg 安装/重装/升级/回滚/移除/purge 通过，五个文件校验一致且用户配置保留；跳过依赖安装 |
+| 插件导出与动态依赖 | 包含 `fcitx_addon_factory_instance`；暂存模块动态依赖解析通过 |
+| 性能基准 | 各场景次数单列；全拼/混输/连续上下文、查询、整串和翻页分别测量，见 PERFORMANCE |
+
+本次无头回归发现并修复：构造 `Text("")` 在框架内部不等同于空文本容器，可能使面板保持非空；清理后只在预编辑非空时设置 Text。测试覆盖正常上屏、无 client-preedit 客户端和密码字段清理。
+
+CI 已配置 Linux/Windows 原生 Rust/C ABI、最低 Rust 版本、ARM 构建检查、Fcitx CTest、sanitizer、Debian 打包/生命周期测试及构建产物保存；另有 Windows TSF 构建、五个 CTest、隔离 runner 安装/修复/升级/回滚/卸载和 EXE 保存。**此处为历史记录；最新 GitHub/CI 状态见文档开头**，不能把 CI 配置写成远程测试通过。
+
+## 本轮：词典配置与测试包
+
+词典测试使用真实 Fcitx 事件循环，验证加载期间继续输入、旧组合保留、共享新词典、输入后删除源文件仍能工作、失败不保存、缺失/FIFO/目录/过大/损坏/重复词条拒绝、最新请求优先、手工配置重载和后台回收。新增持久化失败测试发现框架 `safeSaveAsIni` 未报告重命名失败，已改为逐步校验写入与原子替换。
+
+开发包位于 `build/packages/fcitx5-myswy_0.1.0-1_amd64.deb`，目标 Debian 13 amd64；依赖 libc6 ≥2.39、Fcitx Core/Config/Utils ≥5.1.12、libstdc++6 ≥13.1。默认维护者为明确的开发占位地址，正式分发前需配置真实维护者。包内仅模块、两个注册文件和两个文档，没有 maintainer scripts，不会自行重启输入法。
+
+打包和测试用法见 `platforms/fcitx5/README.md`。环境曾重新连接，文件、SDK 与构建产物均保留，安装生命周期测试已在恢复后重新验证。
+
+## 本环境复现说明
+
+系统没有预装 Rust/Fcitx SDK；Rust 工具链在当前用户目录。Debian 官方签名软件包只下载并解包到 `/tmp/myswy-sysroot`，没有 root 安装。解包 SDK 的三个 CMake imported target 的绝对 include 路径被本地重定位到此目录；该临时修正不是源码改动。
+
+```sh
+. "$HOME/.cargo/env"
+bash scripts/check.sh
+LD_LIBRARY_PATH=/tmp/myswy-sysroot/usr/lib/x86_64-linux-gnu \
+  /tmp/myswy-sysroot/usr/bin/cmake --build build/fcitx5
+LD_LIBRARY_PATH=/tmp/myswy-sysroot/usr/lib/x86_64-linux-gnu \
+  /tmp/myswy-sysroot/usr/bin/ctest --test-dir build/fcitx5 --output-on-failure
+```
+
+临时 SDK 可能随工作环境消失。普通开发机使用平台 README 的标准安装命令，代码不依赖这些临时路径。
+
+解包 SDK 的打包依赖查询使用 `/tmp/myswy-apt/shlibs.local`，内容来自三个官方 Fcitx 运行库包的 `shlibs` 元数据。复现命令：
+
+```sh
+LD_LIBRARY_PATH=/tmp/myswy-sysroot/usr/lib/x86_64-linux-gnu \
+  python3 scripts/package_deb.py --cmake /tmp/myswy-sysroot/usr/bin/cmake \
+  --library-dir /tmp/myswy-sysroot/usr/lib/x86_64-linux-gnu \
+  --shlibs-local /tmp/myswy-apt/shlibs.local
+python3 scripts/test_deb.py build/packages/*.deb
+```
+
+已有同名包时脚本拒绝覆盖；重新构建可指定新 Debian revision。正常安装 SDK 的开发机不需要这两个额外搜索参数。
+
+## 本轮：Windows x64 TSF 预览
+
+按用户新优先级实现 `platforms/windows`，复用原 C ABI，当前没有新增 Rust crate。按键测试回调无副作用；每次输入只在同步写锁成功后处理核心。候选文本和标点同次写入，宿主文字已写入后不因光标设置失败而重新透传。焦点切换保留旧框已经显示的原拼音，再释放旧 Session。
+
+布局未就绪时暂时隐藏候选；收到布局通知后申请只读编辑会话刷新候选位置。每个上下文最多一个待处理 UI 更新，退役组合的回调用 generation 拒绝，不插入任何迟到文字。模拟宿主验证同步锁拒绝、SetText/SetSelection 失败、外部光标移动、上下文隔离、密码/PIN 绕过、布局只读刷新/陈旧回调、按键释放隔离以及全部 COM 引用释放。
+
+注册测试发现 MinGW 的 `HRESULT_FROM_WIN32` 宏会多次求值；将有输出参数的注册表 API 放入宏中会创建两次、把首次创建误判为“已存在”。现先保存 Win32 返回值再转换，首次/重复注册及卸载保护回归通过。注册阶段逐项记录已开始的操作，失败时只补偿对应步骤；隔离 Wine 中暂时移除并恢复内置 profile COM 类，验证出错不留下 Myswy COM 注册，再恢复正常注册。候选生命周期测试也覆盖父窗口销毁后清空句柄，避免使用失效 HWND。
+
+试用包：`build/packages/myswy-windows-x64-0.1.0-preview1-gnu.zip`，目标 Windows 10 2004+/11、Intel/AMD x64 经典桌面应用。包未签名；安装复制到 Program Files 并注册 COM/TSF，需要用户在管理员 PowerShell 中运行脚本。正常输入不需要管理员。包内 `BUILD_INFO.json` 和 `SHA256SUMS.json` 记录构建来源与每个文件的校验值。完整步骤见 `platforms/windows/README.md`。最终包为 2,023,627 bytes，SHA-256：`647b07185b8b991b26a27f2be0f165875731a25a3581e8015a7a9f065e48c16f`。
+
+本地 Wine 验证使用单独前缀，未修改真实 Windows 注册。远程 CI 未运行；实际 Windows 系统的输入法列表、注销后启用、应用兼容、焦点/候选位置和 PowerShell 生命周期仍待实机确认。当时 UI-element-only/WinUI、安全模式、ARM64、32 位宿主、鼠标候选点击与 Windows 自定义词典设置尚未实现；后续点击已补齐，preview3 又完成日常词库/整句/翻页/编辑、设置和宿主 UI 接口；其他架构与实际应用验收仍待做。
+
+## 本轮：Windows 单 EXE 与集中实测策略
+
+用户新增要求已写入 AGENTS、ROADMAP 和 WINDOWS_RELEASE_GATE：Windows 单文件交付，先完成较完整的一批功能/自动化后再集中实测。
+
+使用 NSIS 3.11 原生 amd64 Unicode stub 和 LZMA，输出一个离线 EXE；负载静态链接工具链运行时，包含完整许可与 SHA-256 清单，无需用户解压、安装运行库、运行脚本或联网。安装创建开始菜单和 Apps & Features 卸载入口，默认输入法不变，程序不自动注销/重启。
+
+安装先校验和只读 COM 自检，再复制新版本目录、切换注册和卸载入口；旧版本保留供回滚。同版文件一致时修复注册，支持缺失 COM 类的恢复；内容不同、降级、未知注册、链接目录拒绝修改。升级/卸载仅移除已知文件，占用文件用 NSIS 的延迟删除机制处理，用户文件保留。旧 preview1 ZIP 的标准目录/ASCII CRLF 标记可迁移。新增 DLL 的显式 repair 入口严格检查注册路径。
+
+候选点击不获取焦点；按下/释放校验候选版本，在 TSF 写锁内再次验证上下文/组合/敏感类型。键入新内容、布局销毁或失焦使排队的旧点击失效，重复点击合并；编辑锁失败无核心/宿主变化。Ctrl+Space 在当前服务中切换中英文，原拼音保留；停用后注销保留键并恢复中文。
+
+Windows 服务改用显式共享词典句柄：激活时取得、最后一个服务停用后释放，不初始化进程永久保留的 Rust 演示缓存；池锁不进入按键路径。100 次激活、输入 `nihao`、提交、停用回归验证 COM/context/sink 释放。该回归不等于真实词库内存/端到端性能测量。
+
+当前 MinGW 链接、Wine + Xvfb 三项 CTest、Build.ps1 parser、工作流 YAML 已通过。完整安装生命周期自动化在隔离 Wine 前缀中通过：完整负载校验、已注册 COM、同版修复/缺失类恢复、文件损坏拒绝、注入升级注册失败回滚、外来路径保护、加载 DLL 时升级与延迟清理、降级拒绝、用户文件保留、卸载/重复清理、首次注册失败回滚、旧 ZIP 布局迁移与普通临时副本卸载。验证后 Myswy 的 COM/ARP 注册与产品目录均已清理。测试 fault DLL 仅在测试构建目录出现，不在安装负载中。
+
+内部构建：`build/packages/myswy-windows-x64-0.1.0-preview2-gnu.exe`，1,917,224 bytes，SHA-256 `0c00fc686ea484d5f2bbadb3cfc6e1a436e8391278821c1e4d452643194f2ebb`。仍使用 98 条示例，尚未达到集中实测门槛。Windows 使用说明见 platforms/windows/README.md，后续从下面第 1 项继续。
+
+## 本轮：日常全拼与单 EXE preview3
+
+用户明确要求词库、整句和翻页等完成后再集中测试。本次替换了 top-9 缓存
+原型，完成 65,125 条固定 Rime/Apache-2.0 字词、离线导入脚本与版本化二进制。
+TSV SHA256 为 be88144a8a5221268c9551184ccc32fb9c06a1ed8588059ff82d918b0d866dc4，
+二进制 SHA256 为 31ef9199120d8dabdd78634b7a99cf4432ce306af2ad3ebc84cc9bcb14a8e597。
+原始 LICENSE/README/词典/SOURCE.json 保留；上游该修订没有根目录 NOTICE 文件。
+安装包内完整词库许可位于 RUNTIME_LICENSES.zip/vocabulary/。
+
+每个终端保留全部同音词，候选游标按需遍历；整句为每位置 16 条路径的
+unigram 基线，未完末音节预测、未知尾部原文回退。可键盘/鼠标翻页、在
+拼音中间插入删除、选段后保留尾部、在片段边界撤回；光标在核心 UTF-8
+与 Windows UTF-16 范围间转换。长文本撤回超限时保留旧状态也有回归。
+
+C ABI 保持 v1，追加二进制构造、句柄复制、页/光标/跨度 getter 和高亮 setter。
+Windows 使用嵌入的日常二进制；开始菜单打开设置，导入先校验再原子替换，
+激活时检测配置变化，旧服务/组合保留快照，失败保留可用词库或回退内置。
+正常按键无字典文件 I/O；大型自定义 TSV 的激活加载仍是同步操作。
+
+宿主候选接口实现读取、重新排版、高亮、提交和取消。UI-only 模式不弹原生
+窗口；经典模式尊重宿主是否接管。测试覆盖陈旧/重复 finalize、abort，以及
+宿主在 UpdateUIElement 回调内停用服务时的生命周期，保留写入已完成的消费
+结果。固定词库测试 DLL 和注册故障 DLL 均不进入安装包。
+
+证据：Rust 1.99 和最低 1.82 的 21 项测试、C ABI、四个 Windows CTest（Wine
+10 + Xvfb）、两个 Fcitx CTest 均通过；ARM Android/Linux 核心构建检查通过。
+真实词库逐键回放 242,000 次含 60 字节长串，P99 279.342 µs；词库堆容量
+5,856,901 字节，内存二进制加载 28.644 ms，会话工作区+预留堆 60,295 字节。
+这些是云 Linux 核心测量，不等同 Windows 端到端或 RSS。详见 PERFORMANCE。
+
+当前单 EXE：build/packages/myswy-windows-x64-0.1.0-preview3-gnu.exe，
+4,147,614 bytes，SHA256 51233ecdf4f63304b6fe302e768f26b6b0b979bf02e6881ffe76f1b504e87318。
+单 EXE 完整生命周期回归通过，包含实际 LocalAppData/dictionary.custom 的升级与卸载保留；测试结束 COM/ARP/产品和测试配置已清理。真实 Windows/MSVC CI 尚未执行；交叉链接及 Wine 不能代替应用矩阵验收。
+
+## 本轮：开源词库、搜狗兼容与现代快速输入 / preview4
+
+新增 22,415 条 jieba/MIT 常用词，连同 Rime/Apache-2.0 共 87,540 条。
+固定 jieba 修订 `67fa2e36e72f69d9134b8a1037b83fbb070b9775`，原始字词/许可/
+README/哈希保留于 data/sources/jieba；只补频率至少 30 的 2–6 字词且每字读音
+在源词库中唯一，不猜多音字。离线重建再次得到相同 TSV 和音节表。
+TSV SHA256 `0b3386677e7f98c047a4f839d878b78cb54f0671611b8e3b8a1583189573eb88`，
+v2 二进制 SHA256 `b218e5a87acdc1a8b6f586d1c6c31442b2d5a1075fd797265a4b5cccf8676af9`。
+v2 允许最长 255 字节规范词条拼音，输入仍为 63 字节；保留 v1 读取。
+
+同一个安全 Rust 解析器供 CLI/C ABI/Windows 设置使用，支持经典 SCEL 0x44/
+0x45、UTF-8/UTF-16LE 搜狗文本和本项目词库，Windows 再转换 GBK。设置可
+追加、替换、恢复；首次追加保留全部内置词，重复项取最大频率。互斥锁、
+唯一临时文件/刷盘/原子替换保证失败保留旧配置；编译结果限 64 MiB/25 万项。
+本地公开格式参考 SCEL 实际转换 3,563 条，最长规范拼音 105 字节；样例
+只在忽略目录中，不预载或分发。格式边界见 SOGOU_COMPATIBILITY。
+
+首拼/zh/ch/sh 声母/全拼可混输；`wxhzw` 首选“我喜欢中文”，整句由词图
+组合。完整输入先解码，缩写备选按需展开；缩写必须沿音节边界继续，不能
+在跳过音节尾部后继续匹配音节内部字母。用独立音节别名枚举器验证该边界。
+每位置 16 条路径、缩写图 96 状态，预算不足显式提示；完全匹配、整句、
+分段、词尾预测分层，上下文排序不会把预测尾词提升到完整句之前。
+
+离线联想来自自写常用搭配及词库中文字前缀，不使用联网服务或训练模型。
+当前中文上下文/最近 32 次选词只存在会话内存，失焦/重置/敏感输入清除。
+上屏后空预编辑的联想用 Tab/鼠标确认；Space/数字/Enter 等透传，不意外插字。
+TSF 使用折叠的上屏后范围定位，不创建空组合；复用宿主候选接口，光标移动、
+过期点击、密码作用域、重入与重复提交均有回归。Fcitx 也映射联想/Tab，
+Linux 配置界面仍仅加载 TSV，默认示例词库与历史 Debian 包没有改成正式预载。
+
+最终证据：scripts/check.sh、Rust 1.99 与最低 1.82 的 31 项集成测试、扩展
+C ABI、Android/Linux ARM 构建检查通过；Windows 交叉链接后 Wine 4/4 通过；
+Fcitx 2/2 与 C++ ASan/UBSan 2/2 通过。真实词库热路径 100 轮仍零次堆分配，
+单会话 65,031 字节；单独核心微基准全拼逐键 P99 0.642 ms、首拼混输
+2.465 ms、连续上下文 5.313 ms，内存词库加载 77.660 ms。逐键延迟和加载
+仍需优化，未达到项目目标；口径/原始输出位置见 PERFORMANCE。
+
+已生成单 EXE `build/packages/myswy-windows-x64-0.1.0-preview4-gnu.exe`，
+7,028,499 bytes，SHA256 `9c3aea328d11bcbd28b5a44cab7b9f56c029088c5bf5450c3c308cfe6cd923ec`。
+旧 preview3 原包/哈希保留。该最终 EXE 在隔离 Wine 前缀的完整生命周期
+六阶段通过：首次安装/完整负载校验/注册/同版修复、注入升级失败回滚、
+损坏文件与外来注册保护、占用 DLL 升级/降级拒绝/未知文件保护、卸载/
+重复清理/首次注册失败回滚、旧 ZIP 迁移/普通系统卸载入口。实际 LocalAppData
+词库的升级/卸载保留通过；两项词库的包内许可证/来源记录逐字节核验，
+三个正式 PE64 只依赖 Windows 系统 DLL。测试结束 COM/ARP/产品目录与
+测试创建的词库文件已清理。真实 Windows 桌面、原生 MSVC 和远程 CI 尚未执行。
+
+## 本轮：设置、候选与持久学习 / preview5
+
+设置拆成五页原生界面：常规、外观、词库、学习与隐私、帮助与诊断。
+统一 YaHei UI 字体并在缺失时回退；候选支持 12–32 字号、系统/浅/深主题、
+纵向/横向换行、密度、5/7/9 条每页、拼音副行和分隔预览。词库导入在后台
+运行，保留草稿/未保存提示、备份/导入/清除与诊断入口。参考仓库/修订与
+实际绘制范围见 WINDOWS_UI_REFERENCES；未复制/打包第三方 UI 代码或字体。
+
+候选保留原生 popup 和离屏 DC/bitmap，抑制背景擦除，单次 BitBlt，不逐键
+hide/recreate；重复刷新回归检查 HWND、几何与 GDI 资源。原始拼音与光标
+不因显示分隔改变，所有合法音节显示对照通过；手工撇号进入真正解码约束。
+
+纯中文选词/整句在宿主 SetText 成功后显式学习，最多 4,096 项，按实际拼写
+（含手工分隔）/文字记录频次和序列；深页词可进首屏。Profile 是独立的
+Arc 只读快照，CRC/UTF-8/边界/顺序全校验；长历史保持频次优先。Windows
+128 项后台队列合并各应用磁盘状态，互斥/刷盘/原子替换；共享 epoch 防止
+清除或导入前的排队事件复活。损坏/空备份、锁定文件均保留原数据；缺失
+文件才初始化为空。异常退出、存储失败、队列满时未保存选择可能丢失。
+配置、学习导入/清除在服务重新激活后应用；不保存应用、位置或时间，不上传。
+Fcitx/Android 尚未接入持久存储。
+
+输入测试显式激活 ITfThreadMgr 并使用 TSF message pump/keystroke manager，
+在对话框 Tab 导航前分派输入；含标准 Edit、RichEdit 和密码框。
+注册补 COM-less/input-mode 类别和中英文 compartments；左 Shift 只在单独
+释放时切换，重复/组合键/左右 Shift 同时按下不会误切换。OnEndEdit 对比
+当前组合文本/光标，迟到的自身写通知不退役组合；位置回退涵盖非空范围、
+Win32 光标、同框有效锚点和当前视图，明确 clipped 则隐藏。
+这些是针对用户失败的实现与模拟证据，未宣称真实 Notepad3 已修复。
+
+最终源码回归：scripts/check.sh、Rust 1.99/最低 1.82 的 38 项集成测试、
+新增 Profile C ABI/小缓冲区/确认生命周期、ARM Android/Linux 检查通过；
+Windows 交叉链接及 Wine 5/5、Fcitx 2/2、C++ ASan/UBSan 2/2 通过。
+五页/主题/滚动/DPI 与候选布局在 Wine 实际绘制并检查截图；没有写用户设置。
+加载偏好与分隔显示的 100 轮核心热路径仍零分配，会话 65,142 bytes；
+4,096 项共享偏好成功上屏确认 P99 46.278 µs（允许分配，不含磁盘），
+60 字节分隔 getter P99 38.056 µs。全拼/混输/连续上下文 P99 为
+0.641/2.604/5.412 ms，加载 71.918 ms，仍未达到项目性能目标。
+原始日志 build/*preview5*.txt，详细口径见 PERFORMANCE。
+
+preview5 原包已生成并通过完整安装生命周期和真实保留 preview4 EXE 的升级：
+7,536,403 bytes，SHA256 `e37113b36fc697449aef7ddbdf8c1a267fcc2d82bebd18e98f7ddaf8514dec9e`。
+此时用户新增改名与九项核验要求；集中交付包为 **澄音输入法 / Chengyin IME preview6**。
+显示名、设置/测试窗口、宿主候选说明、安装向导/系统应用列表/开始菜单和文档
+统一更名；保持 CLSID、内部 ABI 与用户目录标识，升级数据继续兼容。
+九项逐项结论/证据见 WINDOWS_FEEDBACK_AUDIT；第 6 项仍为实机待复测。
+
+最终单 EXE：`build/packages/chengyin-windows-x64-0.1.0-preview6-gnu.exe`，
+7,499,364 bytes，SHA256
+`ed5716c9360b852147e00b0ee0be8ab9ce57bbe7eec85f9bcc9805b4670f656c`。
+Windows 五项 CTest 通过；原生输入测试实际进程启动、三个控件创建、密码框
+完整可见和正常退出检查通过。检查曾发现跨进程创建/显示的测试时序和密码框
+底部截断，均已修正。截图检查会等待绘制消息完成，最终路径为
+`build/ui-review-chengyin-final/`；这仍是 Wine，不是真实 Windows。
+
+最终 EXE 完整生命周期七段回归通过：真实保留 preview4 EXE 升级，
+安装/完整哈希/已注册 COM/同版修复，注入注册失败回滚，改动文件/外来路径
+保护，占用 DLL 升级/版本切换/拒绝降级/未知文件保留，卸载/首次安装失败
+清理，以及旧 ZIP 迁移/系统卸载临时副本。核对新系统应用名称、四个新菜单
+入口、旧已知入口移除，并保留用户自行放入旧菜单的文件。词库/设置/学习
+三种数据升级与卸载后字节不变。结束后隔离 COM/ARP、产品、菜单和自有
+配置测试文件已清理；旧 preview3/4/5 包的哈希未变。
+
+Wine 的 `reg.exe` 重定向中文为问号，名称检查改用 Win32 Unicode 读取并输出
+UTF-8。Wine 10 尚未实现 TSF 名称 getter，因此仅此环境直接检查已保存的
+profile Description；原生 Windows 仍要求正式 TSF getter 通过。最终日志：
+`build/windows-tests-preview6.txt`、`build/probe-tests-preview6-final.txt`、
+`build/installer-preview6-final.txt`、`build/package-preview6.txt`。
+
+## 下一步
+
+1. 本批单 EXE 内部完成后，集中复测真实 Windows 输入测试/Edit/RichEdit、Notepad3、ChatGPT 及常用应用的激活、定位、Shift、习惯排序、缩放和隐私；记录版本/架构。无需测试开发切片。
+2. 优化连续上下文候选展开、增量解码、预编译索引；扩大独立中文语料，记录首选率/按键数和反例。当前 P99 与加载目标仍未达标。
+3. 推进双拼与 Profile 在 Linux/Android 的存储接入；补真实现代宿主、x86/ARM64 输入 DLL、签名和原生 MSVC CI 执行证据。
+4. Linux 保留 Fcitx 插件和后台 TSV 加载；正式预载/导入界面、X11/Wayland 实测继续。Android JNI/IME 服务尚未实现。
+5. 专门环境测 Windows 端到端呈现、长期 GDI/COM/内存、冷启动与峰值；微基准和模拟 text store 不能代替。
+
+源码和产物均在本地，未推送、未执行远程 CI、未配置后台自动继续任务。

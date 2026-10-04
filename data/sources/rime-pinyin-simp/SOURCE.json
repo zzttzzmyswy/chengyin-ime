@@ -1,0 +1,19 @@
+{
+  "repository": "https://github.com/rime/rime-pinyin-simp",
+  "revision": "0c6861ef7420ee780270ca6d993d18d4101049d0",
+  "license": "Apache-2.0",
+  "files": {
+    "pinyin_simp.dict.yaml": {
+      "bytes": 1266216,
+      "sha256": "e341598343a0f0f2035bb1aafc34a7f3bb7887deeecb3f60796262aaa2983e6b"
+    },
+    "LICENSE": {
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    "README.md": {
+      "bytes": 255,
+      "sha256": "bc51038baf2408cc5ec9eba680634cfd4ec07f905a636644839daff1a94055c9"
+    }
+  }
+}

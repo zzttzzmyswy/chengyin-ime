@@ -1,0 +1,7 @@
+/target/
+/build/
+/.deps/
+*.so
+*.dll
+*.dylib
+__pycache__/

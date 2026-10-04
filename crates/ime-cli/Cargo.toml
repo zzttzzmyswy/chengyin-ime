@@ -1,0 +1,13 @@
+[package]
+name = "myswy-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "myswy"
+path = "src/main.rs"
+
+[dependencies]
+myswy-core = { path = "../ime-core" }

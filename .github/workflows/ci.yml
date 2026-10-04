@@ -1,0 +1,89 @@
+name: checks
+on: [push, pull_request]
+permissions:
+  contents: read
+
+jobs:
+  msrv:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.82.0
+      - run: cargo test --workspace --locked
+  rust:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo build --release --workspace --locked
+      - run: cargo run --release -p myswy-cli -- --query nihao
+      - if: runner.os == 'Linux'
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -Iinclude tests/ffi_smoke.c -Ltarget/release -lmyswy_ime -Wl,-rpath,"$PWD/target/release" -o target/ffi-smoke
+          target/ffi-smoke
+      - if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cl /nologo /utf-8 /W4 /WX /Iinclude tests\ffi_smoke.c target\release\myswy_ime.dll.lib /Fe:target\release\ffi-smoke.exe
+          target\release\ffi-smoke.exe
+  portable-core:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, aarch64-unknown-linux-gnu
+      # These are compile checks; they are not NDK builds or device tests.
+      - run: cargo check -p myswy-core -p myswy-ffi --target aarch64-linux-android --locked
+      - run: cargo check -p myswy-core -p myswy-ffi --target aarch64-unknown-linux-gnu --locked
+  windows-tsf:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+          components: rust-docs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: choco install nsis -y --no-progress
+      - name: Build static core, TSF, native tests and single EXE
+        shell: powershell
+        run: ./platforms/windows/Build.ps1
+      - name: Install, upgrade, rollback and uninstall in this isolated runner
+        shell: powershell
+        run: python scripts/test_windows_installer.py --package build/packages/chengyin-windows-x64-0.1.0-preview7-msvc.exe --build-dir build/windows-msvc --makensis "C:\Program Files (x86)\NSIS\makensis.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chengyin-windows-x64-msvc-preview
+          path: build/packages/*-msvc.exe
+  fcitx5:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libfcitx5core-dev extra-cmake-modules cmake ninja-build dpkg-dev python3
+      - run: cargo build --release -p myswy-ffi --locked
+      - run: cmake -S platforms/fcitx5 -B build/fcitx5 -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+      - run: cmake --build build/fcitx5
+      - run: ctest --test-dir build/fcitx5 --output-on-failure
+      - run: DESTDIR="$PWD/build/stage" cmake --install build/fcitx5
+      - run: python3 scripts/package_deb.py
+      - run: python3 scripts/test_deb.py build/packages/*.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: myswy-ubuntu-24.04-amd64-preview
+          path: build/packages/*.deb
+      - run: cmake -S platforms/fcitx5 -B build/fcitx5-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+      - run: cmake --build build/fcitx5-asan
+      - run: ctest --test-dir build/fcitx5-asan --output-on-failure

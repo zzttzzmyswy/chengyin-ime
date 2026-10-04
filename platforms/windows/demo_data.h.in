@@ -1,0 +1,4 @@
+#pragma once
+namespace myswy {
+inline constexpr char kDemoTsv[] = R"myswylex(@MYSWY_DEMO_TSV@)myswylex";
+}

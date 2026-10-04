@@ -1,0 +1,13 @@
+[package]
+name = "myswy-ffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "myswy_ime"
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[dependencies]
+myswy-core = { path = "../ime-core" }

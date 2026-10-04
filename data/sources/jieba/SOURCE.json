@@ -1,0 +1,19 @@
+{
+  "repository": "https://github.com/fxsjy/jieba",
+  "commit": "67fa2e36e72f69d9134b8a1037b83fbb070b9775",
+  "license": "MIT",
+  "files": {
+    "LICENSE": {
+      "sha256": "18ba0984839f85853b29fadaf992f7dba8fd0ca0fbeae34de2b8735222dc7a37",
+      "bytes": 1075
+    },
+    "README.md": {
+      "sha256": "d6754b68da8fae70d2fb93b8100f41d55e2c0c262230c1017a053ad8154d85c1",
+      "bytes": 31879
+    },
+    "dict.txt": {
+      "sha256": "7197c3211ddd98962b036cdf40324d1ea2bfaa12bd028e68faa70111a88e12a8",
+      "bytes": 5071852
+    }
+  }
+}
