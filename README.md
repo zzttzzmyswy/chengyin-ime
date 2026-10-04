@@ -2,7 +2,7 @@
 
 澄音是一款正在开发的开源中文输入法，长期目标是高性能、低延迟和跨平台兼容。
 共享 Rust 核心面向 Windows、Linux X11、Linux Wayland 与 Android；全拼优先，随后双拼。
-当前优先交付 Windows x64，版本 **0.1.0-preview10**。
+当前优先交付 Windows x64，版本 **0.1.0-preview11**。
 
 ## 当前功能
 
@@ -30,7 +30,7 @@
 
 ## 安装和体验
 
-Windows 原生构建文件为 `chengyin-windows-x64-0.1.0-preview10-msvc.exe`；开发者的 MinGW
+Windows 原生构建文件为 `chengyin-windows-x64-0.1.0-preview11-msvc.exe`；开发者的 MinGW
 交叉构建以 `-gnu.exe` 结尾。安装包自包含，不需要用户安装 Rust、Python 或额外运行库。
 安装后注销并重新登录，Win+Space 选择澄音；开始菜单打开设置。
 使用、升级、卸载和集中实测步骤见 [Windows 指南](platforms/windows/README.md)。

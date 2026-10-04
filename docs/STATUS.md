@@ -1,5 +1,23 @@
 # 开发记录 / 下次从这里继续
 
+更新：2026-10-05。当前批次：**preview11 明确四类键盘纠错为通用规则，每项标注“示例”。**
+设置展示 zhnag→zhang、png→ping、hso→hao、shii→shi，说明适用于词库拼音，不限所列示例。
+核对共享 trie/字母对齐无 zhang 特例；扩展既有回归为 12 个不同拼音案例，包括 ni'hao 多音节、
+同排/跨排邻键与提交/字母标记。五项模糊音测试、fmt、Clippy -D warnings、MSVC 七项 CTest 通过。
+解码算法及输入/空格契约不变；见 [preview11 任务清单](WINDOWS_PREVIEW11_TASKLIST.md)。
+
+交付：build/packages/chengyin-windows-x64-0.1.0-preview11-msvc.exe，4,333,865 bytes；
+SHA-256 82b4b325aad21e910d15145c0b911cef1b1bba1bf0e8c539f51dc153f93fb246。
+八页字体/模拟 DPI/滚动回归与新文案截图通过；build/ui-preview11/。
+最终包预检查、7-Zip、解包完整负载哈希/COM 和三二进制一致性通过；native-build-preview11.txt、
+native-test-preview11.txt、ui-test-preview11.txt、package-preview11.txt 位于 build/。
+升级版本后同步更新“较新 release”离线 fixture 为 preview12；初轮设置测试清理目录失败，
+仅余空目录，未改产品/设置测试，重跑七项全部通过，不推断具体外部占用者。
+本轮未替换用户已安装 preview10、未修改用户设置；其桌面验证见下方记录。
+新包安装后实测、完整现代应用矩阵、物理混合 DPI、隔离安装生命周期与远程更新仍需分别验收。
+
+## 以下为 preview10 记录
+
 更新：2026-10-05。当前批次：**preview10 已完成三个角色主题删除、可配置模糊音与四类常见键盘失误、候选标准拼音逐字母加粗/强调色。**
 任务见 [WINDOWS_PREVIEW10_TASKLIST](WINDOWS_PREVIEW10_TASKLIST.md)。设置新增“模糊音”第八页，默认全部关闭；
 正确整词/整句优先，原始拼音与光标不改，按空格仍提交原始输入。纠错候选即使可内嵌编辑仍显示标准拼音。

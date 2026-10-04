@@ -1,6 +1,6 @@
 # 澄音输入法 · Windows x64 全拼
 
-当前版本：0.1.0-preview10。使用原生 TSF 和共享 Rust 核心，目标 Windows 10
+当前版本：0.1.0-preview11。使用原生 TSF 和共享 Rust 核心，目标 Windows 10
 2004（build 19041）及更新版本、Windows 11，Intel/AMD x64。
 
 本版按用户要求删除三个角色主题，保留主题页与 Windows 系统、白、黑。
@@ -12,7 +12,7 @@
 首拼/声母混输、联想、翻页、中间编辑和本地选词学习。
 
 设置中的“模糊音”页提供 11 组双向匹配和四种常见键盘失误开关，默认全部关闭。
-支持相邻字母按反（zhnag→zhang）、漏字母（zhng）、QWERTY 相邻键（zhsng）和重复按键（zhaang）。
+四类通用规则适用于词库拼音，以下仅为示例：相邻字母按反（zhnag→zhang）、漏字母（png→ping）、QWERTY 相邻键（hso→hao）和重复按键（shii→shi）。
 每音节最多一次键盘纠错、每词最多两次；不做任意字母排列。候选按字母加粗并强调修正位置，
 原始拼音仍可编辑；纠错候选在内嵌编辑宿主中也显示标准拼音。应用后下一段输入生效。
 
@@ -21,7 +21,7 @@
 
 ## 单文件安装与卸载
 
-原生 Windows 构建交付一个离线 EXE：`chengyin-windows-x64-0.1.0-preview10-msvc.exe`。
+原生 Windows 构建交付一个离线 EXE：`chengyin-windows-x64-0.1.0-preview11-msvc.exe`。
 开发者的 MinGW 交叉构建文件以 `-gnu.exe` 结尾；同版不同工具链的负载不能相互修复覆盖。
 双击安装向导并接受 UAC；无需解压、PowerShell、Rust、额外运行库或联网下载。
 安装后的 DLL、说明和卸载程序由安装器管理，单文件指交付的安装包。

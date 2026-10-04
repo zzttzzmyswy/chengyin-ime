@@ -33,22 +33,36 @@ fn marked(s: &Session, i: usize) -> String {
 }
 #[test]
 fn keyboard_errors_are_bounded_and_marked_by_canonical_letter() {
-    for (raw, flag, letters) in [
-        ("zhnag", SWAP, "an"),
-        ("zhng", OMIT, "a"),
-        ("zhsng", NEIGHBOR, "a"),
-        ("zhaang", REPEAT, "a"),
+    let d = Arc::new(
+        Dictionary::from_tsv(
+            "zhang\t张\t1000\nping\t平\t800\nhao\t好\t800\nshi\t是\t800\nni'hao\t你好\t900\n",
+        )
+        .unwrap(),
+    );
+    for (raw, flag, text, canonical, letters) in [
+        ("zhnag", SWAP, "张", "zhang", "an"),
+        ("zhng", OMIT, "张", "zhang", "a"),
+        ("zhsng", NEIGHBOR, "张", "zhang", "a"),
+        ("zhaang", REPEAT, "张", "zhang", "a"),
+        ("hoa", SWAP, "好", "hao", "ao"),
+        ("pign", SWAP, "平", "ping", "ng"),
+        ("png", OMIT, "平", "ping", "i"),
+        ("hso", NEIGHBOR, "好", "hao", "a"),
+        ("pinb", NEIGHBOR, "平", "ping", "g"),
+        ("shii", REPEAT, "是", "shi", "i"),
+        ("haoo", REPEAT, "好", "hao", "o"),
+        ("nihoa", SWAP, "你好", "ni'hao", "ao"),
     ] {
-        let mut s = Session::new(dictionary());
+        let mut s = Session::new(Arc::clone(&d));
         assert!(s.configure_matching(flag));
         typed(&mut s, raw);
-        let i = find(&mut s, "张");
-        assert_eq!(s.candidate(i).unwrap().pinyin, "zhang");
+        let i = find(&mut s, text);
+        assert_eq!(s.candidate(i).unwrap().pinyin, canonical);
         assert_eq!(marked(&s, i), letters, "{raw}");
         assert!(!s.configure_matching(0));
         assert_eq!(s.preedit(), raw);
         s.process(Key::Select(i), Modifiers::default());
-        assert_eq!(s.commit(), "张");
+        assert_eq!(s.commit(), text);
     }
     let mut s = Session::new(dictionary());
     s.configure_matching(SWAP);

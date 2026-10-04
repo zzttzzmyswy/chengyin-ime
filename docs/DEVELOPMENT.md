@@ -1,3 +1,9 @@
+# preview11 纠错示例说明
+
+2026-10-05：见 [WINDOWS_PREVIEW11_TASKLIST](WINDOWS_PREVIEW11_TASKLIST.md)。四类纠错为通用 trie/字母对齐规则，
+不限定 zhang。设置每项标注“示例”，分别展示 zhang、ping、hao、shi，并在组内说明适用于词库拼音。
+扩展既有键盘失误回归到不同声母、韵母和 ni'hao 多音节，核对逐字母标记和提交；算法范围不变。
+
 # preview10 匹配与主题补充
 
 2026-10-05：见 [WINDOWS_PREVIEW10_TASKLIST](WINDOWS_PREVIEW10_TASKLIST.md)。三个角色主题及绘制代码删除，保留通用系统/白/黑绘制器。

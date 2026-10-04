@@ -66,7 +66,7 @@ jobs:
         run: ./platforms/windows/Build.ps1
       - name: Install, upgrade, rollback and uninstall in this isolated runner
         shell: powershell
-        run: python scripts/test_windows_installer.py --package build/packages/chengyin-windows-x64-0.1.0-preview10-msvc.exe --build-dir build/windows-msvc --makensis (Get-Content -LiteralPath build/nsis-compiler-path.txt -Raw).Trim()
+        run: python scripts/test_windows_installer.py --package build/packages/chengyin-windows-x64-0.1.0-preview11-msvc.exe --build-dir build/windows-msvc --makensis (Get-Content -LiteralPath build/nsis-compiler-path.txt -Raw).Trim()
       - uses: actions/upload-artifact@v4
         with:
           name: chengyin-windows-x64-msvc-preview
