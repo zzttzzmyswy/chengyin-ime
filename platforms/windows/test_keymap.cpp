@@ -126,7 +126,8 @@ int main() {
         HWND owner = CreateWindowW(L"STATIC", L"Myswy test owner", WS_OVERLAPPEDWINDOW,
                                    0, 0, 300, 200, nullptr, nullptr, module, nullptr);
         require(owner != nullptr, "candidate test owner");
-        candidates.show(session, owner, RECT{100, 100, 101, 120}, false, &clicks, clicked, 1);
+        Preferences headerPrefs; headerPrefs.candidatePinyin = true;
+        candidates.show(session, owner, RECT{100, 100, 101, 120}, false, &clicks, clicked, 1, headerPrefs);
         HWND popup = candidates.handle();
         if (!popup || !IsWindowVisible(popup))
             std::fprintf(stderr, "Popup=%p visible=%d error=%lu\n", popup, popup ? IsWindowVisible(popup) : 0, GetLastError());
@@ -140,13 +141,13 @@ int main() {
         // and Windows' drawing caches. Flush batched deletions before counting;
         // a tight UpdateWindow loop does not perform the usual message-pump flush.
         for (int i = 0; i < 10; ++i) {
-            candidates.show(session, owner, RECT{100, 100, 101, 120}, false, &clicks, clicked, 1);
+            candidates.show(session, owner, RECT{100, 100, 101, 120}, false, &clicks, clicked, 1, headerPrefs);
             UpdateWindow(popup);
         }
         require(GdiFlush() != FALSE, "initial GDI batch completed");
         const DWORD gdiBefore = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
         for (int i = 0; i < 150; ++i) {
-            candidates.show(session, owner, RECT{100, 100, 101, 120}, false, &clicks, clicked, 1);
+            candidates.show(session, owner, RECT{100, 100, 101, 120}, false, &clicks, clicked, 1, headerPrefs);
             UpdateWindow(popup);
             require(popup == candidates.handle()
                     && IsWindowVisible(popup), "continuous redraw retains visible window");
@@ -162,17 +163,19 @@ int main() {
         require(gdiAfter <= gdiBefore,
                 "repeated paints do not leak GDI handles");
         require(SendMessageW(popup, WM_ERASEBKGND, 0, 0) == 1, "candidate erasing is suppressed");
-        const LPARAM firstRow = MAKELPARAM(20, 52);
+        const UINT clickDpi = windowDpi(popup);
+        const LPARAM firstRow = MAKELPARAM(MulDiv(20, clickDpi, 96), MulDiv(52, clickDpi, 96));
+        const LPARAM header = MAKELPARAM(MulDiv(20, clickDpi, 96), MulDiv(15, clickDpi, 96));
         SendMessageW(popup, WM_LBUTTONDOWN, MK_LBUTTON, firstRow);
         SendMessageW(popup, WM_LBUTTONUP, 0, firstRow);
         require(clicks.count == 1 && clicks.index == 0 && clicks.generation == 1
                 && GetFocus() == focus, "click without focus change");
         SendMessageW(popup, WM_LBUTTONDOWN, MK_LBUTTON, firstRow);
-        candidates.show(session, owner, RECT{100, 100, 101, 120}, false, &clicks, clicked, 2);
+        candidates.show(session, owner, RECT{100, 100, 101, 120}, false, &clicks, clicked, 2, headerPrefs);
         SendMessageW(popup, WM_LBUTTONUP, 0, firstRow);
         require(clicks.count == 1, "changed candidates invalidate an in-flight click");
-        SendMessageW(popup, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(20, 15));
-        SendMessageW(popup, WM_LBUTTONUP, 0, MAKELPARAM(20, 15));
+        SendMessageW(popup, WM_LBUTTONDOWN, MK_LBUTTON, header);
+        SendMessageW(popup, WM_LBUTTONUP, 0, header);
         require(clicks.count == 1, "preedit row is not selectable");
         SendMessageW(popup, WM_LBUTTONDOWN, MK_LBUTTON, firstRow);
         candidates.hide();

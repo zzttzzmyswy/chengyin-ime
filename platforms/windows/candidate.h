@@ -17,6 +17,7 @@ class CandidateWindow {
               void *target = nullptr, Choice choice = nullptr, uint64_t generation = 0,
               const Preferences &preferences = Preferences{}, bool inlineEditable = false);
     void hide();
+    void refreshPreferences(MyswySession *, const Preferences &);
     HWND handle() const { return hwnd_; }
   private:
     static LRESULT CALLBACK procedure(HWND, UINT, WPARAM, LPARAM);
@@ -52,6 +53,8 @@ class CandidateWindow {
     int shapeWidth_ = 0, shapeHeight_ = 0, shapeRadius_ = -1;
     int numberWidth_ = 0, scrollOffset_ = 0, scrollMaximum_ = 0;
     bool inlineEditable_ = false, showPinyin_ = false;
+    RECT requestedCaret_{};
+    bool limited_ = false;
     void *target_ = nullptr;
     Choice choice_ = nullptr;
     uint64_t generation_ = 0, pressedGeneration_ = 0;

@@ -13,7 +13,7 @@ struct Preferences {
     int pageSize = 5;
     int shiftSwitch = 1; // disabled/left/both
     bool separators = true;
-    bool candidatePinyin = true; // only when the host cannot edit inline preedit
+    bool candidatePinyin = false; // explicit opt-in, including corrected pronunciation
     bool learning = true;
     bool associations = true;
     bool defaultEnglish = false;

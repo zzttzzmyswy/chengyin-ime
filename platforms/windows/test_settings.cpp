@@ -129,6 +129,7 @@ int main() {
             && before == after, "damaged SCEL preserves merged snapshot");
     const auto preferences = folder + L"\\preferences.ini", profilePath = folder + L"\\learning.profile";
     myswy::Preferences prefs;
+    require(!prefs.candidatePinyin, "new settings default to no candidate pinyin");
     prefs.font = L"微软雅黑";
     prefs.fontSize = 23;
     prefs.theme = 2;
@@ -180,11 +181,14 @@ int main() {
         require(at!=std::wstring::npos,"matching option fixture");
         const auto end=legacy.find(L'\n',at);
         legacy.erase(at,end-at+1);
+        const auto pinyinAt = legacy.find(L"ShowCandidatePinyin=");
+        require(pinyinAt != std::wstring::npos, "new explicit pinyin preference fixture");
+        legacy.erase(pinyinAt, legacy.find(L'\n', pinyinAt) - pinyinAt + 1);
         std::vector<uint8_t> bytes(2+legacy.size()*2); bytes[0]=0xff; bytes[1]=0xfe;
         std::memcpy(bytes.data()+2,legacy.data(),legacy.size()*2);
         require(myswy::atomicWrite(preferences,bytes),"legacy preference without matching switches");
         auto old=restored;
-        require(myswy::tryLoadPreferences(preferences,old) && old.matchingOptions==0 && old.font==prefs.font,
+        require(myswy::tryLoadPreferences(preferences,old) && old.matchingOptions==0 && !old.candidatePinyin && old.font==prefs.font,
             "legacy matching disabled with other settings preserved");
         prefs.matchingOptions=1u<<31;
         require(!myswy::savePreferences(preferences,prefs),"unknown matching flags cannot save");

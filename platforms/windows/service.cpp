@@ -392,7 +392,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
                     Ptr<Service>
                     keep(this);
                     receiveConfiguration(std::move(snapshot));
-                });
+                }, kConfigurationEpoch, userFile(L"preferences.ini"));
             } catch (...) {
                 watcher_.reset();
             }
@@ -401,6 +401,18 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         return hr;
     }
 #ifdef MYSWY_FIXED_TEST_VOCABULARY
+    HRESULT STDMETHODCALLTYPE Appearance(UINT fontSize, UINT layout, BOOL pinyin) override {
+        auto snapshot = std::make_shared<ConfigurationUpdate>();
+        snapshot->preferences = preferences_;
+        snapshot->preferences.fontSize = static_cast<int>(fontSize);
+        snapshot->preferences.layout = static_cast<int>(layout);
+        snapshot->preferences.candidatePinyin = pinyin != FALSE;
+        snapshot->preferencesValid = validPreferences(snapshot->preferences);
+        if (!snapshot->preferencesValid)
+            return E_INVALIDARG;
+        receiveConfiguration(std::move(snapshot));
+        return S_OK;
+    }
     HRESULT STDMETHODCALLTYPE Update(UINT page, BOOL punctuation, BOOL associations, BOOL learning,
                                      const uint8_t *data, size_t size) override {
         if (page != 5 && page != 7 && page != 9)
@@ -1108,6 +1120,8 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         replaceProfile_ = replaceProfile_ || !wasLearning || snapshot->learningGeneration != learningGeneration_;
         pendingConfiguration_ = std::move(snapshot);
         applyPendingConfiguration();
+        if (session_ && composition_)
+            candidates_.refreshPreferences(session_, preferences_);
         if (composition_ && context_)
             OnLayoutChange(context_.get(), LayoutCode::change, nullptr);
     }

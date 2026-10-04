@@ -23,16 +23,17 @@ struct ConfigurationUpdate {
             myswy_profile_free(profile);
     }
 };
-// The worker polls one shared integer; files are read only after a successful
-// configuration publish. The input thread receives the latest owned snapshot.
+// Shared notification plus a background preference-file stamp fallback. No
+// file I/O on the input thread; delivery returns to the owning TSF apartment.
 class ConfigurationWatcher {
   public:
     using Snapshot = std::shared_ptr<ConfigurationUpdate>;
     ConfigurationWatcher(DWORD observed, std::function<Snapshot()> load,
-                         std::function<void(Snapshot)> apply, const wchar_t *name = kConfigurationEpoch);
+                         std::function<void(Snapshot)> apply, const wchar_t *name = kConfigurationEpoch,
+                         std::wstring preferencesPath = {});
     ~ConfigurationWatcher();
     bool valid() const {
-        return window_ && stop_ && epoch_.valid() && worker_.joinable();
+        return window_ && stop_ && worker_.joinable();
     }
   private:
     static LRESULT CALLBACK procedure(HWND, UINT, WPARAM, LPARAM);

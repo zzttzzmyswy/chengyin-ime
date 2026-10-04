@@ -764,6 +764,22 @@ void runEditTests(ITfKeyEventSink *keys) {
     type(keys, b, "nihao");
     HWND stablePopup = testCandidateWindow();
     require(stablePopup && IsWindowVisible(stablePopup), "layout baseline candidate");
+    {
+        Ptr<ConfigurationTest> configuration;
+        require(SUCCEEDED(query(keys, kConfigurationTest, configuration)), "appearance configuration fixture");
+        RECT beforeAppearance{}, afterAppearance{};
+        GetWindowRect(stablePopup, &beforeAppearance);
+        const auto text = b->doc.text;
+        const int appearanceWrites = b->doc.writes;
+        b->doc.denyLock = true;
+        require(SUCCEEDED(configuration->Appearance(32, 1, TRUE)), "appearance updates with denied host edit lock");
+        GetWindowRect(stablePopup, &afterAppearance);
+        require(afterAppearance.right - afterAppearance.left != beforeAppearance.right - beforeAppearance.left || afterAppearance.bottom - afterAppearance.top != beforeAppearance.bottom - beforeAppearance.top,
+                "visible popup changes immediately without input or host edit lock");
+        require(b->doc.text == text && b->doc.writes == appearanceWrites, "appearance refresh preserves host composition");
+        require(SUCCEEDED(configuration->Appearance(18, 0, FALSE)), "appearance can be restored without reactivation");
+        b->doc.denyLock = false;
+    }
     b->doc.failExt = true;
     require(key(keys, b, VK_LEFT), "typing continues while TSF layout unavailable");
     require(stablePopup == testCandidateWindow()

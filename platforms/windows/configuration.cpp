@@ -2,20 +2,39 @@
 namespace myswy {
 namespace {
 constexpr UINT kReady = WM_APP + 57;
+struct FileStamp {
+    bool exists = false;
+    FILETIME modified{};
+    DWORD high = 0, low = 0;
+    bool operator==(const FileStamp &other) const {
+        return exists == other.exists && modified.dwHighDateTime == other.modified.dwHighDateTime
+            && modified.dwLowDateTime == other.modified.dwLowDateTime && high == other.high && low == other.low;
+    }
+};
+FileStamp stamp(const std::wstring &path) {
+    WIN32_FILE_ATTRIBUTE_DATA data{};
+    if (path.empty() || !GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data))
+        return {};
+    return {true, data.ftLastWriteTime, data.nFileSizeHigh, data.nFileSizeLow};
+}
 }
 ConfigurationWatcher::ConfigurationWatcher(DWORD observed, std::function<Snapshot()> load,
-        std::function<void(Snapshot)> apply, const wchar_t *name): epoch_(name), apply_(std::move(apply)) {
+        std::function<void(Snapshot)> apply, const wchar_t *name, std::wstring preferencesPath): epoch_(name), apply_(std::move(apply)) {
     stop_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     window_ = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, module, nullptr);
-    if (!window_ || !stop_ || !epoch_.valid())
+    if (!window_ || !stop_ || (!epoch_.valid() && preferencesPath.empty()))
         return;
     SetWindowLongPtrW(window_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
     SetWindowLongPtrW(window_, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(procedure));
     try {
-        worker_ = std::thread([this, observed, load = std::move(load)]() mutable {
+        worker_ = std::thread([this, observed, load = std::move(load), path = std::move(preferencesPath)]() mutable {
+            auto previous = stamp(path);
+            bool initial = !path.empty();
+            ULONGLONG retryAt = 0;
             while (WaitForSingleObject(stop_, 200) == WAIT_TIMEOUT) {
                 const DWORD next = epoch_.current();
-                if (next == observed)
+                const auto current = stamp(path);
+                if ((!initial && next == observed && current == previous) || GetTickCount64() < retryAt)
                     continue;
                 try {
                     auto update = load();
@@ -23,6 +42,13 @@ ConfigurationWatcher::ConfigurationWatcher(DWORD observed, std::function<Snapsho
                         std::lock_guard<std::mutex> guard(mutex_);
                         pending_ = std::move(update);
                         PostMessageW(window_, kReady, 0, 0);
+                        if (pending_->preferencesValid || path.empty()) {
+                            previous = current;
+                            initial = false;
+                        } else {
+                            // Temporary access/parse failures retain the old snapshot and retry.
+                            retryAt = GetTickCount64() + 1000;
+                        }
                     }
                     observed = next;
                 } catch (...) { /* Preserve the active snapshot; retry on the next wake. */ }

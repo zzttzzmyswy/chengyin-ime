@@ -238,7 +238,7 @@ void Settings::buildPage() {
     switch (page_) {
     case 7: {
         begin(L"模糊音（双向匹配）");
-        paragraph(L"按需要勾选容易混淆的声母和韵母。正确拼写候选优先，发生匹配的标准拼音字母加粗显示。各项默认关闭。");
+        paragraph(L"按需要勾选容易混淆的声母和韵母。正确拼写候选优先。开启候选页的“显示候选框拼音”后，匹配位置按字母加粗显示。各项默认关闭。");
         const wchar_t *pairs[]{L"zh ↔ z",L"ch ↔ c",L"sh ↔ s",L"n ↔ l",L"f ↔ h",L"l ↔ r",L"an ↔ ang",L"en ↔ eng",L"in ↔ ing",L"ian ↔ iang",L"uan ↔ uang"};
         for (int i=0;i<11;++i) checkbox(801+i,pairs[i],(draft_.matchingOptions&(1u<<i))!=0);
         end();
@@ -246,7 +246,7 @@ void Settings::buildPage() {
         paragraph(L"以下是四类通用纠错规则，适用于词库中的拼音，不限于所列示例。");
         const wchar_t *errors[]{L"相邻字母按反（示例：zhnag → zhang）",L"漏按一个字母（示例：png → ping）",L"QWERTY 相邻键误按（示例：hso → hao）",L"重复按键（示例：shii → shi）"};
         for (int i=0;i<4;++i) checkbox(820+i,errors[i],(draft_.matchingOptions&(1u<<(16+i)))!=0);
-        paragraph(L"键盘纠错用于至少三个输入字母；每音节最多一次，每个词最多两次。交换只限相邻字母，不作任意乱排。候选显示标准拼音并加粗修正位置；原始拼音仍可编辑，空格提交原始输入。应用后从下一段输入生效。");
+        paragraph(L"键盘纠错用于至少三个输入字母；每音节最多一次，每个词最多两次。交换只限相邻字母，不作任意乱排。开启候选拼音时显示标准读音并加粗修正位置；关闭显示仍会匹配。原始拼音仍可编辑，空格提交原始输入。应用后从下一段输入生效。");
         end();
         break;
     }
@@ -294,8 +294,8 @@ void Settings::buildPage() {
         combo(305, 130, y, 250, {L"紧凑", L"标准"}, draft_.density);
         y += 36;
         checkbox(306, L"显示拼音音节分隔符，如 ni'hao", draft_.separators);
-        checkbox(307, L"无法在编辑框直接编辑时显示候选拼音", draft_.candidatePinyin);
-        paragraph(L"可在编辑框直接编辑拼音时，候选窗自动隐藏重复拼音。其他情况下，纵向拼音放在右侧，横向放在下方。");
+        checkbox(307, L"显示候选框拼音（默认关闭）", draft_.candidatePinyin);
+        paragraph(L"关闭时隐藏候选框内的拼音，包括模糊音和纠错读音。开启后，纵向拼音放在右侧，横向放在下方，匹配位置按字母加粗。可直接编辑临时拼音时仍隐藏普通候选的重复拼音。应用后立即同步候选外观。");
         end();
         begin(L"字体预览");
         std::wstring text;
@@ -385,7 +385,7 @@ void Settings::buildPage() {
     case 6:
         begin(L"澄音输入法");
         paragraph(
-            L"版本：0.1.0-preview11 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
+            L"版本：0.1.0-preview12 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
         paragraph(
             L"代码开源协议：MIT License · Copyright 2026 Myswy IM contributors\n允许使用、修改和分发，须保留版权和许可声明；软件按现状提供。词库及运行库有各自许可，随安装包提供。");
         buttons(605, L"开源协议", 606, L"仓库链接", 607, L"发行说明");
@@ -644,7 +644,7 @@ std::wstring Settings::diagnostics() {
     LSTATUS status = RegGetValueW(HKEY_LOCAL_MACHINE,
                                   L"Software\\Classes\\CLSID\\{65C32A54-219A-4F0A-B44C-B963D7BA532F}\\InprocServer32", nullptr, RRF_RT_REG_SZ,
                                   nullptr, registered, &size);
-    text << L"澄音 0.1.0-preview11\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
+    text << L"澄音 0.1.0-preview12\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
          (status == ERROR_SUCCESS ? registered : L"not registered") << L"\r\nDPI: " << dpi_ << L"\r\nFont: " <<
          draft_.font << L" / " << draft_.fontSize << L"\r\nPage size: " << draft_.pageSize << L"\r\nLearning: " <<
          draft_.learning << L"\r\nAssociation: " << draft_.associations << L"\r\nCaret fallback: " <<
@@ -702,7 +702,7 @@ void Settings::command(int id, int event) {
     if (id == kSave) {
         if (savePreferences(userFile(L"preferences.ini", true), draft_)) {
             dirty_ = false;
-            notify(L"设置已应用，已打开的应用会自动更新。");
+            notify(L"设置已应用；候选外观立即同步，词库与纠错从下一段输入生效。");
         } else
             notify(L"无法保存设置，磁盘上的原配置保留。", true);
         return;
@@ -774,7 +774,9 @@ void Settings::command(int id, int event) {
         ShellExecuteW(window_, L"open", kRepository, nullptr, nullptr, SW_SHOWNORMAL); return;
     }
     if (id == 607) {
-        MessageBoxW(window_, L"0.1.0-preview11 · 2026-10-05\n\n"
+        MessageBoxW(window_, L"0.1.0-preview12 · 2026-10-05\n\n"
+                    L"• 修复已打开应用的候选外观同步，后台文件检测补足共享通知。\n"
+                    L"• 候选拼音开关默认关闭，包括模糊音和纠错拼音；开启后保留字母标记。\n"
                     L"• 键盘纠错明确标注示例，并用不同拼音展示通用规则。\n"
                     L"• 候选按文字尺寸布局，紧凑间距；可编辑临时拼音时隐藏重复拼音。\n"
                     L"• 删除三个角色主题，保留系统、白、黑及主题设置页。\n"

@@ -6,5 +6,6 @@ inline constexpr GUID kConfigurationTest = {0xb3d4ffba, 0x7e1a, 0x4672, {0xb0, 0
 struct ConfigurationTest : IUnknown {
     virtual HRESULT STDMETHODCALLTYPE Update(UINT pageSize, BOOL punctuation, BOOL associations, BOOL learning,
             const uint8_t *dictionary, size_t size) = 0;
+    virtual HRESULT STDMETHODCALLTYPE Appearance(UINT fontSize, UINT layout, BOOL pinyin) = 0;
 };
 }

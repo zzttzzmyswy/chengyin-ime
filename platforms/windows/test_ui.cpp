@@ -51,8 +51,8 @@ void capture(HWND window, const wchar_t *name) {
     HDC screen = GetDC(nullptr), memory = CreateCompatibleDC(screen);
     HBITMAP bitmap = CreateCompatibleBitmap(screen, width, height);
     HGDIOBJ old = SelectObject(memory, bitmap);
-    require(BitBlt(memory, 0, 0, width, height, screen, rect.left, rect.top, SRCCOPY) != FALSE,
-            "capture native paint");
+    require(PrintWindow(window, memory, PW_RENDERFULLCONTENT) != FALSE,
+            "render own fixture window without desktop occlusion");
     SelectObject(memory, old);
     BITMAPINFO info{};
     info.bmiHeader = {sizeof(BITMAPINFOHEADER), width, height, 1, 32, BI_RGB, 0, 0, 0, 0, 0};
@@ -378,7 +378,7 @@ int wmain(int argc, wchar_t **argv) {
     require(session && myswy_session_configure_matching(session,MYSWY_MATCHING_MASK)==0,"correction rendering options");
     {
         myswy::CandidateWindow candidates;
-        myswy::Preferences prefs; prefs.density=0; prefs.candidatePinyin=false;
+        myswy::Preferences prefs; prefs.density=0; prefs.candidatePinyin=true;
         for (const char *raw : {"zhnag","zhng","zhsng","zhaang","zang"}) {
             myswy_session_reset(session);
             for (const char *c=raw;*c;++c) myswy_session_process(session,static_cast<uint32_t>(*c),0);
@@ -390,6 +390,19 @@ int wmain(int argc, wchar_t **argv) {
                 candidates.show(session,owner,RECT{100,150,101,170},false,nullptr,nullptr,100+layout,prefs,true);
                 const auto name=L"candidate-correction-"+std::wstring(raw,raw+std::strlen(raw))+L"-"+std::to_wstring(layout);
                 capture(candidates.handle(),name.c_str());
+                RECT shown{}, hidden{};
+                GetWindowRect(candidates.handle(), &shown);
+                const int selected = myswy_session_selected(session);
+                prefs.candidatePinyin = false;
+                candidates.refreshPreferences(session, prefs);
+                GetWindowRect(candidates.handle(), &hidden);
+                require(hidden.bottom - hidden.top < shown.bottom - shown.top || hidden.right - hidden.left < shown.right - shown.left,
+                        "pinyin toggle hides corrected spelling and immediately shrinks visible popup");
+                require(myswy_session_selected(session) == selected, "appearance refresh preserves selection");
+                const auto hiddenName = name + L"-pinyin-off";
+                capture(candidates.handle(), hiddenName.c_str());
+                prefs.candidatePinyin = true;
+                candidates.refreshPreferences(session, prefs);
             }
         }
     }

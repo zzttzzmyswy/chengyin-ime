@@ -106,9 +106,36 @@ void languageBar() {
     DestroyIcon(english);
 }
 }
-int main() {
+int wmain(int argc, wchar_t **argv) {
     myswy::module = GetModuleHandleW(nullptr);
     require(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)), "COM apartment");
+    if (argc == 3 && !std::wcscmp(argv[1], L"--publish")) {
+        myswy::Preferences prefs;
+        prefs.fontSize = 26; prefs.layout = 1; prefs.pageSize = 9;
+        require(myswy::savePreferences(argv[2], prefs), "separate publisher saves isolated preferences");
+        CoUninitialize();
+        return 0;
+    }
+    if (argc == 4 && !std::wcscmp(argv[1], L"--watch")) {
+        bool complete = false;
+        const auto name = L"Local\\Chengyin.Remote.Test." + std::to_wstring(GetCurrentProcessId());
+        {
+            myswy::ConfigurationWatcher watcher(0, [&] {
+                auto snapshot = std::make_shared<myswy::ConfigurationUpdate>();
+                snapshot->preferencesValid = myswy::tryLoadPreferences(argv[2], snapshot->preferences);
+                return snapshot;
+            }, [&](auto snapshot) {
+                if (!snapshot->preferencesValid) return;
+                complete = snapshot->preferences.fontSize == 26 && !snapshot->preferences.candidatePinyin;
+                const std::string report = complete ? "PASS" : "READY";
+                require(myswy::atomicWrite(argv[3], std::vector<uint8_t>(report.begin(), report.end())), "remote consumer report");
+            }, name.c_str(), argv[2]);
+            require(watcher.valid(), "separate existing consumer file watcher");
+            until([&] {return complete;});
+        }
+        CoUninitialize();
+        return 0;
+    }
     wchar_t root[MAX_PATH] {};
     require(GetTempPathW(MAX_PATH, root) > 0, "temporary root");
     auto file = std::wstring(root) + L"chengyin-live-" + std::to_wstring(GetCurrentProcessId()) + L".ini";
@@ -184,6 +211,68 @@ int main() {
         while (!loaded && GetTickCount() - begin < 2000)
             Sleep(5);
         require(loaded, "pending snapshot created before close");
+    }
+    // Separate process + deliberately unavailable named mapping: file changes
+    // must still reach existing recipients without input or reactivation.
+    {
+        const auto blockedName = name + L".Blocked";
+        HANDLE blocker = CreateEventW(nullptr, TRUE, FALSE, blockedName.c_str());
+        require(blocker != nullptr, "private incompatible notification object");
+        myswy::LearningEpoch unavailable(blockedName.c_str());
+        require(!unavailable.valid(), "shared mapping is actually unavailable for fallback regression");
+        myswy::Preferences prefs; prefs.pageSize = 5; prefs.candidatePinyin = true;
+        require(myswy::savePreferences(file, prefs), "file fallback baseline");
+        int font[2]{}, page[2]{}; bool pinyin[2]{true,true};
+        auto load = [&] {
+            require(GetCurrentThreadId() != mainThread, "fallback disk I/O stays off input thread");
+            auto snapshot = std::make_shared<myswy::ConfigurationUpdate>();
+            snapshot->preferencesValid = myswy::tryLoadPreferences(file, snapshot->preferences);
+            return snapshot;
+        };
+        auto apply = [&](int index, auto snapshot) {
+            require(GetCurrentThreadId() == mainThread, "fallback delivered to owning apartment");
+            if (snapshot->preferencesValid) {
+                font[index] = snapshot->preferences.fontSize;
+                page[index] = snapshot->preferences.pageSize;
+                pinyin[index] = snapshot->preferences.candidatePinyin;
+            }
+        };
+        {
+            myswy::ConfigurationWatcher first(0, load, [&](auto s) {apply(0,std::move(s));}, blockedName.c_str(), file);
+            myswy::ConfigurationWatcher second(0, load, [&](auto s) {apply(1,std::move(s));}, blockedName.c_str(), file);
+            require(first.valid() && second.valid(), "watchers survive unavailable shared mapping");
+            until([&] {return font[0] == 18 && font[1] == 18;});
+            wchar_t executable[32768]{};
+            require(GetModuleFileNameW(nullptr, executable, 32768) > 0, "self executable for separate processes");
+            auto spawn = [&](const std::wstring &arguments) {
+                std::wstring command = L"\"" + std::wstring(executable) + L"\" " + arguments;
+                STARTUPINFOW startup{}; startup.cb = sizeof(startup);
+                startup.dwFlags = STARTF_USESHOWWINDOW; startup.wShowWindow = SW_HIDE;
+                PROCESS_INFORMATION process{};
+                require(CreateProcessW(executable, command.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup, &process) != FALSE,
+                        "launch private existing consumer/publisher");
+                CloseHandle(process.hThread);
+                return process.hProcess;
+            };
+            const auto report = file + L".report";
+            HANDLE consumer = spawn(L"--watch \"" + file + L"\" \"" + report + L"\"");
+            auto reportIs = [&](const std::string &expected) {
+                std::vector<uint8_t> data;
+                return myswy::readSmallFile(report,data,16) && std::string(data.begin(),data.end()) == expected;
+            };
+            until([&] {return reportIs("READY");});
+            HANDLE publisher = spawn(L"--publish \"" + file + L"\"");
+            until([&] {return font[0] == 26 && font[1] == 26 && page[0] == 9 && page[1] == 9 && !pinyin[0] && !pinyin[1];});
+            until([&] {return reportIs("PASS");});
+            for (HANDLE process : {publisher,consumer}) {
+                require(WaitForSingleObject(process,4000) == WAIT_OBJECT_0, "separate process finished");
+                DWORD exit = 1;
+                require(GetExitCodeProcess(process,&exit) && exit == 0, "separate process succeeded");
+                CloseHandle(process);
+            }
+            DeleteFileW(report.c_str());
+        }
+        CloseHandle(blocker);
     }
     languageBar();
     myswy::PunctuationState p;

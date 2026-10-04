@@ -1,3 +1,18 @@
+# preview12 设置同步与拼音开关
+
+2026-10-05：见 [WINDOWS_PREVIEW12_TASKLIST](WINDOWS_PREVIEW12_TASKLIST.md)。ConfigurationWatcher 在后台每 200 ms
+检测共享通知和 preferences.ini 的修改时间/大小；首次补读覆盖初始化竞态，通知映射不可用时仍检测文件。
+无效配置保留当前设置并间隔重试；磁盘/词库读取只在后台，快照通过消息窗返回所属 TSF apartment。
+receiveConfiguration 直接使用缓存的宿主与光标位置刷新当前候选，再申请布局刷新；外观不再依赖编辑锁成功。
+词库、页容量和匹配会话仍在下一段输入切换，不在进行中的 composition 重配共享核心。
+
+Preferences::candidatePinyin 默认 false；新 ShowCandidatePinyin 保存显式开启，旧 CandidatePinyin 仍验证并保存供降级读取。
+缺少新字段时默认关闭，避免旧版默认开启值抵消新要求；只读加载不改个人文件。
+关闭时隐藏原文和标准/纠错拼音，保留联想和长度限制状态。开启时遵循普通内嵌去重，并显示修正位置的字母标记。
+回归增加不同进程的已有接收者、映射创建失败、拒绝编辑锁时即时外观变化、旧配置与开关绘制。
+原有点击 fixture 改成按实际窗口 DPI 换算坐标；截图用 PrintWindow 绘制自有窗口，避免捕获遮挡它的其他应用。
+本次共享 Rust/C ABI 不改；实机现代应用和安装生命周期证据另验，不将 native fixture 泛化为所有宿主。
+
 # preview11 纠错示例说明
 
 2026-10-05：见 [WINDOWS_PREVIEW11_TASKLIST](WINDOWS_PREVIEW11_TASKLIST.md)。四类纠错为通用 trie/字母对齐规则，

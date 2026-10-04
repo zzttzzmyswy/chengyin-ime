@@ -41,6 +41,14 @@ CandidateWindow::~CandidateWindow() {
         DeleteObject(footerFont_);
     UnregisterClassW(kWindowClass, module);
 }
+void CandidateWindow::refreshPreferences(MyswySession *session, const Preferences &preferences) {
+    if (!session || !hwnd_ || !IsWindowVisible(hwnd_))
+        return;
+    HWND owner = reinterpret_cast<HWND>(GetWindowLongPtrW(hwnd_, GWLP_HWNDPARENT));
+    if (!owner || !IsWindow(owner))
+        return;
+    show(session, owner, requestedCaret_, limited_, target_, choice_, generation_, preferences, inlineEditable_);
+}
 void CandidateWindow::hide() {
     pressed_ = -1;
     hover_ = -1;
@@ -54,6 +62,8 @@ void CandidateWindow::hide() {
 }
 void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool limited, void *target,
                            Choice choice, uint64_t generation, const Preferences &preferences, bool inlineEditable) {
+    requestedCaret_ = caret;
+    limited_ = limited;
     // Convert host-virtualized caret coordinates before switching this thread.
     if (owner && !AreDpiAwarenessContextsEqual(GetWindowDpiAwarenessContext(owner), DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
         POINT start{caret.left, caret.top}, end{caret.right, caret.bottom};
@@ -131,6 +141,10 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         fontFace_ = preferences.font;
     }
     readText(session, preferences.separators ? MYSWY_TEXT_DISPLAY_PREEDIT : MYSWY_TEXT_PREEDIT, 0, rows_[0]);
+    if (!preferences.candidatePinyin) {
+        rows_[0].data[0] = L'\0';
+        rows_[0].length = 0;
+    }
     association_ = myswy_session_is_association(session) > 0;
     if (association_) {
         constexpr wchar_t label[] = L"联想 · Tab / 鼠标确认";
@@ -138,8 +152,8 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         rows_[0].length = static_cast<int>(std::wcslen(label));
     }
     if (limited && rows_[0].length + 12 < static_cast<int>(std::size(rows_[0].data))) {
-        constexpr wchar_t label[] = L" · 请分段输入";
-        std::copy_n(label, std::size(label), rows_[0].data + rows_[0].length);
+        const wchar_t *label = rows_[0].length ? L" · 请分段输入" : L"请分段输入";
+        std::copy_n(label, std::wcslen(label) + 1, rows_[0].data + rows_[0].length);
         rows_[0].length = static_cast<int>(std::wcslen(rows_[0].data));
     }
     count_ = std::clamp(myswy_session_candidate_count(session), 0, 9);
@@ -155,7 +169,7 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         readText(session, MYSWY_TEXT_CANDIDATE_PINYIN, static_cast<size_t>(i), pinyin_[i]);
         std::fill_n(marks_[i],256,uint8_t{0});
         myswy_session_candidate_marks(session,static_cast<size_t>(i),marks_[i],256);
-        if (std::any_of(marks_[i],marks_[i]+256,[](uint8_t mark){return mark!=0;})) showPinyin_=true;
+        if (preferences.candidatePinyin && std::any_of(marks_[i],marks_[i]+256,[](uint8_t mark){return mark!=0;})) showPinyin_=true;
     }
     MONITORINFO monitor{};
     monitor.cbSize = sizeof(monitor);
@@ -182,7 +196,7 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         rowHeight_ += pinyinMetric.tmHeight + scale(2);
     else if (showPinyin_)
         rowHeight_ = std::max(rowHeight_, static_cast<int>(pinyinMetric.tmHeight) + scale(2));
-    headerHeight_ = ((!inlineEditable || association_ || limited) ? static_cast<int>(pinyinMetric.tmHeight) + scale(4) : 0);
+    headerHeight_ = (rows_[0].length && (!inlineEditable || association_ || limited) ? static_cast<int>(pinyinMetric.tmHeight) + scale(4) : 0);
     footerHeight_ = previous_ || next_ ? static_cast<int>(footerMetric.tmHeight) + scale(4) : 0;
     int widths[9]{}, textWidths[9]{}, pinyinWidths[9]{};
     int textColumn = 0, pinyinColumn = 0;

@@ -133,7 +133,11 @@ bool tryLoadPreferences(const std::wstring &path, Preferences &result) {
         target = n != 0;
         return true;
     };
-    bool ok = flag(L"Separators", p.separators) && flag(L"CandidatePinyin", p.candidatePinyin)
+    // The former default-on value is not an explicit opt-in to the new switch.
+    // Retain validation of the legacy key and write it for downgrade compatibility.
+    bool legacyPinyin = false;
+    bool ok = flag(L"Separators", p.separators) && flag(L"CandidatePinyin", legacyPinyin)
+              && flag(L"ShowCandidatePinyin", p.candidatePinyin)
               && flag(L"Learning", p.learning)
               && flag(L"Associations", p.associations) && flag(L"DefaultEnglish", p.defaultEnglish)
               && flag(L"CaretFallback", p.caretFallback) && flag(L"ChinesePunctuation", p.chinesePunctuation)
@@ -156,7 +160,8 @@ bool savePreferences(const std::wstring &path, const Preferences &p) {
       << L"\nLayout=" << p.layout << L"\nDensity=" << p.density << L"\nPageSize=" << p.pageSize << L"\nShiftSwitch="
       << p.shiftSwitch
       << L"\nMatchingOptions=" << p.matchingOptions
-      << L"\nSeparators=" << p.separators << L"\nCandidatePinyin=" << p.candidatePinyin << L"\nLearning=" <<
+      << L"\nSeparators=" << p.separators << L"\nCandidatePinyin=" << p.candidatePinyin
+      << L"\nShowCandidatePinyin=" << p.candidatePinyin << L"\nLearning=" <<
       p.learning
       << L"\nAssociations=" << p.associations << L"\nDefaultEnglish=" << p.defaultEnglish << L"\nCaretFallback=" <<
       p.caretFallback << L"\nChinesePunctuation=" << p.chinesePunctuation << L"\nAutoUpdate=" << p.autoUpdate << L"\n";
