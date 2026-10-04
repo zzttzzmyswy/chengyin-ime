@@ -38,7 +38,11 @@ Windows, Linux X11, Linux Wayland, and Android.
   show canonical per-letter candidate annotations; default matching flags are zero.
   Native seven CTests, 43 Rust tests, C ABI, 64 KiB/zero-key-allocation checks and
   package byte-exact/manifest/license checks pass. No new remote CI claim.
-  Preview10 installed application matrix and physical mixed-DPI remain pending.
+  Preview10 installed manifest/COM and a fresh Notepad3 DLL load pass. Real
+  Notepad3/Edit/RichEdit correction annotations, raw Space, paging and middle
+  insertion pass; idle Notepad3 Shift ^&J pass. Temporary matching flags restored
+  to zero, learning hash unchanged. See WINDOWS_PREVIEW10_DESKTOP_VALIDATION.
+  Full modern application matrix and physical mixed-DPI remain pending.
   Installed preview8 Notepad3 reveals Shift pass-through and trailing Space limits;
   preview9 fixes idle Shift test interception. See STATUS for exact evidence.
   Prior preview8 local Win11/MSVC seven CTests, Rust checks and real

@@ -20,9 +20,14 @@ C ABI v1 增量匹配配置/标记接口测试空指针、未知位、BUSY、查
 
 包的构建预检查、7-Zip、完整负载哈希、最终三个二进制逐字节、PE64/COM 与运行库/词库许可 ZIP 校验通过。
 日志 build/core-test-preview10.txt、native-build-preview10.txt、native-test-preview10.txt、abi-test-preview10.txt、package-preview10.txt，
-摘要 build/delivery-preview10.json。没有更新用户已安装的 preview8，不关闭用户已有应用，不保存个人测试设置/学习数据。
+摘要 build/delivery-preview10.json。构建阶段未更新用户安装；随后用户自行安装 preview10。
+安装负载、COM 注册/探测和三二进制哈希验证通过；独立 Notepad3 确认加载 preview10。
+实机 zhnag / zang / zhng / zhsng / zhaang 字母标记、翻页、中间插字、原文空格提交通过；
+Notepad3 保存 `zhnag^&J`（另有 CRLF），无尾随空格，Shift ^&J 正常。
+安装版 Edit/RichEdit 及仅三项主题列表通过；测试匹配设置已恢复 0，学习文件哈希不变。
+细节与 zhaang 第二页排序取舍见 [桌面验证](WINDOWS_PREVIEW10_DESKTOP_VALIDATION.md)。
 
-**剩余实机验收**：preview10 安装后 Notepad3/现代宿主的 Shift、空格、纠错/编辑/分段与跨应用矩阵；
+**剩余实机验收**：preview10 现代宿主、完整整句/分段/提交与跨应用矩阵；
 物理混合 DPI 多屏、干净隔离 runner 的新包安装/修复/升级/回滚/卸载，以及发布 Release 后远程更新安装。
 本轮没有远程 CI 或公开 Release，历史 preview7 安装生命周期不等于新包生命周期实测。
 此前 build-only windows_desktop_test.exe 的卡巴斯基 VHO:Trojan-Dropper.Win32.Convagent.gen 提示分类仍未排除，
