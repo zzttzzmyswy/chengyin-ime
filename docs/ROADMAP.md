@@ -26,7 +26,8 @@ M0 已有实现；M1 已有插件、自定义词典热切换和 Debian 测试包
 
 ## 当前优先：Windows 完整批次与集中实测
 
-preview8 已完成本轮十一项实现与本机原生回归，详情见 WINDOWS_PREVIEW8_TASKLIST；
+preview9 在 preview8 十一项改进上完成主题整体造型；任务与原生证据见 WINDOWS_PREVIEW9_TASKLIST。
+用户安装 preview8 后新增 Notepad3 观察与 Shift 修正，完整新版本实测仍要区分宿主；
 M4 下一步是物理多屏、Notepad3/现代宿主矩阵及隔离 installer 生命周期，
 发布带校验摘要的 Release 后补远程更新安装。核心性能和语料质量继续独立评测。
 

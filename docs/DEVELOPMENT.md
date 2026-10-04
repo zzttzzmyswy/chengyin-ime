@@ -1,3 +1,12 @@
+# preview9 主题开发补充
+
+2026-10-05：批次见 [WINDOWS_PREVIEW9_TASKLIST](WINDOWS_PREVIEW9_TASKLIST.md)。
+theme_art.cpp 为候选窗口与设置预览共享的原创矢量绘制器，GDI+ 由系统提供。
+主题 0 保留经典 GDI；其他主题绘制圆角、插画、纹样、选中态和序号徽章。
+不在共享 Rust 核心加入 GUI 依赖；插画不下载第三方资产。
+Shift 测试回调只允许取消切换，不能触发切换；空闲透传按键不谎报 eaten。
+真实安装的 Notepad3 与模拟编辑对象的结果分别记录，见 STATUS。
+
 # preview8 本机 Windows 开发补充
 
 2026-10-05：批次见 [WINDOWS_PREVIEW8_TASKLIST](WINDOWS_PREVIEW8_TASKLIST.md)。

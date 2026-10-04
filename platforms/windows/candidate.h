@@ -46,7 +46,8 @@ class CandidateWindow {
     std::wstring fontFace_;
     int theme_ = -1;
     Palette colors_{};
-    int hover_ = -1, headerHeight_ = 32, footerHeight_ = 24;
+    int hover_ = -1, headerHeight_ = 32, footerHeight_ = 24, bannerHeight_ = 0;
+    int shapeWidth_ = 0, shapeHeight_ = 0, shapeRadius_ = -1;
     int numberWidth_ = 0, scrollOffset_ = 0, scrollMaximum_ = 0;
     bool inlineEditable_ = false, showPinyin_ = false;
     void *target_ = nullptr;

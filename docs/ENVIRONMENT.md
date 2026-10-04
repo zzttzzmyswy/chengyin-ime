@@ -1,4 +1,4 @@
-# 当前本机 Windows 环境 · preview8
+# 当前本机 Windows 环境 · preview9
 
 2026-10-05：Windows 11 build 26200，AMD Ryzen 9 9950X（16 核/32 线程），x64。
 工作目录是 Codex 的中文路径 Git worktree；源码不依赖绝对路径。

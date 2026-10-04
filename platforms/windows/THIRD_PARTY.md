@@ -2,6 +2,8 @@
 
 本项目源码与手写演示词典：MIT，见 LICENSE。平台代码没有导入其他输入法的实现；已导入的词库单独按下述许可分发。
 
+候选主题插画与纹样由 `theme_art.cpp` 原创绘制，同属项目 MIT 代码；没有下载或打包第三方角色图片。角色名称用于标识主题灵感，插画不是官方立绘。GDI+ 使用 Windows 系统组件，包内不附带该 DLL。
+
 Rust 标准库及其运行时组件静态链接到输入服务。RUNTIME_LICENSES.zip 收录实际构建工具链的 `COPYRIGHT-library.html` 与 `licenses/`；按文件列出的许可、署名和例外保留。源代码与许可信息：[Rust](https://github.com/rust-lang/rust)。
 
 GNU/MinGW 包还静态链接 GCC/libstdc++/libgcc、MinGW CRT 和线程运行时。GCC 使用 GPL 与 GCC Runtime Library Exception；该例外允许符合条件的独立程序使用运行库，并不将本项目代码改为 GPL。包中的 Debian GCC 和 MinGW copyright 文件列出实际工具链所含组件及其许可；GPL 和运行库例外全文同时保留。参考：[GCC runtime exception](https://www.gnu.org/licenses/gcc-exception-3.1.html)、[MinGW-w64](https://www.mingw-w64.org/)。

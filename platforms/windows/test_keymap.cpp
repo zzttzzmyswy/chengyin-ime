@@ -1,10 +1,14 @@
 #include "keymap.h"
 #include "candidate.h"
+#include "theme_art.h"
+#include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <cwchar>
 #include <initializer_list>
+#include <vector>
 
 namespace myswy {
 HINSTANCE module = nullptr;
@@ -174,6 +178,49 @@ int main() {
         candidates.hide();
         SendMessageW(popup, WM_LBUTTONUP, 0, firstRow);
         require(clicks.count == 1 && GetCapture() != popup, "hidden candidate releases capture and cannot commit");
+        for (int theme = 0; theme < 6; ++theme) {
+            Preferences prefs; prefs.theme = theme; prefs.density = 0;
+            for (int layout : {0, 1}) for (int size : {18, 36}) {
+                prefs.layout = layout; prefs.fontSize = size;
+                candidates.show(session, owner, RECT{100,100,101,120}, false, &clicks, clicked, 3, prefs, true);
+                require(GetFocus() == focus, "theme/size/layout changes never acquire host focus");
+                const UINT dpi = windowDpi(popup);
+                HFONT font = createUIFont(size, dpi, prefs.font);
+                HDC dc = GetDC(popup); auto old = SelectObject(dc,font); TEXTMETRICW metric{};
+                GetTextMetricsW(dc,&metric); SelectObject(dc,old); DeleteObject(font); ReleaseDC(popup,dc);
+                const int y = MulDiv(3,static_cast<int>(dpi),96) + themeBannerHeight(visualTheme(theme),dpi,true) + metric.tmHeight/2;
+                const int before = clicks.count;
+                SendMessageW(popup, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(20,y));
+                SendMessageW(popup, WM_LBUTTONUP, 0, MAKELPARAM(20,y));
+                require(clicks.count == before + 1 && clicks.index == 0 && GetFocus() == focus,
+                        "themed inline first candidate hit area follows banner and actual font height");
+                if (visualTheme(theme) >= 3) {
+                    SendMessageW(popup, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(20,15));
+                    SendMessageW(popup, WM_LBUTTONUP, 0, MAKELPARAM(20,15));
+                    require(clicks.count == before + 1, "decorative banner cannot select a candidate");
+                }
+                HRGN region = CreateRectRgn(0,0,0,0);
+                const int kind = GetWindowRgn(popup,region); DeleteObject(region);
+                require(visualTheme(theme) ? kind != ERROR : kind == ERROR,
+                        "switching themes applies and removes the rounded window region");
+            }
+            prefs.layout = 0; prefs.fontSize = 18;
+            candidates.show(session, owner, RECT{100,100,101,120}, false, nullptr, nullptr, 3, prefs, true);
+            auto redraw = [&] { RedrawWindow(popup,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW); GdiFlush(); };
+            for (int warm = 0; warm < 20; ++warm) redraw();
+            const DWORD before = GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS);
+            std::vector<double> timings;
+            for (int n = 0; n < 300; ++n) {
+                const auto start = std::chrono::steady_clock::now(); redraw();
+                timings.push_back(std::chrono::duration<double,std::micro>(std::chrono::steady_clock::now()-start).count());
+            }
+            const DWORD afterPaint = GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS);
+            require(afterPaint <= before, "each theme releases GDI/GDI+ objects after 300 warm repaints");
+            std::sort(timings.begin(),timings.end()); RECT geometry{}; GetWindowRect(popup,&geometry);
+            std::printf("Theme %d paint: count=%d, %ldx%ld, dpi=%u, n=300, P50/P95/P99 %.1f/%.1f/%.1f us, GDI %lu -> %lu (RedrawWindow+GdiFlush; no TSF/core/compositor)\n",
+                theme,myswy_session_candidate_count(session),geometry.right-geometry.left,geometry.bottom-geometry.top,windowDpi(popup),
+                timings[149],timings[284],timings[296],before,afterPaint);
+        }
         DestroyWindow(owner); // Windows automatically destroys its owned popup.
         require(!IsWindow(popup), "owned popup retired with owner");
         owner = CreateWindowW(L"STATIC", L"Myswy second owner", WS_OVERLAPPEDWINDOW,

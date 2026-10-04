@@ -11,8 +11,8 @@ struct KeyPlan {
     // This avoids an asynchronous commit racing the host's original key.
     char punctuation = 0;
 };
-// Track only real dispatched events, never toggle from OnTestKeyDown. A Shift
-// chord or repeat cannot toggle when released. VK_SHIFT uses its physical scan.
+// Arm/toggle only from dispatched events; tests may conservatively cancel.
+// A Shift chord or repeat cannot toggle when released. VK_SHIFT uses its scan.
 class ShiftSwitch {
   public:
     static bool matches(uint32_t vk, uint64_t lparam, int setting) {
@@ -26,6 +26,12 @@ class ShiftSwitch {
     }
     bool pending() const {
         return down_;
+    }
+    // A test callback may be the only notification for a key passed to an
+    // IMM/TSF bridge. Cancelling a shortcut is conservative and cannot toggle it.
+    void cancelChord(uint32_t vk) {
+        if (down_ && vk != 0x10 && vk != 0xa0 && vk != 0xa1)
+            used_ = true;
     }
     void reset() {
         down_ = false;

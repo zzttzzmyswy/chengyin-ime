@@ -1,4 +1,5 @@
 #include "candidate.h"
+#include "theme_art.h"
 #include <algorithm>
 #include <cwchar>
 namespace myswy {
@@ -8,11 +9,6 @@ struct DpiContext {
     DPI_AWARENESS_CONTEXT previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     ~DpiContext() { if (previous) SetThreadDpiAwarenessContext(previous); }
 };
-void fillSelection(HDC dc, RECT rect, COLORREF color) {
-    HBRUSH brush = CreateSolidBrush(color);
-    FillRect(dc, &rect, brush);
-    DeleteObject(brush);
-}
 }
 bool readText(MyswySession *session, uint32_t field, size_t index, WideText &out) {
     uint8_t bytes[MYSWY_MAX_TEXT_BYTES + 65] {};
@@ -180,7 +176,8 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         rowHeight_ += pinyinMetric.tmHeight + scale(2);
     else if (showPinyin_)
         rowHeight_ = std::max(rowHeight_, static_cast<int>(pinyinMetric.tmHeight) + scale(2));
-    headerHeight_ = (!inlineEditable || association_ || limited) ? static_cast<int>(pinyinMetric.tmHeight) + scale(4) : 0;
+    bannerHeight_ = themeBannerHeight(visualTheme(preferences.theme), dpi, preferences.density == 0);
+    headerHeight_ = bannerHeight_ + ((!inlineEditable || association_ || limited) ? static_cast<int>(pinyinMetric.tmHeight) + scale(4) : 0);
     footerHeight_ = previous_ || next_ ? static_cast<int>(footerMetric.tmHeight) + scale(4) : 0;
     int widths[9]{}, textWidths[9]{}, pinyinWidths[9]{};
     int textColumn = 0, pinyinColumn = 0;
@@ -200,7 +197,7 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
     }
     SelectObject(dc, smallFont_);
     SIZE headerExtent{};
-    if (headerHeight_)
+    if (headerHeight_ > bannerHeight_)
         GetTextExtentPoint32W(dc, rows_[0].data, rows_[0].length, &headerExtent);
     SelectObject(dc, footerFont_);
     SIZE footerExtent{};
@@ -274,6 +271,12 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
     if (!visible)
         flags |= SWP_SHOWWINDOW;
     SetWindowPos(hwnd_, HWND_TOPMOST, x, y, width, height, flags);
+    const int radius = themeRadius(visualTheme(preferences.theme), dpi);
+    if (shapeWidth_ != width || shapeHeight_ != height || shapeRadius_ != radius) {
+        HRGN shape = radius ? CreateRoundRectRgn(0, 0, width + 1, height + 1, radius * 2, radius * 2) : nullptr;
+        if (!SetWindowRgn(hwnd_, shape, FALSE) && shape) DeleteObject(shape);
+        shapeWidth_ = width; shapeHeight_ = height; shapeRadius_ = radius;
+    }
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 int CandidateWindow::hit(LPARAM location) const {
@@ -296,6 +299,8 @@ LRESULT CALLBACK CandidateWindow::procedure(HWND hwnd, UINT msg, WPARAM w, LPARA
     auto *self = reinterpret_cast<CandidateWindow *>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
     if (msg == WM_NCDESTROY && self) {
         self->hwnd_ = nullptr;
+        self->shapeWidth_ = self->shapeHeight_ = 0;
+        self->shapeRadius_ = -1;
         self->pressed_ = -1;
         self->choice_ = nullptr;
         self->target_ = nullptr;
@@ -384,20 +389,16 @@ void CandidateWindow::paint() {
     }
     HDC dc = buffer_ && bitmap_ && bufferWidth_ == width && bufferHeight_ == height ? buffer_ : screen;
     const auto colors = colors_;
-    HBRUSH surface = CreateSolidBrush(colors.surface);
-    FillRect(dc, &client, surface);
-    DeleteObject(surface);
-    HPEN pen = CreatePen(PS_SOLID, 1, colors.border);
-    HGDIOBJ oldPen = SelectObject(dc, pen), oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
-    Rectangle(dc, 0, 0, width, height);
-    SelectObject(dc, oldBrush);
-    SelectObject(dc, oldPen);
-    DeleteObject(pen);
+    const int style = visualTheme(preferences_.theme);
+    drawThemeSurface(dc, client, colors, style, fontDpi_);
     SetBkMode(dc, TRANSPARENT);
     HGDIOBJ oldFont = SelectObject(dc, smallFont_ ? smallFont_ : GetStockObject(DEFAULT_GUI_FONT));
     SetTextColor(dc, colors.muted);
-    RECT header{padding_ + 4, padding_, width - padding_, padding_ + headerHeight_};
-    if (headerHeight_)
+    RECT banner{padding_, padding_, width - padding_, padding_ + bannerHeight_};
+    drawThemeBanner(dc, banner, colors, style, fontDpi_, footerFont_);
+    SetTextColor(dc, colors.muted);
+    RECT header{padding_ + 4, padding_ + bannerHeight_, width - padding_, padding_ + headerHeight_};
+    if (headerHeight_ > bannerHeight_)
         DrawTextW(dc, rows_[0].data, rows_[0].length, &header,
                   DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
     const int saved = SaveDC(dc);
@@ -406,11 +407,11 @@ void CandidateWindow::paint() {
         const bool selected = i == selected_, hover = i == hover_;
         RECT row = items_[i];
         OffsetRect(&row, 0, -scrollOffset_);
-        if (selected || hover)
-            fillSelection(dc, row, selected ? colors.selected : colors.background);
+        drawThemeSelection(dc, row, colors, style, fontDpi_, selected, hover);
         RECT number = row;
         number.left += padding_;
         number.right = number.left + numberWidth_;
+        drawThemeBadge(dc, number, colors, style, fontDpi_, selected);
         wchar_t label[4] {association_ ? (selected ? L'›' : L' ') : static_cast<wchar_t>(L'1' + i), 0};
         SelectObject(dc, footerFont_ ? footerFont_ : GetStockObject(DEFAULT_GUI_FONT));
         SetTextColor(dc, selected ? colors.selectedText : colors.muted);

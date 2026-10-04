@@ -630,6 +630,21 @@ void runEditTests(ITfKeyEventSink *keys) {
         keys->OnKeyUp(manual.get(), VK_SHIFT, left, &eaten);
         type(keys, manual.get(), "ni");
         require(key(keys, manual.get(), VK_ESCAPE), "Shift switches back to Chinese");
+        BYTE previousState[256]{}, shiftedState[256]{};
+        require(GetKeyboardState(previousState) != FALSE, "read isolated thread keyboard state");
+        shiftedState[VK_SHIFT] = shiftedState[VK_LSHIFT] = 0x80;
+        for (WPARAM vk : {static_cast<WPARAM>('6'), static_cast<WPARAM>('7'), static_cast<WPARAM>('J')}) {
+            keys->OnKeyDown(manual.get(), VK_SHIFT, left, &eaten);
+            require(SetKeyboardState(shiftedState) != FALSE, "simulate held Shift on test thread");
+            for (int probe = 0; probe < 3; ++probe)
+                require(SUCCEEDED(keys->OnTestKeyDown(manual.get(), vk, 0, &eaten)) && !eaten,
+                        "idle Shift chord test passes directly to IMM/TSF host");
+            require(SetKeyboardState(previousState) != FALSE, "restore keyboard state");
+            require(SUCCEEDED(keys->OnKeyUp(manual.get(), VK_SHIFT, left, &eaten)) && !eaten,
+                    "host pass-through chord cannot toggle on Shift release without OnKeyDown");
+            type(keys, manual.get(), "ni");
+            require(key(keys, manual.get(), VK_ESCAPE), "Shift chord leaves Chinese mode active");
+        }
     }
     {
         Ptr<Context> punctuation;

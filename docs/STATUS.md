@@ -1,5 +1,49 @@
 # 开发记录 / 下次从这里继续
 
+更新：2026-10-05。当前批次：**preview9 候选主题整体美化已实现；本机原生七项 CTest 通过，六主题纵排/横排/大字号与设置预览截图已检查。用户安装的 preview8 注册及完整负载一致性通过；新 Notepad3 确认加载 preview8。**
+
+交付：`build/packages/chengyin-windows-x64-0.1.0-preview9-msvc.exe`，4,314,737 bytes；
+SHA-256 `c0b70b5f03fcde949492484a9742b4c2190fb8673d50f48c8888a00a5b031608`。
+原生打包预检查、7-Zip、解包全负载哈希/PE64/COM、许可 ZIP 与最终三二进制逐字节一致性通过。
+完整摘要 build/delivery-preview9.json；fixture DLL 和开发测试 EXE 不在包中。
+本机卡巴斯基对 build-only windows_desktop_test.exe 提示 VHO:Trojan-Dropper.Win32.Convagent.gen；
+该文件的源码未改（进程内 COM 工厂），本批只新增共享主题库链接。七项 CTest 仍全部通过，
+产物完整性核对通过；检测分类尚未独立排除，未改杀毒配置，不将校验结果当成安全扫描结论。
+
+## preview9 主题造型与验证
+
+任务见 [WINDOWS_PREVIEW9_TASKLIST](WINDOWS_PREVIEW9_TASKLIST.md)。新增共享 GDI+ 矢量绘制器，
+同时供候选窗和设置预览使用。系统保留经典矩形和动态亮暗；白为浅色卡片，黑为暗色金边高亮。
+Deepseek 大肥鱼有原创胖鲸、海浪与气泡；初音未来有双马尾头像、耳机、音符与电子线路；
+洛天依有灰发绿眼头像、云纹与飘带。角色主题各有背景、边框、选中态与序号徽章，
+并非只有配色。无第三方人物图片，原创代码采用项目 MIT 许可。
+
+保留候选字号、紧凑间距、纵向右侧/横向下方的回退拼音，内嵌可编辑时仍隐藏候选拼音。
+主题装饰区紧凑 30px/标准 36px，按 DPI 缩放；窄候选只显示居中图案，不强制加宽。
+原生回归覆盖全部主题的横排/纵排、18/36px 字体、点击区、非激活焦点、圆角切换及每主题 300 次重绘。
+96/120/144/192/288 DPI 为布局通知与离屏矢量绘制模拟；不是物理混合 DPI 多屏验收。
+主题预览切换只改测试窗口草稿，未保存个人设置、未写个人学习数据。
+
+安装后的 preview8：COM 注册指向 0.1.0-preview8；安装文件清单、COM 探测和三个二进制
+逐字节一致性通过。原有两个 Notepad3 进程仍加载 preview7，未关闭用户窗口。
+新建独立 Notepad3（独立 INI/测试文档）加载 preview8 并显示候选；Space 未转中文，
+保存文本为 `ni `（含尾随空格）；空闲 Shift ^/J 在该传统宿主未输出，不能把以前的
+Edit/RichEdit 结果泛化为 Notepad3 验收。preview9 修正 OnTestKeyDown 因 Shift 待释放
+状态误报拦截的问题：直接透传空闲组合，并仅保守取消切换。新增只有测试回调、没有
+OnKeyDown 的 IMM/TSF 宿主回归，^&J 三种组合通过。完整新 Notepad3/安装升级实测另验。
+
+原生构建与测试日志：build/native-build-preview9.txt、native-test-preview9.txt；
+截图 build/theme-preview9-captures/；安装负载检查 build/installed-payload-preview8.json。
+Windows 11 build 26200、Ryzen 9 9950X、MSVC 19.44.35229、SDK 10.0.26100、CMake 4.4.3。
+共享 Rust 核心/C ABI 未改，沿用上一批的 38 项集成测试、fmt/clippy 和原生 C ABI 通过证据。
+本轮没有新远程 CI，不能复用 preview7 的安装生命周期当作新版本已验证。
+
+下一步：新安装 preview9 后复测 Notepad3 Shift、空格尾随和整段编辑；在干净隔离 runner
+验证安装/修复/升级/卸载；物理混合 DPI 多屏、浏览器/WinUI/UWP/管理员/RDP 应用矩阵；
+发布可校验 Release 后验证更新下载/安装。继续独立核心性能与语料质量，随后双拼及其他平台。
+
+以下 preview8 记录是该批交付时的历史，安装状态以本节的新观察为准。
+
 更新：2026-10-05。当前阶段：**preview8 十一项反馈已实现；本机 Win11/MSVC 七项 CTest、Rust 38 项集成测试、fmt/clippy 与原生 C ABI 检查通过。真实设置 Edit/RichEdit 的输入、原文空格、Shift ^&J、内嵌时隐藏候选拼音及启动焦点通过。单 EXE 打包和解包负载/COM 校验通过。不能把模拟 DPI 和本机两类控件写成任意应用/多屏 100% 兼容。**
 
 ## 最新批次：preview8

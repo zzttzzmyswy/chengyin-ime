@@ -483,9 +483,9 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         if (!eaten)
             return E_POINTER;
         *eaten = FALSE;
+        shift_.cancelChord(static_cast<uint32_t>(key));
         if (allowed(context)
                 && (ShiftSwitch::matches(static_cast<uint32_t>(key), static_cast<uint64_t>(lparam), preferences_.shiftSwitch)
-                    || shift_.pending()
                     || translate(key, lparam, active(context), english_, association(context),
                                  preferences_.chinesePunctuation).action != Action::pass))
             *eaten = TRUE;

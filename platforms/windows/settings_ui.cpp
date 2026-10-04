@@ -2,6 +2,7 @@
 #include "settings.h"
 #include "preferences.h"
 #include "update.h"
+#include "theme_art.h"
 #include <commdlg.h>
 #include <commctrl.h>
 #include <shellapi.h>
@@ -301,11 +302,11 @@ void Settings::buildPage() {
         label(L"主题：", 20, y + 4, 100, 24);
         combo(303, 130, y, 300, {L"Windows 系统（自动亮 / 暗）", L"白", L"黑", L"Deepseek 大肥鱼", L"初音未来", L"洛天依"}, draft_.theme);
         y += 40;
-        paragraph(L"Windows 系统主题跟随系统应用亮暗设置实时切换。高对比度开启时优先采用系统可读颜色。角色主题使用原创配色，不包含第三方人物图片。");
+        paragraph(L"主题会改变候选框的造型、插画、背景装饰、选中态和序号徽章。大肥鱼有胖鲸与海浪，初音有双马尾、耳机和舞台图案，洛天依有头像、云纹与飘带。插画为本项目原创矢量绘制。系统主题自动跟随亮暗；高对比度关闭装饰并采用系统可读颜色。");
         end();
         begin(L"主题预览");
-        control(L"STATIC", L"", SS_OWNERDRAW, 309, 20, y, paneWidth_ - 48, std::max(130, (draft_.fontSize + 18) * 3 + 12));
-        y += std::max(130, (draft_.fontSize + 18) * 3 + 12) + 10;
+        control(L"STATIC", L"", SS_OWNERDRAW, 309, 20, y, paneWidth_ - 48, std::max(130, (draft_.fontSize + 18) * 3 + 12) + themeBannerHeight(draft_.theme,96,true));
+        y += std::max(130, (draft_.fontSize + 18) * 3 + 12) + themeBannerHeight(draft_.theme,96,true) + 10;
         end();
         break;
     case 3: {
@@ -370,7 +371,7 @@ void Settings::buildPage() {
     case 6:
         begin(L"澄音输入法");
         paragraph(
-            L"版本：0.1.0-preview8 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
+            L"版本：0.1.0-preview9 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
         paragraph(
             L"代码开源协议：MIT License · Copyright 2026 Myswy IM contributors\n允许使用、修改和分发，须保留版权和许可声明；软件按现状提供。词库及运行库有各自许可，随安装包提供。");
         buttons(605, L"开源协议", 606, L"仓库链接", 607, L"发行说明");
@@ -624,7 +625,7 @@ std::wstring Settings::diagnostics() {
     LSTATUS status = RegGetValueW(HKEY_LOCAL_MACHINE,
                                   L"Software\\Classes\\CLSID\\{65C32A54-219A-4F0A-B44C-B963D7BA532F}\\InprocServer32", nullptr, RRF_RT_REG_SZ,
                                   nullptr, registered, &size);
-    text << L"澄音 0.1.0-preview8\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
+    text << L"澄音 0.1.0-preview9\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
          (status == ERROR_SUCCESS ? registered : L"not registered") << L"\r\nDPI: " << dpi_ << L"\r\nFont: " <<
          draft_.font << L" / " << draft_.fontSize << L"\r\nPage size: " << draft_.pageSize << L"\r\nLearning: " <<
          draft_.learning << L"\r\nAssociation: " << draft_.associations << L"\r\nCaret fallback: " <<
@@ -753,9 +754,11 @@ void Settings::command(int id, int event) {
         ShellExecuteW(window_, L"open", kRepository, nullptr, nullptr, SW_SHOWNORMAL); return;
     }
     if (id == 607) {
-        MessageBoxW(window_, L"0.1.0-preview8 · 2026-10-05\n\n"
+        MessageBoxW(window_, L"0.1.0-preview9 · 2026-10-05\n\n"
                     L"• 候选按文字尺寸布局，紧凑间距；可编辑临时拼音时隐藏重复拼音。\n"
-                    L"• 新增六种主题和 Windows 亮暗自动切换。\n"
+                    L"• 三种角色主题增加原创插画、背景纹样、圆角边框和专属选中态。\n"
+                    L"• 设置预览共用实际绘制代码；Windows 亮暗自动切换。\n"
+                    L"• 修复传统宿主 Shift 组合键测试阶段的误拦截。\n"
                     L"• 修复设置字体生命周期，改进 DPI、工作区和滚动。\n"
                     L"• 自定义词库列表支持添加、启用、停用和删除。\n"
                     L"• 空格提交原始拼音；数字和鼠标选词；Shift 组合键透传。\n"
@@ -900,25 +903,31 @@ LRESULT Settings::message(HWND hwnd, UINT message, WPARAM w, LPARAM l, bool pane
         if (pane && w == 309) {
             auto *item = reinterpret_cast<DRAWITEMSTRUCT *>(l);
             const auto colors = palette(draft_.theme);
-            HBRUSH brush = CreateSolidBrush(colors.surface);
-            FillRect(item->hDC, &item->rcItem, brush); DeleteObject(brush);
+            const int style=visualTheme(draft_.theme);
+            drawThemeSurface(item->hDC,item->rcItem,colors,style,dpi_);
+            RECT banner=item->rcItem;
+            banner.left += scaled(6); banner.right -= scaled(6); banner.top += scaled(3);
+            banner.bottom=banner.top+themeBannerHeight(style,dpi_,true);
+            drawThemeBanner(item->hDC,banner,colors,style,dpi_,body_);
             RECT selected = item->rcItem;
             selected.left += scaled(6); selected.right -= scaled(6);
             auto old = SelectObject(item->hDC, sample_);
             TEXTMETRICW metrics{}; GetTextMetricsW(item->hDC, &metrics);
             const int rowHeight = metrics.tmHeight + scaled(6);
-            selected.top += scaled(6); selected.bottom = selected.top + rowHeight;
-            brush = CreateSolidBrush(colors.selected);
-            FillRect(item->hDC, &selected, brush); DeleteObject(brush);
+            selected.top=banner.bottom+scaled(3); selected.bottom = selected.top + rowHeight;
             SetBkMode(item->hDC, TRANSPARENT);
-            SetTextColor(item->hDC, colors.selectedText);
-            selected.left += scaled(8);
-            DrawTextW(item->hDC, L"1. 你好", -1, &selected, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
-            RECT rest = selected; rest.top += rowHeight; rest.bottom += rowHeight;
-            SetTextColor(item->hDC, colors.text);
-            DrawTextW(item->hDC, L"2. 拟好", -1, &rest, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
-            rest.top += rowHeight; rest.bottom += rowHeight;
-            DrawTextW(item->hDC, L"3. 你号", -1, &rest, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+            for (int i=0;i<3;++i) {
+                RECT row=selected; OffsetRect(&row,0,i*rowHeight);
+                drawThemeSelection(item->hDC,row,colors,style,dpi_,i==0,false);
+                RECT number=row; number.left+=scaled(5); number.right=number.left+scaled(18);
+                drawThemeBadge(item->hDC,number,colors,style,dpi_,i==0);
+                SelectObject(item->hDC,body_); SetTextColor(item->hDC,i==0 ? colors.selectedText : colors.muted);
+                wchar_t digit[2]{static_cast<wchar_t>(L'1'+i),0};
+                DrawTextW(item->hDC,digit,1,&number,DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
+                row.left+=scaled(30); SelectObject(item->hDC,sample_);
+                SetTextColor(item->hDC,i==0 ? colors.selectedText : colors.text);
+                DrawTextW(item->hDC,i==0 ? L"你好" : i==1 ? L"拟好" : L"你号",-1,&row,DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
+            }
             SelectObject(item->hDC, old);
             return TRUE;
         }

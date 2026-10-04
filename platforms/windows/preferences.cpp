@@ -307,7 +307,13 @@ Palette themePalette(int theme, bool systemDark, COLORREF highlight, COLORREF hi
     if (theme == 5)
         return {RGB(235,243,255), RGB(247,250,255), RGB(43,53,95), RGB(91,99,137), RGB(130,157,215),
                 RGB(79,101,170), RGB(79,101,170), RGB(255,255,255)};
-    if (theme == 2 || (theme == 0 && systemDark))
+    if (theme == 1)
+        return {RGB(237,242,249), RGB(255,255,255), RGB(28,38,54), RGB(103,118,138), RGB(195,208,225),
+                RGB(46,109,174), RGB(221,237,253), RGB(23,69,113)};
+    if (theme == 2)
+        return {RGB(24,24,24), RGB(32,32,32), RGB(242,243,247), RGB(168,173,190), RGB(88,91,105),
+                RGB(208,181,124), RGB(58,63,80), RGB(255,246,224)};
+    if (theme == 0 && systemDark)
         return {RGB(24,24,24), RGB(32,32,32), RGB(245,245,245), RGB(190,190,190), RGB(100,100,100),
                 highlight, highlight, highlightText};
     return {RGB(248,248,248), RGB(255,255,255), RGB(20,20,20), RGB(95,95,95), RGB(145,145,145),

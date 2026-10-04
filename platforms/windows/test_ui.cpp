@@ -3,6 +3,7 @@
 #include <commctrl.h>
 #include "preferences.h"
 #include "candidate.h"
+#include "theme_art.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -177,6 +178,19 @@ void CALLBACK inspect(HWND, UINT, UINT_PTR timer, DWORD) {
         ReleaseDC(pane, dc);
         const wchar_t *names[] {L"settings-input", L"settings-candidates", L"settings-themes", L"settings-dictionary", L"settings-learning", L"settings-input-test", L"settings-about"};
         capture(window, names[stage]);
+        if (stage == 2) {
+            const auto original = SendMessageW(GetDlgItem(pane,303),CB_GETCURSEL,0,0);
+            for (int theme = 0; theme < 6; ++theme) {
+                HWND combo = GetDlgItem(pane,303);
+                SendMessageW(combo,CB_SETCURSEL,theme,0);
+                SendMessageW(pane,WM_COMMAND,MAKEWPARAM(303,CBN_SELCHANGE),reinterpret_cast<LPARAM>(combo));
+                checkLayout(pane); checkFonts(window);
+                const auto name = L"settings-theme-" + std::to_wstring(theme);
+                capture(window,name.c_str());
+            }
+            HWND combo = GetDlgItem(pane,303); SendMessageW(combo,CB_SETCURSEL,original,0);
+            SendMessageW(pane,WM_COMMAND,MAKEWPARAM(303,CBN_SELCHANGE),reinterpret_cast<LPARAM>(combo));
+        }
     } else if (stage < 35) {
         // All pages at 125/150/200/300%, narrow work areas and both scroll axes.
         const UINT dpis[]{120,144,192,288};
@@ -271,6 +285,25 @@ int wmain(int argc, wchar_t **argv) {
         CreateDirectoryW(argv[1], nullptr);
     }
     require(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)), "UI COM initialization");
+    // Vector-art DPI simulation is separate from physical monitor validation.
+    for (UINT dpi : {96u,120u,144u,192u,288u}) for (int theme = 0; theme < 6; ++theme) {
+        auto scale = [dpi](int value) { return MulDiv(value,static_cast<int>(dpi),96); };
+        HDC screen = GetDC(nullptr), dc = CreateCompatibleDC(screen);
+        HBITMAP bitmap = CreateCompatibleBitmap(screen,scale(260),scale(180)); auto previous = SelectObject(dc,bitmap);
+        const auto colors = myswy::palette(theme);
+        const int style = myswy::visualTheme(theme);
+        HFONT font = myswy::createUIFont(12,dpi,L"Microsoft YaHei UI");
+        RECT surface{0,0,scale(260),scale(180)}, banner{scale(3),scale(3),scale(257),scale(33)}, row{scale(3),scale(60),scale(257),scale(87)}, badge{scale(6),scale(60),scale(20),scale(87)};
+        myswy::drawThemeSurface(dc,surface,colors,style,dpi);
+        myswy::drawThemeBanner(dc,banner,colors,style,dpi,font);
+        myswy::drawThemeSelection(dc,row,colors,style,dpi,true,false);
+        myswy::drawThemeBadge(dc,badge,colors,style,dpi,true);
+        GdiFlush();
+        const COLORREF center = GetPixel(dc,scale(120),scale(73)), outside = GetPixel(dc,scale(120),scale(100));
+        require(center != CLR_INVALID && outside != CLR_INVALID && center != outside,
+                "all themes render visible selection and vector surfaces at 100/125/150/200/300 percent");
+        SelectObject(dc,previous); DeleteObject(bitmap); DeleteObject(font); DeleteDC(dc); ReleaseDC(nullptr,screen);
+    }
     HMODULE richEdit = LoadLibraryW(L"Msftedit.dll");
     require(SetTimer(nullptr, 0, 100, inspect) != 0, "UI inspection timer");
     require(myswy::runSettings(myswy::module, SW_SHOW, nullptr, nullptr, 0, false) == 0 && stage == 36, "all settings pages painted");
@@ -316,6 +349,15 @@ int wmain(int argc, wchar_t **argv) {
             SendMessageW(popup,WM_SETTINGCHANGE,0,reinterpret_cast<LPARAM>(L"ImmersiveColorSet"));
             const auto name = L"candidate-theme-" + std::to_wstring(theme);
             capture(popup,name.c_str());
+            prefs.layout = 1;
+            candidates.show(session,owner,RECT{100,150,101,170},false,nullptr,nullptr,20+theme,prefs,true);
+            const auto horizontal = name + L"-horizontal-inline";
+            capture(popup,horizontal.c_str());
+            prefs.fontSize = 36;
+            candidates.show(session,owner,RECT{100,150,101,170},false,nullptr,nullptr,30+theme,prefs,true);
+            const auto large = name + L"-large";
+            capture(popup,large.c_str());
+            prefs.layout = 0; prefs.fontSize = 18;
         }
     }
     myswy_session_free(session);
