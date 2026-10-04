@@ -36,6 +36,7 @@ CandidateWindow::~CandidateWindow() {
         DeleteObject(font_);
     if (smallFont_)
         DeleteObject(smallFont_);
+    if (boldPinyinFont_) DeleteObject(boldPinyinFont_);
     if (footerFont_)
         DeleteObject(footerFont_);
     UnregisterClassW(kWindowClass, module);
@@ -107,6 +108,7 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
     if (fontDpi_ != dpi || fontSize_ != preferences.fontSize || fontFace_ != preferences.font) {
         HFONT font = createUIFont(preferences.fontSize, dpi, preferences.font);
         HFONT nextSmallFont = createUIFont(std::max(16, preferences.fontSize - 2), dpi, preferences.font);
+        HFONT nextBoldFont = createUIFont(std::max(16, preferences.fontSize - 2), dpi, preferences.font, FW_BOLD);
         HFONT nextFooterFont = createUIFont(12, dpi, preferences.font);
         if (font) {
             if (font_)
@@ -123,6 +125,7 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
                 DeleteObject(footerFont_);
             footerFont_ = nextFooterFont;
         }
+        if (nextBoldFont) {if (boldPinyinFont_) DeleteObject(boldPinyinFont_); boldPinyinFont_=nextBoldFont;}
         fontDpi_ = dpi;
         fontSize_ = preferences.fontSize;
         fontFace_ = preferences.font;
@@ -150,6 +153,9 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
     for (int i = 0; i < count_; ++i) {
         readText(session, MYSWY_TEXT_CANDIDATE, static_cast<size_t>(i), rows_[i + 1]);
         readText(session, MYSWY_TEXT_CANDIDATE_PINYIN, static_cast<size_t>(i), pinyin_[i]);
+        std::fill_n(marks_[i],256,uint8_t{0});
+        myswy_session_candidate_marks(session,static_cast<size_t>(i),marks_[i],256);
+        if (std::any_of(marks_[i],marks_[i]+256,[](uint8_t mark){return mark!=0;})) showPinyin_=true;
     }
     MONITORINFO monitor{};
     monitor.cbSize = sizeof(monitor);
@@ -176,8 +182,7 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         rowHeight_ += pinyinMetric.tmHeight + scale(2);
     else if (showPinyin_)
         rowHeight_ = std::max(rowHeight_, static_cast<int>(pinyinMetric.tmHeight) + scale(2));
-    bannerHeight_ = themeBannerHeight(visualTheme(preferences.theme), dpi, preferences.density == 0);
-    headerHeight_ = bannerHeight_ + ((!inlineEditable || association_ || limited) ? static_cast<int>(pinyinMetric.tmHeight) + scale(4) : 0);
+    headerHeight_ = ((!inlineEditable || association_ || limited) ? static_cast<int>(pinyinMetric.tmHeight) + scale(4) : 0);
     footerHeight_ = previous_ || next_ ? static_cast<int>(footerMetric.tmHeight) + scale(4) : 0;
     int widths[9]{}, textWidths[9]{}, pinyinWidths[9]{};
     int textColumn = 0, pinyinColumn = 0;
@@ -188,16 +193,20 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         textWidths[i] = extent.cx;
         textColumn = std::max(textColumn, textWidths[i]);
         if (showPinyin_) {
-            SelectObject(dc, smallFont_);
-            GetTextExtentPoint32W(dc, pinyin_[i].data, pinyin_[i].length, &extent);
-            pinyinWidths[i] = extent.cx;
+            for (int at=0;at<pinyin_[i].length;) {
+                const bool marked=marks_[i][at]!=0; int end=at+1;
+                while (end<pinyin_[i].length && (marks_[i][end]!=0)==marked) ++end;
+                SelectObject(dc,marked && boldPinyinFont_ ? boldPinyinFont_ : smallFont_);
+                GetTextExtentPoint32W(dc,pinyin_[i].data+at,end-at,&extent);
+                pinyinWidths[i]+=extent.cx; at=end;
+            }
             pinyinColumn = std::max(pinyinColumn, pinyinWidths[i]);
         }
         widths[i] = numberWidth_ + std::max(textWidths[i], pinyinWidths[i]) + padding_ * 2;
     }
     SelectObject(dc, smallFont_);
     SIZE headerExtent{};
-    if (headerHeight_ > bannerHeight_)
+    if (headerHeight_)
         GetTextExtentPoint32W(dc, rows_[0].data, rows_[0].length, &headerExtent);
     SelectObject(dc, footerFont_);
     SIZE footerExtent{};
@@ -394,11 +403,9 @@ void CandidateWindow::paint() {
     SetBkMode(dc, TRANSPARENT);
     HGDIOBJ oldFont = SelectObject(dc, smallFont_ ? smallFont_ : GetStockObject(DEFAULT_GUI_FONT));
     SetTextColor(dc, colors.muted);
-    RECT banner{padding_, padding_, width - padding_, padding_ + bannerHeight_};
-    drawThemeBanner(dc, banner, colors, style, fontDpi_, footerFont_);
     SetTextColor(dc, colors.muted);
-    RECT header{padding_ + 4, padding_ + bannerHeight_, width - padding_, padding_ + headerHeight_};
-    if (headerHeight_ > bannerHeight_)
+    RECT header{padding_ + 4, padding_, width - padding_, padding_ + headerHeight_};
+    if (headerHeight_)
         DrawTextW(dc, rows_[0].data, rows_[0].length, &header,
                   DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
     const int saved = SaveDC(dc);
@@ -425,10 +432,18 @@ void CandidateWindow::paint() {
         if (showPinyin_ && pinyin_[i].length) {
             RECT pronunciation = pinyinRects_[i];
             OffsetRect(&pronunciation, 0, -scrollOffset_);
-            SelectObject(dc, smallFont_ ? smallFont_ : GetStockObject(DEFAULT_GUI_FONT));
-            SetTextColor(dc, selected ? colors.selectedText : colors.muted);
-            DrawTextW(dc, pinyin_[i].data, pinyin_[i].length, &pronunciation,
-                      DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
+            int x=pronunciation.left;
+            for (int at=0;at<pinyin_[i].length;) {
+                const bool marked=marks_[i][at]!=0;
+                int end=at+1;
+                while (end<pinyin_[i].length && (marks_[i][end]!=0)==marked) ++end;
+                SelectObject(dc,marked && boldPinyinFont_ ? boldPinyinFont_ : smallFont_);
+                SetTextColor(dc,selected ? colors.selectedText : (marked ? colors.accent : colors.muted));
+                SIZE size{}; GetTextExtentPoint32W(dc,pinyin_[i].data+at,end-at,&size);
+                RECT run{x,pronunciation.top,std::min<LONG>(x+size.cx,pronunciation.right),pronunciation.bottom};
+                DrawTextW(dc,pinyin_[i].data+at,end-at,&run,DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX|DT_END_ELLIPSIS);
+                x+=size.cx; at=end; if (x>=pronunciation.right) break;
+            }
         }
     }
     RestoreDC(dc, saved);

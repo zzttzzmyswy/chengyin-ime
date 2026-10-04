@@ -142,13 +142,56 @@ int main() {
     prefs.associations = false;
     prefs.defaultEnglish = true;
     prefs.caretFallback = false;
+    prefs.matchingOptions = MYSWY_MATCHING_MASK;
     require(myswy::savePreferences(preferences, prefs), "save Unicode preferences");
     auto restored = myswy::loadPreferences(preferences);
     require(restored.font == prefs.font && restored.fontSize == 23 && restored.theme == 2 && restored.layout == 1
             && restored.density == 0 && restored.pageSize == 7 && restored.shiftSwitch == 2
             && restored.candidatePinyin && !restored.separators && !restored.learning && !restored.associations
-            && restored.defaultEnglish && !restored.caretFallback, "all preferences survive reload");
+            && restored.defaultEnglish && !restored.caretFallback && restored.matchingOptions==MYSWY_MATCHING_MASK, "all preferences survive reload");
     require(myswy::readSmallFile(preferences, before, 8192), "preferences snapshot");
+    for (wchar_t theme : {L'3',L'4',L'5',L'6'}) {
+        std::wstring legacy((before.size()-2)/2,L'\0');
+        std::memcpy(legacy.data(),before.data()+2,before.size()-2);
+        const auto at = legacy.find(L"Theme=2");
+        require(at != std::wstring::npos, "locate legacy theme fixture");
+        legacy[at+6] = theme;
+        std::vector<uint8_t> legacyBytes = before;
+        std::memcpy(legacyBytes.data()+2,legacy.data(),legacy.size()*2);
+        require(myswy::atomicWrite(preferences,legacyBytes), "write isolated legacy theme fixture");
+        auto migrated = restored;
+        const bool loaded = myswy::tryLoadPreferences(preferences,migrated);
+        if (theme == L'6')
+            require(!loaded && migrated.theme == 2, "unknown theme rejected without changing output preferences");
+        else
+            require(loaded && migrated.theme == 0 && migrated.font == prefs.font && migrated.fontSize == 23
+                    && migrated.layout == 1 && migrated.density == 0 && migrated.pageSize == 7
+                    && migrated.shiftSwitch == 2 && migrated.defaultEnglish && !migrated.learning
+                    && !migrated.associations && !migrated.separators && !migrated.caretFallback,
+                    "retired theme falls back to system while preserving unrelated settings");
+        require(myswy::readSmallFile(preferences,after,8192) && after == legacyBytes,
+                "legacy theme loading never rewrites user configuration");
+    }
+    require(myswy::atomicWrite(preferences,before), "restore valid isolated preferences");
+    {
+        std::wstring legacy((before.size()-2)/2,L'\0');
+        std::memcpy(legacy.data(),before.data()+2,before.size()-2);
+        const auto at=legacy.find(L"MatchingOptions=");
+        require(at!=std::wstring::npos,"matching option fixture");
+        const auto end=legacy.find(L'\n',at);
+        legacy.erase(at,end-at+1);
+        std::vector<uint8_t> bytes(2+legacy.size()*2); bytes[0]=0xff; bytes[1]=0xfe;
+        std::memcpy(bytes.data()+2,legacy.data(),legacy.size()*2);
+        require(myswy::atomicWrite(preferences,bytes),"legacy preference without matching switches");
+        auto old=restored;
+        require(myswy::tryLoadPreferences(preferences,old) && old.matchingOptions==0 && old.font==prefs.font,
+            "legacy matching disabled with other settings preserved");
+        prefs.matchingOptions=1u<<31;
+        require(!myswy::savePreferences(preferences,prefs),"unknown matching flags cannot save");
+        require(myswy::readSmallFile(preferences,after,8192) && after==bytes,"invalid matching flags preserve file");
+        prefs.matchingOptions=MYSWY_MATCHING_MASK;
+        require(myswy::atomicWrite(preferences,before),"restore complete preference fixture");
+    }
     prefs.fontSize = 100;
     require(!myswy::savePreferences(preferences, prefs), "out of bounds preference rejected");
     require(myswy::readSmallFile(preferences, after, 8192) && before == after, "invalid settings preserve file");

@@ -20,7 +20,7 @@ namespace {
 constexpr UINT kImported = WM_APP + 31;
 constexpr UINT kUpdateReady = WM_APP + 32, kUpdateDownloaded = WM_APP + 33;
 constexpr int kSave = 100, kDefaults = 101;
-const wchar_t *kNames[] {L"输入", L"候选", L"主题", L"词库", L"学习", L"输入测试", L"关于"};
+const wchar_t *kNames[] {L"输入", L"候选", L"主题", L"词库", L"学习", L"输入测试", L"关于", L"模糊音"};
 struct Control {
     HWND window;
     int x, y, width, height;
@@ -236,6 +236,19 @@ void Settings::buildPage() {
         y += 40;
     };
     switch (page_) {
+    case 7: {
+        begin(L"模糊音（双向匹配）");
+        paragraph(L"按需要勾选容易混淆的声母和韵母。正确拼写候选优先，发生匹配的标准拼音字母加粗显示。各项默认关闭。");
+        const wchar_t *pairs[]{L"zh ↔ z",L"ch ↔ c",L"sh ↔ s",L"n ↔ l",L"f ↔ h",L"l ↔ r",L"an ↔ ang",L"en ↔ eng",L"in ↔ ing",L"ian ↔ iang",L"uan ↔ uang"};
+        for (int i=0;i<11;++i) checkbox(801+i,pairs[i],(draft_.matchingOptions&(1u<<i))!=0);
+        end();
+        begin(L"常见键盘失误");
+        const wchar_t *errors[]{L"相邻字母按反：zhnag → zhang",L"漏按一个字母：zhng → zhang",L"QWERTY 相邻键误按：zhsng → zhang",L"重复按键：zhaang → zhang"};
+        for (int i=0;i<4;++i) checkbox(820+i,errors[i],(draft_.matchingOptions&(1u<<(16+i)))!=0);
+        paragraph(L"键盘纠错用于至少三个输入字母；每音节最多一次，每个词最多两次。交换只限相邻字母，不作任意乱排。候选显示标准拼音并加粗修正位置；原始拼音仍可编辑，空格提交原始输入。应用后从下一段输入生效。");
+        end();
+        break;
+    }
     case 0:
         begin(L"输入模式");
         checkbox(202, L"启动输入服务时默认使用英文", draft_.defaultEnglish);
@@ -300,13 +313,13 @@ void Settings::buildPage() {
     case 2:
         begin(L"候选主题");
         label(L"主题：", 20, y + 4, 100, 24);
-        combo(303, 130, y, 300, {L"Windows 系统（自动亮 / 暗）", L"白", L"黑", L"Deepseek 大肥鱼", L"初音未来", L"洛天依"}, draft_.theme);
+        combo(303, 130, y, 300, {L"Windows 系统（自动亮 / 暗）", L"白", L"黑"}, draft_.theme);
         y += 40;
-        paragraph(L"主题会改变候选框的造型、插画、背景装饰、选中态和序号徽章。大肥鱼有胖鲸与海浪，初音有双马尾、耳机和舞台图案，洛天依有头像、云纹与飘带。插画为本项目原创矢量绘制。系统主题自动跟随亮暗；高对比度关闭装饰并采用系统可读颜色。");
+        paragraph(L"候选框可选择 Windows 系统、白或黑主题。系统主题自动跟随 Windows 亮暗切换；高对比度优先采用系统可读颜色。更多主题后续再开发。");
         end();
         begin(L"主题预览");
-        control(L"STATIC", L"", SS_OWNERDRAW, 309, 20, y, paneWidth_ - 48, std::max(130, (draft_.fontSize + 18) * 3 + 12) + themeBannerHeight(draft_.theme,96,true));
-        y += std::max(130, (draft_.fontSize + 18) * 3 + 12) + themeBannerHeight(draft_.theme,96,true) + 10;
+        control(L"STATIC", L"", SS_OWNERDRAW, 309, 20, y, paneWidth_ - 48, std::max(130, (draft_.fontSize + 18) * 3 + 12));
+        y += std::max(130, (draft_.fontSize + 18) * 3 + 12) + 10;
         end();
         break;
     case 3: {
@@ -371,7 +384,7 @@ void Settings::buildPage() {
     case 6:
         begin(L"澄音输入法");
         paragraph(
-            L"版本：0.1.0-preview9 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
+            L"版本：0.1.0-preview10 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
         paragraph(
             L"代码开源协议：MIT License · Copyright 2026 Myswy IM contributors\n允许使用、修改和分发，须保留版权和许可声明；软件按现状提供。词库及运行库有各自许可，随安装包提供。");
         buttons(605, L"开源协议", 606, L"仓库链接", 607, L"发行说明");
@@ -493,6 +506,11 @@ void Settings::collect(int id) {
     auto checked = [&](int controlId) {
         return SendMessageW(GetDlgItem(pane_, controlId), BM_GETCHECK, 0, 0) == BST_CHECKED;
     };
+    if ((id>=801 && id<=811) || (id>=820 && id<=823)) {
+        const uint32_t bit=1u<<(id<820?id-801:id-820+16);
+        if (checked(id)) draft_.matchingOptions|=bit; else draft_.matchingOptions&=~bit;
+        dirty_=true; notify(L"有未保存的更改。点击“应用”后从下一段输入生效。"); return;
+    }
     switch (id) {
     case 200:
         draft_.pageSize = 5 + choice(id) * 2;
@@ -625,7 +643,7 @@ std::wstring Settings::diagnostics() {
     LSTATUS status = RegGetValueW(HKEY_LOCAL_MACHINE,
                                   L"Software\\Classes\\CLSID\\{65C32A54-219A-4F0A-B44C-B963D7BA532F}\\InprocServer32", nullptr, RRF_RT_REG_SZ,
                                   nullptr, registered, &size);
-    text << L"澄音 0.1.0-preview9\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
+    text << L"澄音 0.1.0-preview10\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
          (status == ERROR_SUCCESS ? registered : L"not registered") << L"\r\nDPI: " << dpi_ << L"\r\nFont: " <<
          draft_.font << L" / " << draft_.fontSize << L"\r\nPage size: " << draft_.pageSize << L"\r\nLearning: " <<
          draft_.learning << L"\r\nAssociation: " << draft_.associations << L"\r\nCaret fallback: " <<
@@ -659,7 +677,7 @@ void Settings::copyDiagnostics() {
     notify(ok ? L"诊断信息已复制，不含输入正文。" : L"无法复制诊断信息。");
 }
 void Settings::command(int id, int event) {
-    if (id >= 11 && id < 17) {
+    if (id >= 11 && id < 18) {
         page_ = id - 10;
         scroll_ = 0;
         buildPage();
@@ -667,7 +685,8 @@ void Settings::command(int id, int event) {
         return;
     }
     if ((event == CBN_SELCHANGE && (id == 200 || id == 201 || (id >= 302 && id <= 305))) || (event == BN_CLICKED
-            && (id == 202 || id == 203 || id == 204 || id == 306 || id == 307 || id == 501 || id == 601 || id == 608))) {
+            && (id == 202 || id == 203 || id == 204 || id == 306 || id == 307 || id == 501 || id == 601 || id == 608
+                || (id>=801 && id<=811) || (id>=820 && id<=823)))) {
         collect(id);
         return;
     }
@@ -754,9 +773,10 @@ void Settings::command(int id, int event) {
         ShellExecuteW(window_, L"open", kRepository, nullptr, nullptr, SW_SHOWNORMAL); return;
     }
     if (id == 607) {
-        MessageBoxW(window_, L"0.1.0-preview9 · 2026-10-05\n\n"
+        MessageBoxW(window_, L"0.1.0-preview10 · 2026-10-05\n\n"
                     L"• 候选按文字尺寸布局，紧凑间距；可编辑临时拼音时隐藏重复拼音。\n"
-                    L"• 三种角色主题增加原创插画、背景纹样、圆角边框和专属选中态。\n"
+                    L"• 删除三个角色主题，保留系统、白、黑及主题设置页。\n"
+                    L"• 新增 11 组模糊音与四类键盘纠错，标准拼音按字母加粗修正位置。\n"
                     L"• 设置预览共用实际绘制代码；Windows 亮暗自动切换。\n"
                     L"• 修复传统宿主 Shift 组合键测试阶段的误拦截。\n"
                     L"• 修复设置字体生命周期，改进 DPI、工作区和滚动。\n"
@@ -838,7 +858,7 @@ LRESULT Settings::message(HWND hwnd, UINT message, WPARAM w, LPARAM l, bool pane
             HWND tabs = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_CLIPSIBLINGS | TCS_MULTILINE, 0, 0, 0,
                                       0, hwnd, reinterpret_cast<HMENU>(10), instance_, nullptr);
             SendMessageW(tabs, WM_SETFONT, reinterpret_cast<WPARAM>(body_), FALSE);
-            for (int i = 0; i < 7; ++i) {
+            for (int i = 0; i < static_cast<int>(std::size(kNames)); ++i) {
                 TCITEMW item{};
                 item.mask = TCIF_TEXT;
                 item.pszText = const_cast<wchar_t *>(kNames[i]);
@@ -905,16 +925,12 @@ LRESULT Settings::message(HWND hwnd, UINT message, WPARAM w, LPARAM l, bool pane
             const auto colors = palette(draft_.theme);
             const int style=visualTheme(draft_.theme);
             drawThemeSurface(item->hDC,item->rcItem,colors,style,dpi_);
-            RECT banner=item->rcItem;
-            banner.left += scaled(6); banner.right -= scaled(6); banner.top += scaled(3);
-            banner.bottom=banner.top+themeBannerHeight(style,dpi_,true);
-            drawThemeBanner(item->hDC,banner,colors,style,dpi_,body_);
             RECT selected = item->rcItem;
             selected.left += scaled(6); selected.right -= scaled(6);
             auto old = SelectObject(item->hDC, sample_);
             TEXTMETRICW metrics{}; GetTextMetricsW(item->hDC, &metrics);
             const int rowHeight = metrics.tmHeight + scaled(6);
-            selected.top=banner.bottom+scaled(3); selected.bottom = selected.top + rowHeight;
+            selected.top+=scaled(6); selected.bottom = selected.top + rowHeight;
             SetBkMode(item->hDC, TRANSPARENT);
             for (int i=0;i<3;++i) {
                 RECT row=selected; OffsetRect(&row,0,i*rowHeight);
@@ -1084,7 +1100,7 @@ int runSettings(HINSTANCE instance, int show, ITfMessagePump *pump, ITfKeystroke
         if (!RegisterClassW(&cls) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
             return 1;
     }
-    Settings settings(instance, std::clamp(initialPage, 0, 6));
+    Settings settings(instance, std::clamp(initialPage, 0, 7));
     RECT work{};
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
     HWND window = CreateWindowExW(0, L"Myswy.Settings", L"澄音输入法设置",

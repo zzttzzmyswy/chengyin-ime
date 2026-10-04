@@ -1082,6 +1082,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             return false;
         myswy_session_configure(session_, static_cast<uint32_t>(preferences_.pageSize),
                                 (preferences_.learning ? 1u : 0u) | (preferences_.associations ? 2u : 0u));
+        myswy_session_configure_matching(session_,preferences_.matchingOptions);
         if (profile_)
             myswy_session_set_profile(session_, profile_);
         context_.attach(context);

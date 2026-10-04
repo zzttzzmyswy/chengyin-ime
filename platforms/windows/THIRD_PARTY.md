@@ -2,7 +2,7 @@
 
 本项目源码与手写演示词典：MIT，见 LICENSE。平台代码没有导入其他输入法的实现；已导入的词库单独按下述许可分发。
 
-候选主题插画与纹样由 `theme_art.cpp` 原创绘制，同属项目 MIT 代码；没有下载或打包第三方角色图片。角色名称用于标识主题灵感，插画不是官方立绘。GDI+ 使用 Windows 系统组件，包内不附带该 DLL。
+候选主题绘制器 `theme_art.cpp` 属于项目 MIT 代码。GDI+ 使用 Windows 系统组件，包内不附带该 DLL。
 
 Rust 标准库及其运行时组件静态链接到输入服务。RUNTIME_LICENSES.zip 收录实际构建工具链的 `COPYRIGHT-library.html` 与 `licenses/`；按文件列出的许可、署名和例外保留。源代码与许可信息：[Rust](https://github.com/rust-lang/rust)。
 

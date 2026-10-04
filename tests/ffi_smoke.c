@@ -21,6 +21,32 @@ static void expect_text(MyswySession *s, uint32_t field, size_t index, const cha
 }
 
 int main(void) {
+    {
+        const char source[]="zhang\t\xe5\xbc\xa0\t1000\n";
+        MyswyDictionary *d=myswy_dictionary_new_tsv((const uint8_t *)source,strlen(source));
+        assert(d);
+        MyswySession *s=myswy_session_new_with_dictionary(d);
+        myswy_dictionary_free(d);
+        assert(myswy_session_configure_matching(NULL,0)==MYSWY_INVALID);
+        assert(myswy_session_configure_matching(s,1u<<31)==MYSWY_INVALID);
+        assert(myswy_session_configure_matching(s,MYSWY_CORRECT_SWAP)==0);
+        type_ascii(s,"zhnag");
+        assert(myswy_session_configure_matching(s,0)==MYSWY_BUSY);
+        expect_text(s,MYSWY_TEXT_PREEDIT,0,"zhnag");
+        expect_text(s,MYSWY_TEXT_CANDIDATE_PINYIN,0,"zhang");
+        uint8_t marks[8]; memset(marks,0x55,sizeof(marks));
+        assert(myswy_session_candidate_marks(NULL,0,NULL,0)==MYSWY_INVALID);
+        assert(myswy_session_candidate_marks(s,99,NULL,0)==MYSWY_INVALID);
+        assert(myswy_session_candidate_marks(s,0,NULL,0)==5);
+        assert(myswy_session_candidate_marks(s,0,marks,4)==5);
+        for(size_t i=0;i<sizeof(marks);++i) assert(marks[i]==0x55);
+        assert(myswy_session_candidate_marks(s,0,marks,sizeof(marks))==5);
+        assert(marks[0]==0 && marks[1]==0 && marks[2]==1 && marks[3]==1 && marks[4]==0 && marks[5]==0x55);
+        myswy_session_process(s,MYSWY_KEY_ENTER,0);
+        assert(myswy_session_configure_matching(s,0)==0);
+        expect_text(s,MYSWY_TEXT_COMMIT,0,"zhnag");
+        myswy_session_free(s);
+    }
     assert(myswy_ime_abi_version() == MYSWY_ABI_VERSION);
     assert(myswy_session_reset(NULL) == MYSWY_INVALID);
     assert(myswy_session_process(NULL, 'a', 0) == MYSWY_INVALID);

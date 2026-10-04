@@ -3,6 +3,7 @@
 
 mod decoder;
 mod dictionary;
+pub mod fuzzy;
 mod import;
 mod language;
 mod profile;

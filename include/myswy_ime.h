@@ -95,6 +95,22 @@ int32_t myswy_session_set_profile(MyswySession *, const MyswyProfile *);
 MyswyProfile *myswy_session_profile(const MyswySession *);
 /* page_size=1..9; flags bit0=learning, bit1=association, other bits invalid. */
 int32_t myswy_session_configure(MyswySession *, uint32_t page_size, uint32_t flags);
+/* Optional matching, idle only; default 0. Unknown bits INVALID, active BUSY;
+ * both leave composition/commit unchanged. Phonetic rules are symmetric. */
+enum MyswyMatching {
+    MYSWY_FUZZY_ZH_Z=1u<<0, MYSWY_FUZZY_CH_C=1u<<1, MYSWY_FUZZY_SH_S=1u<<2,
+    MYSWY_FUZZY_N_L=1u<<3, MYSWY_FUZZY_F_H=1u<<4, MYSWY_FUZZY_L_R=1u<<5,
+    MYSWY_FUZZY_AN_ANG=1u<<6, MYSWY_FUZZY_EN_ENG=1u<<7, MYSWY_FUZZY_IN_ING=1u<<8,
+    MYSWY_FUZZY_IAN_IANG=1u<<9, MYSWY_FUZZY_UAN_UANG=1u<<10,
+    MYSWY_CORRECT_SWAP=1u<<16, MYSWY_CORRECT_OMIT=1u<<17,
+    MYSWY_CORRECT_NEIGHBOR=1u<<18, MYSWY_CORRECT_REPEAT=1u<<19,
+    MYSWY_MATCHING_MASK=0x000f07ffu
+};
+int32_t myswy_session_configure_matching(MyswySession *, uint32_t flags);
+/* One 0/1 annotation per canonical ASCII pinyin byte, including unmarked '.
+ * Required byte count, no NUL; NULL/small output writes nothing; invalid index
+ * returns INVALID. Mutation-free and allocation-free, same lifetime as text. */
+int32_t myswy_session_candidate_marks(const MyswySession *, size_t index, uint8_t *, size_t capacity);
 /* Call once only AFTER successful host SetText, before next process/reset.
  * Learns accepted Chinese selections in memory; returns 1/0, or error. Allocates.
  * LEARNING_KEY + COMMIT can also be copied to a platform's background writer. */

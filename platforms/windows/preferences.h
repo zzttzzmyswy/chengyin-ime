@@ -7,7 +7,7 @@ namespace myswy {
 struct Preferences {
     std::wstring font = L"Microsoft YaHei UI";
     int fontSize = 18;
-    int theme = 0; // system/white/black/deepseek/miku/luotianyi
+    int theme = 0; // system/white/black
     int layout = 0; // vertical/horizontal
     int density = 1; // compact/comfortable
     int pageSize = 5;
@@ -20,6 +20,7 @@ struct Preferences {
     bool caretFallback = true;
     bool chinesePunctuation = true;
     bool autoUpdate = true; // check releases in settings, install only on user action
+    uint32_t matchingOptions = 0;
 };
 std::wstring userFile(const wchar_t *, bool create = false);
 bool readSmallFile(const std::wstring &, std::vector<uint8_t> &, size_t limit);

@@ -24,6 +24,7 @@ class CandidateWindow {
     HWND hwnd_ = nullptr;
     HFONT font_ = nullptr;
     HFONT smallFont_ = nullptr;
+    HFONT boldPinyinFont_ = nullptr;
     HFONT footerFont_ = nullptr;
     HDC buffer_ = nullptr;
     HBITMAP bitmap_ = nullptr;
@@ -31,6 +32,7 @@ class CandidateWindow {
     int bufferWidth_ = 0, bufferHeight_ = 0;
     WideText rows_[10] {};
     WideText pinyin_[9] {};
+    uint8_t marks_[9][256] {};
     RECT items_[9] {}, footerRect_{};
     RECT textRects_[9]{}, pinyinRects_[9]{}, contentRect_{};
     WideText footer_{};
@@ -46,7 +48,7 @@ class CandidateWindow {
     std::wstring fontFace_;
     int theme_ = -1;
     Palette colors_{};
-    int hover_ = -1, headerHeight_ = 32, footerHeight_ = 24, bannerHeight_ = 0;
+    int hover_ = -1, headerHeight_ = 32, footerHeight_ = 24;
     int shapeWidth_ = 0, shapeHeight_ = 0, shapeRadius_ = -1;
     int numberWidth_ = 0, scrollOffset_ = 0, scrollMaximum_ = 0;
     bool inlineEditable_ = false, showPinyin_ = false;

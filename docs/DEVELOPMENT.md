@@ -1,3 +1,17 @@
+# preview10 匹配与主题补充
+
+2026-10-05：见 [WINDOWS_PREVIEW10_TASKLIST](WINDOWS_PREVIEW10_TASKLIST.md)。三个角色主题及绘制代码删除，保留通用系统/白/黑绘制器。
+共享核心 fuzzy.rs 定义声母/韵母规则、QWERTY 键位和固定栈字母对齐；dictionary.rs 在只读 trie 上有界遍历，
+每音节一次、每词两次键盘纠错，4096 状态预算。Decoder 在原始输入位置构词图，准确拼写路径优先。
+纠错句子保留标准拼音，候选每 ASCII 字母的标记经 C ABI 提供；不存在按键期堆分配和平台 I/O。
+内部 ResultRef 压成 32 位以容纳句子标准拼音，候选结果上限仍 4096，会话仍低于 64 KiB。
+拼音超过 255 字节的纠错句子显式受限，未纠错路径保留原语义。候选字体和字母坐标同步 DPI 缩放。
+个人配置 MatchingOptions 默认 0，旧文件兼容；现有后台通知从下一段输入应用匹配设置。
+学习错拼后，已有词库/解码句子的标准读音仍用于标记。新增接口 configure_matching/candidate_marks 不改 ABI v1 生命周期。
+原生构建只列生产与七项回归 target，build-only desktop helper 的杀毒提示未绕过，详见 STATUS。
+
+以下为历史批次记录：
+
 # preview9 主题开发补充
 
 2026-10-05：批次见 [WINDOWS_PREVIEW9_TASKLIST](WINDOWS_PREVIEW9_TASKLIST.md)。

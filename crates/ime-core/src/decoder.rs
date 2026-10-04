@@ -11,6 +11,7 @@ struct Path {
     rank: u8,
     abbreviated: bool,
     predicted: bool,
+    corrected: bool,
 }
 impl Default for Path {
     fn default() -> Self {
@@ -21,6 +22,7 @@ impl Default for Path {
             rank: 0,
             abbreviated: false,
             predicted: false,
+            corrected: false,
         }
     }
 }
@@ -28,16 +30,27 @@ impl Default for Path {
 pub(crate) struct Sentence {
     bytes: [u8; MAX_TEXT_BYTES],
     len: u16,
+    pinyin: [u8; 255],
+    pinyin_len: u8,
+    pub corrected: bool,
+    pub exact: bool,
 }
 impl Default for Sentence {
     fn default() -> Self {
         Self {
             bytes: [0; MAX_TEXT_BYTES],
             len: 0,
+            pinyin: [0; 255],
+            pinyin_len: 0,
+            corrected: false,
+            exact: true,
         }
     }
 }
 impl Sentence {
+    pub fn pinyin(&self) -> &str {
+        std::str::from_utf8(&self.pinyin[..self.pinyin_len as usize]).expect("ASCII pinyin")
+    }
     pub fn text(&self) -> &str {
         std::str::from_utf8(&self.bytes[..self.len as usize]).expect("copied UTF-8 words")
     }
@@ -104,9 +117,15 @@ impl Decoder {
     }
     fn insert(&mut self, start: usize, item: Path) {
         let len = self.lengths[start] as usize;
+        if self.paths[start][..len].iter().any(|p| {
+            p.id == item.id && p.next == item.next && p.rank == item.rank && p.cost <= item.cost
+        }) {
+            return;
+        }
         let compare = |a: &Path, b: &Path| {
-            a.cost
-                .total_cmp(&b.cost)
+            a.corrected
+                .cmp(&b.corrected)
+                .then(a.cost.total_cmp(&b.cost))
                 .then(a.id.cmp(&b.id))
                 .then(a.next.cmp(&b.next))
                 .then(a.rank.cmp(&b.rank))
@@ -124,6 +143,7 @@ impl Decoder {
         input: &str,
         context: &str,
         fast: bool,
+        options: u32,
     ) -> Result<bool, LookupError> {
         self.lengths.fill(0);
         self.primary_abbreviated = false;
@@ -162,10 +182,35 @@ impl Decoder {
                         rank: rank as u8,
                         abbreviated: self.paths[end][rank].abbreviated,
                         predicted: self.paths[end][rank].predicted,
+                        corrected: self.paths[end][rank].corrected,
                     };
                     self.insert(start, item);
                 }
             })?;
+            limited |= d.matches_tolerant(input, start, options, BEAM, |id, end, penalty| {
+                for rank in 0..self.lengths[end] as usize {
+                    let bonus = if end < size {
+                        self.pair_bonus(d, id, self.paths[end][rank].id)
+                    } else {
+                        0.0
+                    };
+                    self.insert(
+                        start,
+                        Path {
+                            cost: d.word_cost(id)
+                                + f32::from(penalty) * 4.0
+                                + self.paths[end][rank].cost
+                                - bonus,
+                            id,
+                            next: end as u8,
+                            rank: rank as u8,
+                            abbreviated: self.paths[end][rank].abbreviated,
+                            predicted: self.paths[end][rank].predicted,
+                            corrected: true,
+                        },
+                    );
+                }
+            });
             if fast {
                 limited |= d.matches_fast(input, start, BEAM, |id, end| {
                     let word = d.entry(id);
@@ -198,6 +243,7 @@ impl Decoder {
                                 rank: rank as u8,
                                 abbreviated: true,
                                 predicted: self.paths[end][rank].predicted,
+                                corrected: self.paths[end][rank].corrected,
                             },
                         );
                     }
@@ -218,6 +264,7 @@ impl Decoder {
                                 rank: 0,
                                 abbreviated: false,
                                 predicted: true,
+                                corrected: false,
                             },
                         );
                     }
@@ -227,15 +274,33 @@ impl Decoder {
         self.primary_abbreviated = self.lengths[0] > 0 && self.paths[0][0].abbreviated;
         Ok(limited && self.primary_abbreviated)
     }
-    fn render(&mut self, d: &Dictionary, input: &str, base: usize) {
+    fn render(&mut self, d: &Dictionary, input: &str, base: usize) -> bool {
+        let mut limited = false;
         let size = input.len();
         self.count = base;
         for initial in 0..self.lengths[0] as usize {
             let mut sentence = Sentence::default();
+            let mut pinyin_overflow = false;
             let (mut pos, mut rank, mut words) = (0, initial, 0);
             while pos < size {
                 let path = self.paths[pos][rank];
                 let text = d.entry(path.id).text;
+                let spelling = d.entry(path.id).pinyin.as_bytes();
+                let pstart = sentence.pinyin_len as usize;
+                let delimiter = usize::from(pstart > 0);
+                if pstart + delimiter + spelling.len() > 255 {
+                    pinyin_overflow = true;
+                }
+                if !pinyin_overflow {
+                    if delimiter > 0 {
+                        sentence.pinyin[pstart] = b'\'';
+                    }
+                    sentence.pinyin[pstart + delimiter..pstart + delimiter + spelling.len()]
+                        .copy_from_slice(spelling);
+                    sentence.pinyin_len = (pstart + delimiter + spelling.len()) as u8;
+                }
+                sentence.corrected |= path.corrected;
+                sentence.exact &= !path.corrected && !path.abbreviated && !path.predicted;
                 let end = sentence.len as usize + text.len();
                 if end > MAX_TEXT_BYTES {
                     break;
@@ -245,6 +310,10 @@ impl Decoder {
                 pos = path.next as usize;
                 rank = path.rank as usize;
                 words += 1;
+            }
+            if sentence.corrected && pinyin_overflow {
+                limited = true;
+                continue;
             }
             if pos == size
                 && words > 1
@@ -256,26 +325,28 @@ impl Decoder {
                 self.count += 1;
             }
         }
+        limited
     }
     pub fn decode(
         &mut self,
         d: &Dictionary,
         input: &str,
         context: &str,
+        options: u32,
     ) -> Result<bool, LookupError> {
         self.count = 0;
         self.segment_count = 0;
         self.fast_ready = false;
         self.full_coverage = false;
-        let mut limited = self.compute(d, input, context, false)?;
+        let mut limited = self.compute(d, input, context, false, options)?;
         self.full_coverage = self.paths[0][..self.lengths[0] as usize]
             .iter()
             .any(|p| !p.predicted);
         if self.lengths[0] == 0 && !input.is_empty() {
-            limited |= self.compute(d, input, context, true)?;
+            limited |= self.compute(d, input, context, true, options)?;
             self.fast_ready = true;
         }
-        self.render(d, input, 0);
+        limited |= self.render(d, input, 0);
         let size = input.len();
         // Offer explicit prefix words after complete sentence/word choices.
         // Descending consumed length gives useful phrase-sized corrections first.
@@ -302,6 +373,7 @@ impl Decoder {
         } else {
             d.matches(input, 0, BEAM, &mut offer)?;
         }
+        limited |= d.matches_tolerant(input, 0, options, BEAM, |id, end, _| offer(id, end));
         Ok(limited)
     }
     pub fn decode_alternates(
@@ -309,13 +381,13 @@ impl Decoder {
         d: &Dictionary,
         input: &str,
         context: &str,
+        options: u32,
     ) -> Result<bool, LookupError> {
         if self.fast_ready {
             return Ok(false);
         }
         let base = self.count;
-        let limited = self.compute(d, input, context, true)?;
-        self.render(d, input, base);
+        let limited = self.compute(d, input, context, true, options)? | self.render(d, input, base);
         self.fast_ready = true;
         Ok(limited)
     }

@@ -510,6 +510,27 @@ impl Dictionary {
     pub(crate) fn word_cost(&self, id: u32) -> f32 {
         self.entries[id as usize].cost
     }
+    pub(crate) fn corrected_pronunciation(
+        &self,
+        text: &str,
+        input: &str,
+        flags: u32,
+    ) -> Option<&str> {
+        if flags == 0 {
+            return None;
+        }
+        let start = self
+            .text_index
+            .partition_point(|&id| self.entry(id).text < text);
+        self.text_index[start..]
+            .iter()
+            .take_while(|&&id| self.entry(id).text == text)
+            .take(64)
+            .map(|&id| self.entry(id).pinyin)
+            .find(|&pinyin| {
+                crate::fuzzy::annotations(input, pinyin, flags).is_some_and(|marks| marks != [0; 4])
+            })
+    }
     fn edges_for(&self, node: Node) -> &[Edge] {
         &self.edges[node.edge_start as usize..node.edge_start as usize + node.edge_len as usize]
     }
@@ -519,6 +540,198 @@ impl Dictionary {
             .binary_search_by_key(&label, |e| e.label)
             .ok()
             .map(|i| edges[i].target)
+    }
+    /// Bounded trie alignment, never a dictionary-wide edit-distance scan.
+    /// One keyboard error per syllable, two per word; phonetic rules are anchored.
+    pub(crate) fn tolerant(
+        &self,
+        input: &str,
+        start: usize,
+        flags: u32,
+        mut emit: impl FnMut(u32, usize, u8),
+    ) -> bool {
+        use crate::fuzzy::*;
+        #[derive(Clone, Copy, Default, PartialEq, Eq)]
+        struct State {
+            node: u32,
+            pos: u8,
+            depth: u8,
+            typo: u8,
+            total: u8,
+            cost: u8,
+        }
+        let raw = input.as_bytes();
+        if flags == 0 || start >= raw.len() {
+            return false;
+        }
+        let mut queue = [State::default(); 4096];
+        queue[0].pos = start as u8;
+        let (mut head, mut tail, mut limited) = (0, 1, false);
+        // Open-addressed state set: duplicate routes cannot crowd the sentence beam.
+        let mut seen = [u64::MAX; 8192];
+        while head < tail {
+            let s = queue[head];
+            head += 1;
+            let pos = s.pos as usize;
+            let node = self.nodes[s.node as usize];
+            if pos > start {
+                emit(s.node, pos, s.cost);
+            }
+            if pos == raw.len() {
+                continue;
+            }
+            let mut put = |value: State| {
+                if tail == queue.len() {
+                    limited = true;
+                    return;
+                }
+                let key = u64::from(value.node)
+                    | (u64::from(value.pos) << 32)
+                    | (u64::from(value.depth) << 40)
+                    | (u64::from(value.typo) << 48)
+                    | (u64::from(value.total) << 49)
+                    | (u64::from(value.cost) << 51);
+                let mut at = (key.wrapping_mul(11400714819323198485) >> 51) as usize;
+                while seen[at] != u64::MAX && seen[at] != key {
+                    at = (at + 1) & 8191;
+                }
+                if seen[at] == key {
+                    return;
+                }
+                seen[at] = key;
+                queue[tail] = value;
+                tail += 1;
+            };
+            if let Some(next) = self.child(s.node, b'\'') {
+                if s.depth > 0 {
+                    put(State {
+                        node: next,
+                        pos: s.pos + u8::from(raw[pos] == b'\''),
+                        depth: 0,
+                        typo: 0,
+                        ..s
+                    });
+                }
+            }
+            if raw[pos] == b'\'' {
+                continue;
+            }
+            if let Some(next) = self.child(s.node, raw[pos]) {
+                put(State {
+                    node: next,
+                    pos: s.pos + 1,
+                    depth: s.depth + 1,
+                    ..s
+                });
+            }
+            // Never interpret a one/two-letter initial as a keyboard mistake.
+            let typing = s.typo == 0
+                && s.total < 2
+                && raw[start..].iter().filter(|&&c| c != b'\'').count() >= 3;
+            if typing {
+                if flags & SWAP != 0 && pos + 1 < raw.len() && raw[pos] != raw[pos + 1] {
+                    if let Some(next) = self
+                        .child(s.node, raw[pos + 1])
+                        .and_then(|n| self.child(n, raw[pos]))
+                    {
+                        put(State {
+                            node: next,
+                            pos: s.pos + 2,
+                            depth: s.depth + 2,
+                            typo: 1,
+                            total: s.total + 1,
+                            cost: s.cost + 2,
+                        });
+                    }
+                }
+                for edge in self.edges_for(node) {
+                    if !edge.label.is_ascii_lowercase() || s.depth >= 6 {
+                        continue;
+                    }
+                    if flags & OMIT != 0 {
+                        put(State {
+                            node: edge.target,
+                            depth: s.depth + 1,
+                            typo: 1,
+                            total: s.total + 1,
+                            cost: s.cost + 2,
+                            ..s
+                        });
+                    }
+                    if flags & NEIGHBOR != 0 && neighbors(raw[pos], edge.label) {
+                        put(State {
+                            node: edge.target,
+                            pos: s.pos + 1,
+                            depth: s.depth + 1,
+                            typo: 1,
+                            total: s.total + 1,
+                            cost: s.cost + 2,
+                        });
+                    }
+                }
+                if flags & REPEAT != 0 && s.depth > 0 && pos > start && raw[pos] == raw[pos - 1] {
+                    put(State {
+                        pos: s.pos + 1,
+                        typo: 1,
+                        total: s.total + 1,
+                        cost: s.cost + 2,
+                        ..s
+                    });
+                }
+            }
+            if s.cost >= 12 {
+                continue;
+            }
+            for (rule, (left, right, initial)) in RULES.iter().enumerate() {
+                if flags & (1 << rule) == 0 || (*initial && s.depth != 0) {
+                    continue;
+                }
+                for (canonical, typed) in [(*left, *right), (*right, *left)] {
+                    if !raw[pos..].starts_with(typed) {
+                        continue;
+                    }
+                    let mut next = Some(s.node);
+                    for &letter in canonical {
+                        next = next.and_then(|n| self.child(n, letter));
+                    }
+                    if let Some(next) = next {
+                        let end = self.nodes[next as usize];
+                        if !initial && end.term_len == 0 && self.child(next, b'\'').is_none() {
+                            continue;
+                        }
+                        put(State {
+                            node: next,
+                            pos: (pos + typed.len()) as u8,
+                            depth: s.depth + canonical.len() as u8,
+                            cost: s.cost + 1,
+                            ..s
+                        });
+                    }
+                }
+            }
+        }
+        limited
+    }
+    pub(crate) fn matches_tolerant(
+        &self,
+        input: &str,
+        start: usize,
+        flags: u32,
+        limit: usize,
+        mut emit: impl FnMut(u32, usize, u8),
+    ) -> bool {
+        self.tolerant(input, start, flags, |node, end, cost| {
+            if cost == 0 {
+                return;
+            }
+            let n = self.nodes[node as usize];
+            let end = end + usize::from(input.as_bytes().get(end) == Some(&b'\''));
+            for &id in &self.terminals
+                [n.term_start as usize..n.term_start as usize + (n.term_len as usize).min(limit)]
+            {
+                emit(id, end, cost);
+            }
+        })
     }
     fn advance(
         &self,
@@ -993,6 +1206,35 @@ impl CandidateCursor {
     }
     pub(crate) fn has_matches(&self) -> bool {
         self.root_len > 0
+    }
+    pub(crate) fn reset_tolerant(&mut self, d: &Dictionary, input: &str, flags: u32) -> bool {
+        self.len = 0;
+        self.root_len = 0;
+        self.completions = false;
+        let mut limited = false;
+        let traversal = d.tolerant(input, 0, flags, |node, end, cost| {
+            if end != input.len() || cost == 0 || self.roots[..self.root_len].contains(&node) {
+                return;
+            }
+            if self.root_len == MAX_ACTIVE_STATES {
+                limited = true;
+                return;
+            }
+            self.roots[self.root_len] = node;
+            self.root_len += 1;
+        });
+        for i in 0..self.root_len {
+            let n = d.nodes[self.roots[i] as usize];
+            if n.term_len > 0 {
+                limited |= self
+                    .push(HeapItem {
+                        rank: d.terminals[n.term_start as usize],
+                        source: TERMINAL | n.term_start,
+                    })
+                    .is_err();
+            }
+        }
+        limited || traversal
     }
     pub fn next(&mut self, d: &Dictionary) -> Result<Option<u32>, LookupError> {
         loop {

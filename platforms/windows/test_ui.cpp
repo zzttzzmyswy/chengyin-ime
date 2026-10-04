@@ -1,6 +1,7 @@
 // Read-only native UI regression. No Save/import/clear action is dispatched.
 #include "settings.h"
 #include <commctrl.h>
+#include <algorithm>
 #include "preferences.h"
 #include "candidate.h"
 #include "theme_art.h"
@@ -77,7 +78,7 @@ void capture(HWND window, const wchar_t *name) {
 HWND embedded[3] {};
 void choosePage(HWND window, int page) {
     HWND tab = GetDlgItem(window, 10);
-    require(tab && SendMessageW(tab, TCM_GETITEMCOUNT, 0, 0) == 7, "seven native tabs accessible");
+    require(tab && SendMessageW(tab, TCM_GETITEMCOUNT, 0, 0) == 8, "eight native tabs accessible");
     SendMessageW(tab, TCM_SETCURSEL, page, 0);
     NMHDR note{tab, 10, TCN_SELCHANGE};
     SendMessageW(window, WM_NOTIFY, 10, reinterpret_cast<LPARAM>(&note));
@@ -157,12 +158,19 @@ void CALLBACK inspect(HWND, UINT, UINT_PTR timer, DWORD) {
     ScreenToClient(window, &point);
     require(ChildWindowFromPointEx(window, point, CWP_SKIPINVISIBLE) == pane,
             "content pane stays above tab background");
-    if (stage < 7) {
+    if (stage < 8) {
         choosePage(window, stage);
         SendMessageW(window, WM_THEMECHANGED, 0, 0);
         checkFonts(window);
-        const int expected[] {204, 301, 303, 401, 501, 701, 601};
+        const int expected[] {204, 301, 303, 401, 501, 701, 601, 801};
         require(GetDlgItem(pane, expected[stage]), "all settings groups available");
+        if (stage==7) {
+            for (int id : {801,811,820,823}) {
+                HWND check=GetDlgItem(pane,id); require(check!=nullptr,"fuzzy and error switches available");
+                SendMessageW(check,BM_SETCHECK,BST_CHECKED,0);
+                SendMessageW(pane,WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),reinterpret_cast<LPARAM>(check));
+            }
+        }
         if (stage == 5) {
             for (int i = 0; i < 3; ++i)
                 embedded[i] = GetDlgItem(pane, 701 + i);
@@ -176,11 +184,13 @@ void CALLBACK inspect(HWND, UINT, UINT_PTR timer, DWORD) {
         require(GetPixel(dc, 18, 66) == GetSysColor(COLOR_BTNFACE),
                 "native group interiors repaint with dialog background");
         ReleaseDC(pane, dc);
-        const wchar_t *names[] {L"settings-input", L"settings-candidates", L"settings-themes", L"settings-dictionary", L"settings-learning", L"settings-input-test", L"settings-about"};
+        const wchar_t *names[] {L"settings-input", L"settings-candidates", L"settings-themes", L"settings-dictionary", L"settings-learning", L"settings-input-test", L"settings-about", L"settings-fuzzy"};
         capture(window, names[stage]);
         if (stage == 2) {
+            require(SendMessageW(GetDlgItem(pane,303),CB_GETCOUNT,0,0) == 3,
+                    "theme page exposes exactly system, white and black");
             const auto original = SendMessageW(GetDlgItem(pane,303),CB_GETCURSEL,0,0);
-            for (int theme = 0; theme < 6; ++theme) {
+            for (int theme = 0; theme < 3; ++theme) {
                 HWND combo = GetDlgItem(pane,303);
                 SendMessageW(combo,CB_SETCURSEL,theme,0);
                 SendMessageW(pane,WM_COMMAND,MAKEWPARAM(303,CBN_SELCHANGE),reinterpret_cast<LPARAM>(combo));
@@ -191,14 +201,16 @@ void CALLBACK inspect(HWND, UINT, UINT_PTR timer, DWORD) {
             HWND combo = GetDlgItem(pane,303); SendMessageW(combo,CB_SETCURSEL,original,0);
             SendMessageW(pane,WM_COMMAND,MAKEWPARAM(303,CBN_SELCHANGE),reinterpret_cast<LPARAM>(combo));
         }
-    } else if (stage < 35) {
+    } else if (stage < 40) {
         // All pages at 125/150/200/300%, narrow work areas and both scroll axes.
         const UINT dpis[]{120,144,192,288};
-        const UINT dpi = dpis[(stage - 7) / 7];
+        const UINT dpi = dpis[(stage - 8) / 8];
         RECT next{10, 10, 1090, 850};
         SendMessageW(window, WM_DPICHANGED, MAKEWPARAM(dpi, dpi), reinterpret_cast<LPARAM>(&next));
-        const int page = (stage - 7) % 7;
+        const int page = (stage - 8) % 8;
         choosePage(window, page);
+        if (page==7) for (int id : {801,811,820,823})
+            require(SendMessageW(GetDlgItem(pane,id),BM_GETCHECK,0,0)==BST_CHECKED,"fuzzy draft survives tab and DPI recreation");
         checkFonts(window);
         checkLayout(pane);
         SendMessageW(pane, WM_VSCROLL, SB_BOTTOM, 0);
@@ -217,7 +229,7 @@ void CALLBACK inspect(HWND, UINT, UINT_PTR timer, DWORD) {
     } else
         DestroyWindow(window);
     ++stage;
-    if (stage < 36)
+    if (stage < 41)
         require(SetTimer(nullptr, timer, 100, inspect) != 0, "next UI inspection");
 }
 void inspectTestpad() {
@@ -286,27 +298,25 @@ int wmain(int argc, wchar_t **argv) {
     }
     require(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)), "UI COM initialization");
     // Vector-art DPI simulation is separate from physical monitor validation.
-    for (UINT dpi : {96u,120u,144u,192u,288u}) for (int theme = 0; theme < 6; ++theme) {
+    for (UINT dpi : {96u,120u,144u,192u,288u}) for (int theme = 0; theme < 3; ++theme) {
         auto scale = [dpi](int value) { return MulDiv(value,static_cast<int>(dpi),96); };
         HDC screen = GetDC(nullptr), dc = CreateCompatibleDC(screen);
         HBITMAP bitmap = CreateCompatibleBitmap(screen,scale(260),scale(180)); auto previous = SelectObject(dc,bitmap);
         const auto colors = myswy::palette(theme);
         const int style = myswy::visualTheme(theme);
-        HFONT font = myswy::createUIFont(12,dpi,L"Microsoft YaHei UI");
-        RECT surface{0,0,scale(260),scale(180)}, banner{scale(3),scale(3),scale(257),scale(33)}, row{scale(3),scale(60),scale(257),scale(87)}, badge{scale(6),scale(60),scale(20),scale(87)};
+        RECT surface{0,0,scale(260),scale(180)}, row{scale(3),scale(60),scale(257),scale(87)}, badge{scale(6),scale(60),scale(20),scale(87)};
         myswy::drawThemeSurface(dc,surface,colors,style,dpi);
-        myswy::drawThemeBanner(dc,banner,colors,style,dpi,font);
         myswy::drawThemeSelection(dc,row,colors,style,dpi,true,false);
         myswy::drawThemeBadge(dc,badge,colors,style,dpi,true);
         GdiFlush();
         const COLORREF center = GetPixel(dc,scale(120),scale(73)), outside = GetPixel(dc,scale(120),scale(100));
         require(center != CLR_INVALID && outside != CLR_INVALID && center != outside,
                 "all themes render visible selection and vector surfaces at 100/125/150/200/300 percent");
-        SelectObject(dc,previous); DeleteObject(bitmap); DeleteObject(font); DeleteDC(dc); ReleaseDC(nullptr,screen);
+        SelectObject(dc,previous); DeleteObject(bitmap); DeleteDC(dc); ReleaseDC(nullptr,screen);
     }
     HMODULE richEdit = LoadLibraryW(L"Msftedit.dll");
     require(SetTimer(nullptr, 0, 100, inspect) != 0, "UI inspection timer");
-    require(myswy::runSettings(myswy::module, SW_SHOW, nullptr, nullptr, 0, false) == 0 && stage == 36, "all settings pages painted");
+    require(myswy::runSettings(myswy::module, SW_SHOW, nullptr, nullptr, 0, false) == 0 && stage == 41, "all settings pages painted");
     HWND owner = CreateWindowW(L"STATIC", L"澄音 visual regression", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
                                10, 10, 400, 200, nullptr, nullptr, myswy::module, nullptr);
     MyswySession *session = myswy_session_new();
@@ -342,7 +352,7 @@ int wmain(int argc, wchar_t **argv) {
         require(compact.bottom - compact.top < comfortable.bottom - comfortable.top
                 && compact.right - compact.left < comfortable.right - comfortable.left,
                 "compact reduces both dimensions without changing text size");
-        for (int theme = 0; theme < 6; ++theme) {
+        for (int theme = 0; theme < 3; ++theme) {
             prefs.theme = theme;
             prefs.density = 0;
             candidates.show(session,owner,RECT{100,150,101,170},false,nullptr,nullptr,6+theme,prefs,false);
@@ -361,12 +371,35 @@ int wmain(int argc, wchar_t **argv) {
         }
     }
     myswy_session_free(session);
+    const char spelling[]="zhang\t\xe5\xbc\xa0\t1000\n";
+    auto dictionary=myswy_dictionary_new_tsv(reinterpret_cast<const uint8_t *>(spelling),sizeof(spelling)-1);
+    require(dictionary!=nullptr,"correction rendering fixture dictionary");
+    session=myswy_session_new_with_dictionary(dictionary); myswy_dictionary_free(dictionary);
+    require(session && myswy_session_configure_matching(session,MYSWY_MATCHING_MASK)==0,"correction rendering options");
+    {
+        myswy::CandidateWindow candidates;
+        myswy::Preferences prefs; prefs.density=0; prefs.candidatePinyin=false;
+        for (const char *raw : {"zhnag","zhng","zhsng","zhaang","zang"}) {
+            myswy_session_reset(session);
+            for (const char *c=raw;*c;++c) myswy_session_process(session,static_cast<uint32_t>(*c),0);
+            uint8_t marks[256]{};
+            require(myswy_session_candidate_marks(session,0,marks,256)>0 &&
+                std::any_of(marks,marks+256,[](uint8_t mark){return mark!=0;}),"corrected candidate marks reach renderer");
+            for (int layout=0;layout<2;++layout) {
+                prefs.layout=layout;
+                candidates.show(session,owner,RECT{100,150,101,170},false,nullptr,nullptr,100+layout,prefs,true);
+                const auto name=L"candidate-correction-"+std::wstring(raw,raw+std::strlen(raw))+L"-"+std::to_wstring(layout);
+                capture(candidates.handle(),name.c_str());
+            }
+        }
+    }
+    myswy_session_free(session);
     DestroyWindow(owner);
     inspectTestpad();
     if (richEdit)
         FreeLibrary(richEdit);
     CoUninitialize();
     require(myswy::objects == 0, "UI lifetimes released");
-    std::puts("PASS: seven tabs, live fonts after hover/theme recreation, 96/120/144/192/288 DPI, narrow viewport/scroll, six candidate themes, compact geometry and embedded test lifetime; no user settings written.");
+    std::puts("PASS: eight tabs, live fonts after hover/theme recreation, 96/120/144/192/288 DPI, narrow viewport/scroll, three candidate themes, letter correction marks, compact geometry and embedded test lifetime; no user settings written.");
     return 0;
 }

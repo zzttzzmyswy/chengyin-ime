@@ -20,8 +20,8 @@ int main(int argc, char **argv) {
     }
     ReleaseUpdate result;
     require(parse("[]", result) && !result.available, "no published releases is a normal result");
-    const char fixture[] = R"([{"draft":false,"tag_name":"v0.1.0-preview10","body":"New\n\u4e2d\u6587","assets":[{"name":"chengyin-windows-x64-0.1.0-preview10-msvc.exe","browser_download_url":"https://github.com/zzttzzmyswy/myswyIm/releases/download/v0.1.0-preview10/chengyin-windows-x64-0.1.0-preview10-msvc.exe","digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}]}])";
-    require(parse(fixture, result) && result.available && result.version == L"v0.1.0-preview10"
+    const char fixture[] = R"([{"draft":false,"tag_name":"v0.1.0-preview11","body":"New\n\u4e2d\u6587","assets":[{"name":"chengyin-windows-x64-0.1.0-preview11-msvc.exe","browser_download_url":"https://github.com/zzttzzmyswy/myswyIm/releases/download/v0.1.0-preview11/chengyin-windows-x64-0.1.0-preview11-msvc.exe","digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}]}])";
+    require(parse(fixture, result) && result.available && result.version == L"v0.1.0-preview11"
             && result.notes == L"New\n中文", "newer release with verified repository asset and Unicode notes");
     ReleaseUpdate imageRelease = result;
     imageRelease.digest = L"sha256:228f47e1d41177fb11a95b237d5738131b6e44a586f217e8438b1a0b5fae3ae4";
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     require(parse(unsafe.c_str(), result) && !result.available, "external executable URL cannot become an update");
     unsafe = fixture; at = unsafe.find("sha256:"); unsafe.replace(at, 7, "sha512:");
     require(parse(unsafe.c_str(), result) && !result.available, "missing or wrong digest algorithm rejected");
-    unsafe = fixture; at = unsafe.find("preview10\""); unsafe.replace(at, 10, "preview7\"");
+    unsafe = fixture; at = unsafe.find("preview11\""); unsafe.replace(at, 10, "preview7\"");
     require(parse(unsafe.c_str(), result) && !result.available, "old version cannot downgrade installation");
     unsafe = fixture; at = unsafe.find("false"); unsafe.replace(at, 5, "true");
     require(parse(unsafe.c_str(), result) && !result.available, "draft release never offered");
@@ -57,11 +57,17 @@ int main(int argc, char **argv) {
     require(light.surface != dark.surface && light.text != dark.text, "system light/dark uses different readable palettes");
     require(themePalette(1, true, accent, selectedText).surface == light.surface
             && themePalette(2, false, accent, selectedText).surface == dark.surface, "explicit white/black remain fixed");
-    for (int theme = 0; theme < 6; ++theme) {
+    for (int theme = 0; theme < 3; ++theme) {
         Preferences prefs; prefs.theme = theme;
-        require(validPreferences(prefs), "all six themes have valid persisted identifiers");
+        require(validPreferences(prefs), "all three themes have valid persisted identifiers");
         const auto colors = themePalette(theme, false, accent, selectedText);
         require(colors.surface != colors.text && colors.selected != colors.selectedText, "theme text contrasts with its surface");
+    }
+    for (int theme : {3,4,5,6}) {
+        Preferences prefs; prefs.theme = theme;
+        require(!validPreferences(prefs), "retired and unknown themes cannot be saved");
+        require(themePalette(theme,true,accent,selectedText).surface == dark.surface,
+                "unavailable theme uses system palette without retained character colors");
     }
     // Override HKCU in this process only; never change the user's real theme.
     const std::wstring keyName = L"Software\\MyswyIME\\TestTheme-" + std::to_wstring(GetCurrentProcessId());
@@ -80,5 +86,5 @@ int main(int argc, char **argv) {
     require(RegOverridePredefKey(HKEY_CURRENT_USER, nullptr) == ERROR_SUCCESS, "restore HKCU");
     RegCloseKey(isolated);
     require(RegDeleteTreeW(HKEY_CURRENT_USER, keyName.c_str()) == ERROR_SUCCESS, "remove registry fixture");
-    std::puts("PASS: release version/channel parsing, Unicode notes, repository/digest restrictions, malformed responses and six theme palettes; offline fixtures only.");
+    std::puts("PASS: release version/channel parsing, Unicode notes, repository/digest restrictions, malformed responses and three theme palettes; offline fixtures only.");
 }

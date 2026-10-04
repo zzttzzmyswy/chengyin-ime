@@ -160,6 +160,55 @@ const INVALID: i32 = -1;
 const PANIC: i32 = -2;
 const BUSY: i32 = -3;
 
+#[no_mangle]
+pub unsafe extern "C" fn myswy_session_configure_matching(
+    session: *mut MyswySession,
+    flags: u32,
+) -> i32 {
+    guard(|| {
+        if flags & !myswy_core::fuzzy::OPTIONS_MASK != 0 {
+            return INVALID;
+        }
+        // SAFETY: exclusive access to a live session, or null.
+        let Some(s) = (unsafe { session.as_mut() }) else {
+            return INVALID;
+        };
+        if s.0.configure_matching(flags) {
+            0
+        } else {
+            BUSY
+        }
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn myswy_session_candidate_marks(
+    session: *const MyswySession,
+    index: usize,
+    buffer: *mut u8,
+    capacity: usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: externally serialized live session, or null.
+        let Some(s) = (unsafe { session.as_ref() }) else {
+            return INVALID;
+        };
+        let (Some(candidate), Some(marks)) = (s.0.candidate(index), s.0.candidate_marks(index))
+        else {
+            return INVALID;
+        };
+        let size = candidate.pinyin.len();
+        if !buffer.is_null() && capacity >= size {
+            // SAFETY: caller supplies capacity writable bytes; ASCII spelling uses byte indices.
+            let output = unsafe { std::slice::from_raw_parts_mut(buffer, size) };
+            for (at, value) in output.iter_mut().enumerate() {
+                *value = u8::from(marks[at / 64] & (1 << (at % 64)) != 0);
+            }
+        }
+        size as i32
+    })
+}
+
 fn guard(action: impl FnOnce() -> i32) -> i32 {
     catch_unwind(AssertUnwindSafe(action)).unwrap_or(PANIC)
 }

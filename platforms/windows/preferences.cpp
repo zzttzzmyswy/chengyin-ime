@@ -70,7 +70,8 @@ bool atomicWrite(const std::wstring &path, const std::vector<uint8_t> &bytes) {
     return ok;
 }
 bool validPreferences(const Preferences &p) {
-    return p.fontSize >= 12 && p.fontSize <= 32 && p.theme >= 0 && p.theme <= 5 && p.layout >= 0 && p.layout <= 1
+    if (p.matchingOptions & ~MYSWY_MATCHING_MASK) return false;
+    return p.fontSize >= 12 && p.fontSize <= 32 && p.theme >= 0 && p.theme <= 2 && p.layout >= 0 && p.layout <= 1
            && p.density >= 0 && p.density <= 1 && (p.pageSize == 5 || p.pageSize == 7 || p.pageSize == 9)
            && p.shiftSwitch >= 0 && p.shiftSwitch <= 2 && !p.font.empty() && p.font.size() < LF_FACESIZE
            && p.font.find_first_of(L"\r\n\t=\0", 0, 5) == std::wstring::npos
@@ -111,10 +112,20 @@ bool tryLoadPreferences(const std::wstring &path, Preferences &result) {
     };
     p.fontSize = integer(L"FontSize", p.fontSize);
     p.theme = integer(L"Theme", p.theme);
+    // preview8/9 removed character themes: preserve all other preferences.
+    if (p.theme >= 3 && p.theme <= 5) p.theme = 0;
     p.layout = integer(L"Layout", p.layout);
     p.density = integer(L"Density", p.density);
     p.pageSize = integer(L"PageSize", p.pageSize);
     p.shiftSwitch = integer(L"ShiftSwitch", p.shiftSwitch);
+    if (values.count(L"MatchingOptions")) {
+        const auto &value=values[L"MatchingOptions"];
+        if (value.empty() || value.find_first_not_of(L"0123456789")!=std::wstring::npos) return false;
+        wchar_t *end=nullptr;
+        const auto n=std::wcstoul(value.c_str(),&end,10);
+        if (!end || *end || n>MYSWY_MATCHING_MASK || (n & ~MYSWY_MATCHING_MASK)) return false;
+        p.matchingOptions=static_cast<uint32_t>(n);
+    }
     auto flag = [&](const wchar_t *key, bool & target) {
         int n = integer(key, target ? 1 : 0);
         if (n < 0 || n > 1)
@@ -144,6 +155,7 @@ bool savePreferences(const std::wstring &path, const Preferences &p) {
     s << L"Version=1\nFont=" << p.font << L"\nFontSize=" << p.fontSize << L"\nTheme=" << p.theme
       << L"\nLayout=" << p.layout << L"\nDensity=" << p.density << L"\nPageSize=" << p.pageSize << L"\nShiftSwitch="
       << p.shiftSwitch
+      << L"\nMatchingOptions=" << p.matchingOptions
       << L"\nSeparators=" << p.separators << L"\nCandidatePinyin=" << p.candidatePinyin << L"\nLearning=" <<
       p.learning
       << L"\nAssociations=" << p.associations << L"\nDefaultEnglish=" << p.defaultEnglish << L"\nCaretFallback=" <<
@@ -298,15 +310,7 @@ bool systemDarkTheme() {
                        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size) == ERROR_SUCCESS && light == 0;
 }
 Palette themePalette(int theme, bool systemDark, COLORREF highlight, COLORREF highlightText) {
-    if (theme == 3)
-        return {RGB(235,243,255), RGB(245,249,255), RGB(18,40,85), RGB(64,87,128), RGB(91,135,208),
-                RGB(45,88,201), RGB(45,88,201), RGB(255,255,255)};
-    if (theme == 4)
-        return {RGB(228,251,248), RGB(239,255,253), RGB(14,64,62), RGB(49,106,101), RGB(89,176,166),
-                RGB(12,113,105), RGB(12,113,105), RGB(255,255,255)};
-    if (theme == 5)
-        return {RGB(235,243,255), RGB(247,250,255), RGB(43,53,95), RGB(91,99,137), RGB(130,157,215),
-                RGB(79,101,170), RGB(79,101,170), RGB(255,255,255)};
+    if (theme < 0 || theme > 2) theme = 0;
     if (theme == 1)
         return {RGB(237,242,249), RGB(255,255,255), RGB(28,38,54), RGB(103,118,138), RGB(195,208,225),
                 RGB(46,109,174), RGB(221,237,253), RGB(23,69,113)};

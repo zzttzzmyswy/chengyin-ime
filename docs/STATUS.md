@@ -1,5 +1,38 @@
 # 开发记录 / 下次从这里继续
 
+更新：2026-10-05。当前批次：**preview10 已完成三个角色主题删除、可配置模糊音与四类常见键盘失误、候选标准拼音逐字母加粗/强调色。**
+任务见 [WINDOWS_PREVIEW10_TASKLIST](WINDOWS_PREVIEW10_TASKLIST.md)。设置新增“模糊音”第八页，默认全部关闭；
+正确整词/整句优先，原始拼音与光标不改，按空格仍提交原始输入。纠错候选即使可内嵌编辑仍显示标准拼音。
+旧主题 3–5 回退系统，其他选项保留；主题页仅系统/白/黑，更多主题后续再开发。
+
+交付：`build/packages/chengyin-windows-x64-0.1.0-preview10-msvc.exe`，4,310,250 bytes；SHA-256 `a66e189828b28ebcad915a594ffccc6957c954d113bade78b9eece88a77ef6e7`。
+原生 MSVC 七项 CTest、Rust 43 项工作区回归、fmt/Clippy -D warnings、C ABI 冒烟通过。
+八页、横/纵候选、加粗字母、字体/DPI/滚动回归与实际窗口截图通过；截图 build/ui-preview10/。
+64 KiB 会话预算通过，实际 61,118 bytes；启用全部规则、读取候选标记和学习错拼的按键路径零堆分配。
+C ABI v1 增量匹配配置/标记接口测试空指针、未知位、BUSY、查询长度、短缓冲不写及 commit 生命期。
+词库/会话隔离、整句、分段、翻页、编辑、学习后错拼标记及 11 组双向规则通过。
+
+性能（Windows 11 build 26200，Ryzen 9 9950X，MSVC/Rust 1.99 release，87,540 条 daily 词库）：
+100 轮六输入 zhnag/zhng/zhsng/zhaang/nizhnaghao/jintiantianqihenhao，共 4,900 按键，
+全部匹配开关开启、核心 process 加读取全部可见字母标记：P50 0.8224 ms，P95 6.5561 ms，P99 8.2297 ms，max 9.1851 ms。
+关闭匹配的五输入（含 60 字节）12,100 按键：P50 0.0828 ms，P95 0.3328 ms，P99 0.3521 ms。
+这些是核心微基准，不含 Windows 编辑锁、宿主/绘制/磁盘，不代表输入首选率；完整语料口径见 benches/latency.rs 和 build/bench-preview10.txt。
+
+包的构建预检查、7-Zip、完整负载哈希、最终三个二进制逐字节、PE64/COM 与运行库/词库许可 ZIP 校验通过。
+日志 build/core-test-preview10.txt、native-build-preview10.txt、native-test-preview10.txt、abi-test-preview10.txt、package-preview10.txt，
+摘要 build/delivery-preview10.json。没有更新用户已安装的 preview8，不关闭用户已有应用，不保存个人测试设置/学习数据。
+
+**剩余实机验收**：preview10 安装后 Notepad3/现代宿主的 Shift、空格、纠错/编辑/分段与跨应用矩阵；
+物理混合 DPI 多屏、干净隔离 runner 的新包安装/修复/升级/回滚/卸载，以及发布 Release 后远程更新安装。
+本轮没有远程 CI 或公开 Release，历史 preview7 安装生命周期不等于新包生命周期实测。
+此前 build-only windows_desktop_test.exe 的卡巴斯基 VHO:Trojan-Dropper.Win32.Convagent.gen 提示分类仍未排除，
+本批只构建 production/七项回归 target，未重建/运行该辅助工具、未改杀毒配置；工具未装入交付包。
+
+下一步：在具备对应应用/屏幕和隔离安装环境后完成上述集中验收；独立语料评估纠错误召回、首选率和按键收益。
+不要将模拟 DPI、核心基准、完整性校验或历史桌面测试泛化为所有 Windows 环境 100% 验收。
+
+## 以下为历史批次记录（以顶部 preview10 为当前状态）
+
 更新：2026-10-05。当前批次：**preview9 候选主题整体美化已实现；本机原生七项 CTest 通过，六主题纵排/横排/大字号与设置预览截图已检查。用户安装的 preview8 注册及完整负载一致性通过；新 Notepad3 确认加载 preview8。**
 
 交付：`build/packages/chengyin-windows-x64-0.1.0-preview9-msvc.exe`，4,314,737 bytes；

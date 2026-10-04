@@ -178,7 +178,7 @@ int main() {
         candidates.hide();
         SendMessageW(popup, WM_LBUTTONUP, 0, firstRow);
         require(clicks.count == 1 && GetCapture() != popup, "hidden candidate releases capture and cannot commit");
-        for (int theme = 0; theme < 6; ++theme) {
+        for (int theme = 0; theme < 3; ++theme) {
             Preferences prefs; prefs.theme = theme; prefs.density = 0;
             for (int layout : {0, 1}) for (int size : {18, 36}) {
                 prefs.layout = layout; prefs.fontSize = size;
@@ -188,17 +188,12 @@ int main() {
                 HFONT font = createUIFont(size, dpi, prefs.font);
                 HDC dc = GetDC(popup); auto old = SelectObject(dc,font); TEXTMETRICW metric{};
                 GetTextMetricsW(dc,&metric); SelectObject(dc,old); DeleteObject(font); ReleaseDC(popup,dc);
-                const int y = MulDiv(3,static_cast<int>(dpi),96) + themeBannerHeight(visualTheme(theme),dpi,true) + metric.tmHeight/2;
+                const int y = MulDiv(3,static_cast<int>(dpi),96) + metric.tmHeight/2;
                 const int before = clicks.count;
                 SendMessageW(popup, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(20,y));
                 SendMessageW(popup, WM_LBUTTONUP, 0, MAKELPARAM(20,y));
                 require(clicks.count == before + 1 && clicks.index == 0 && GetFocus() == focus,
-                        "themed inline first candidate hit area follows banner and actual font height");
-                if (visualTheme(theme) >= 3) {
-                    SendMessageW(popup, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(20,15));
-                    SendMessageW(popup, WM_LBUTTONUP, 0, MAKELPARAM(20,15));
-                    require(clicks.count == before + 1, "decorative banner cannot select a candidate");
-                }
+                        "themed inline first candidate hit area follows actual font height");
                 HRGN region = CreateRectRgn(0,0,0,0);
                 const int kind = GetWindowRgn(popup,region); DeleteObject(region);
                 require(visualTheme(theme) ? kind != ERROR : kind == ERROR,

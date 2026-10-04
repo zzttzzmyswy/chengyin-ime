@@ -1,4 +1,4 @@
-# 当前本机 Windows 环境 · preview9
+# 当前本机 Windows 环境 · preview10
 
 2026-10-05：Windows 11 build 26200，AMD Ryzen 9 9950X（16 核/32 线程），x64。
 工作目录是 Codex 的中文路径 Git worktree；源码不依赖绝对路径。
@@ -17,7 +17,7 @@ $env:PATH="C:\Users\xhxez\.cargo\bin;C:\Program Files\CMake\bin;" + $env:PATH
 $env:RUSTFLAGS='-C target-feature=+crt-static'
 cargo build --release -p myswy-ffi --target x86_64-pc-windows-msvc --locked
 cmake -S platforms/windows -B build/windows-msvc -G 'Visual Studio 17 2022' -A x64
-cmake --build build/windows-msvc --config Release --parallel 3
+cmake --build build/windows-msvc --config Release --parallel 3 --target myswy_tsf myswy_settings myswy_probe windows_ui_test windows_key_test windows_settings_test windows_update_test windows_live_test myswy_tsf_fixture
 ctest --test-dir build/windows-msvc -C Release --output-on-failure
 python scripts/package_windows.py --build-dir build/windows-msvc --toolchain msvc --makensis build/nsis-amd64/makensis.exe --nsis-notice packaging/windows/NSIS-LICENSE.txt
 ```
@@ -89,3 +89,13 @@ SHA-256 为 `103a3284c1a5356efa0aba90fdfc391c3cde8e7df8726377cef0f98471584047`�
 已与 Debian trixie 签名 Packages 索引核对。只复制固定目录的 Windows PE 文件，
 不执行 Debian 包维护脚本；工具链在忽略的 `build/nsis-amd64`，构建不改系统 NSIS。
 `build/nsis-compiler-path.txt` 供后续安装回归使用同一编译器；来源/组件哈希包含在安装负载中。
+
+## preview10 复现补充
+
+核心：cargo fmt --all -- --check；cargo clippy --workspace --all-targets --locked -- -D warnings；cargo test --workspace --locked。
+C ABI：MSVC /utf-8 /W4 /WX 编译 tests/ffi_smoke.c，链接 release myswy_ime.dll.lib；原生 Windows CTest 七项。
+截图：windows_ui_test.exe build/ui-preview10（测试草稿不保存个人设置）；支持全部八页与 96/120/144/192/288 DPI。
+基准：MYSWY_BENCH_ROUNDS=100，cargo bench -p myswy-core --bench latency --locked，输出 build/bench-preview10.txt。
+打包使用 scripts/package_windows.py --revision 10，AMD64 NSIS 准备与 UTF-8 输入沿用之前已验证流程。
+全 target 构建可能被 build-only windows_desktop_test.exe 的杀毒锁定阻止；本批列出 production/test target，
+未重建、重命名或运行被提示的辅助程序，未修改杀毒设置。真实应用与物理多屏另验。
