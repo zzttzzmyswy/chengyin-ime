@@ -4,6 +4,10 @@
 namespace myswy {
 namespace {
 constexpr wchar_t kWindowClass[] = L"Myswy.Candidates.Preview1";
+struct DpiContext {
+    DPI_AWARENESS_CONTEXT previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    ~DpiContext() { if (previous) SetThreadDpiAwarenessContext(previous); }
+};
 void fillSelection(HDC dc, RECT rect, COLORREF color) {
     HBRUSH brush = CreateSolidBrush(color);
     FillRect(dc, &rect, brush);
@@ -36,6 +40,8 @@ CandidateWindow::~CandidateWindow() {
         DeleteObject(font_);
     if (smallFont_)
         DeleteObject(smallFont_);
+    if (footerFont_)
+        DeleteObject(footerFont_);
     UnregisterClassW(kWindowClass, module);
 }
 void CandidateWindow::hide() {
@@ -50,11 +56,23 @@ void CandidateWindow::hide() {
     }
 }
 void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool limited, void *target,
-                           Choice choice, uint64_t generation, const Preferences &preferences) {
+                           Choice choice, uint64_t generation, const Preferences &preferences, bool inlineEditable) {
+    // Convert host-virtualized caret coordinates before switching this thread.
+    if (owner && !AreDpiAwarenessContextsEqual(GetWindowDpiAwarenessContext(owner), DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
+        POINT start{caret.left, caret.top}, end{caret.right, caret.bottom};
+        LogicalToPhysicalPointForPerMonitorDPI(owner, &start);
+        LogicalToPhysicalPointForPerMonitorDPI(owner, &end);
+        caret = {start.x, start.y, end.x, end.y};
+    }
+    DpiContext context;
+    if (generation_ != generation)
+        scrollOffset_ = 0;
     target_ = target;
     choice_ = choice;
     generation_ = generation;
     preferences_ = preferences;
+    inlineEditable_ = inlineEditable;
+    showPinyin_ = preferences.candidatePinyin && !inlineEditable;
     if (theme_ != preferences.theme) {
         theme_ = preferences.theme;
         colors_ = palette(theme_);
@@ -69,28 +87,31 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         cls.style = CS_DROPSHADOW;
         if (!RegisterClassExW(&cls) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
             return;
+        // A TIP also runs inside DPI-unaware hosts. Give this popup its own
+        // per-monitor context without changing the host's process awareness.
         hwnd_ = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST, kWindowClass, L"澄音 候选",
-                                WS_POPUP, 0, 0, 0, 0, owner, nullptr, module, this);
-        if (!hwnd_)
+                                WS_POPUP, caret.left, caret.bottom, 1, 1, owner, nullptr, module, this);
+        if (!hwnd_) {
             return;
+        }
 
     }
     const bool visible = IsWindowVisible(hwnd_) != FALSE;
     const bool sameOwner = reinterpret_cast<HWND>(GetWindowLongPtrW(hwnd_, GWLP_HWNDPARENT)) == owner;
     if (!sameOwner)
         SetWindowLongPtrW(hwnd_, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(owner));
-    const UINT dpi = windowDpi(owner);
+    // Move before querying DPI: the caret may be on a different monitor from
+    // the owner's top-level window. Windows scales the popup for that monitor.
+    SetWindowPos(hwnd_, nullptr, caret.left, caret.bottom, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+    const UINT dpi = windowDpi(hwnd_);
     auto scale = [dpi](int n) {
         return MulDiv(n, static_cast<int>(dpi), 96);
     };
-    padding_ = scale(12);
-    headerHeight_ = scale(32);
-    footerHeight_ = scale(26);
-    rowHeight_ = scale(std::max(preferences.fontSize + 12,
-                                preferences.density ? 36 : 28) + (preferences.candidatePinyin ? 18 : 0));
+    padding_ = scale(preferences.density ? 7 : 3);
     if (fontDpi_ != dpi || fontSize_ != preferences.fontSize || fontFace_ != preferences.font) {
         HFONT font = createUIFont(preferences.fontSize, dpi, preferences.font);
-        HFONT nextSmallFont = createUIFont(13, dpi, preferences.font);
+        HFONT nextSmallFont = createUIFont(std::max(16, preferences.fontSize - 2), dpi, preferences.font);
+        HFONT nextFooterFont = createUIFont(12, dpi, preferences.font);
         if (font) {
             if (font_)
                 DeleteObject(font_);
@@ -100,6 +121,11 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
             if (smallFont_)
                 DeleteObject(smallFont_);
             smallFont_ = nextSmallFont;
+        }
+        if (nextFooterFont) {
+            if (footerFont_)
+                DeleteObject(footerFont_);
+            footerFont_ = nextFooterFont;
         }
         fontDpi_ = dpi;
         fontSize_ = preferences.fontSize;
@@ -123,8 +149,8 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
     const int page = myswy_session_page(session);
     previous_ = page > 0;
     next_ = myswy_session_has_next_page(session) > 0;
-    footer_.length = std::swprintf(footer_.data, std::size(footer_.data), L"%ls     第 %d 页     %ls",
-                                   previous_ ? L"‹ PgUp" : L"", page + 1, next_ ? L"PgDn ›" : L"");
+    footer_.length = std::swprintf(footer_.data, std::size(footer_.data), L"%ls  %d  %ls",
+                                   previous_ ? L"‹" : L"", page + 1, next_ ? L"›" : L"");
     for (int i = 0; i < count_; ++i) {
         readText(session, MYSWY_TEXT_CANDIDATE, static_cast<size_t>(i), rows_[i + 1]);
         readText(session, MYSWY_TEXT_CANDIDATE_PINYIN, static_cast<size_t>(i), pinyin_[i]);
@@ -139,28 +165,53 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
     const int available = static_cast<int>(work.right - work.left);
     HDC dc = GetDC(hwnd_);
     HGDIOBJ old = SelectObject(dc, font_ ? font_ : GetStockObject(DEFAULT_GUI_FONT));
-    int widths[9] {};
+    TEXTMETRICW candidateMetric{}, pinyinMetric{}, footerMetric{};
+    GetTextMetricsW(dc, &candidateMetric);
+    SelectObject(dc, smallFont_);
+    GetTextMetricsW(dc, &pinyinMetric);
+    SelectObject(dc, footerFont_);
+    GetTextMetricsW(dc, &footerMetric);
+    SIZE number{};
+    GetTextExtentPoint32W(dc, L"9", 1, &number);
+    numberWidth_ = number.cx + scale(preferences.density ? 9 : 5);
+    const int gap = scale(preferences.density ? 12 : 8);
+    rowHeight_ = static_cast<int>(candidateMetric.tmHeight) + scale(preferences.density ? 10 : 2);
+    if (showPinyin_ && preferences.layout)
+        rowHeight_ += pinyinMetric.tmHeight + scale(2);
+    else if (showPinyin_)
+        rowHeight_ = std::max(rowHeight_, static_cast<int>(pinyinMetric.tmHeight) + scale(2));
+    headerHeight_ = (!inlineEditable || association_ || limited) ? static_cast<int>(pinyinMetric.tmHeight) + scale(4) : 0;
+    footerHeight_ = previous_ || next_ ? static_cast<int>(footerMetric.tmHeight) + scale(4) : 0;
+    int widths[9]{}, textWidths[9]{}, pinyinWidths[9]{};
+    int textColumn = 0, pinyinColumn = 0;
     for (int i = 0; i < count_; ++i) {
+        SelectObject(dc, font_);
         SIZE extent{};
         GetTextExtentPoint32W(dc, rows_[i + 1].data, rows_[i + 1].length, &extent);
-        widths[i] = static_cast<int>(extent.cx) + scale(52);
-        if (preferences.candidatePinyin) {
-            SelectObject(dc, smallFont_ ? smallFont_ : GetStockObject(DEFAULT_GUI_FONT));
+        textWidths[i] = extent.cx;
+        textColumn = std::max(textColumn, textWidths[i]);
+        if (showPinyin_) {
+            SelectObject(dc, smallFont_);
             GetTextExtentPoint32W(dc, pinyin_[i].data, pinyin_[i].length, &extent);
-            widths[i] = std::max(widths[i], static_cast<int>(extent.cx) + scale(52));
-            SelectObject(dc, font_ ? font_ : GetStockObject(DEFAULT_GUI_FONT));
+            pinyinWidths[i] = extent.cx;
+            pinyinColumn = std::max(pinyinColumn, pinyinWidths[i]);
         }
+        widths[i] = numberWidth_ + std::max(textWidths[i], pinyinWidths[i]) + padding_ * 2;
     }
+    SelectObject(dc, smallFont_);
+    SIZE headerExtent{};
+    if (headerHeight_)
+        GetTextExtentPoint32W(dc, rows_[0].data, rows_[0].length, &headerExtent);
+    SelectObject(dc, footerFont_);
+    SIZE footerExtent{};
+    if (footerHeight_)
+        GetTextExtentPoint32W(dc, footer_.data, footer_.length, &footerExtent);
     SelectObject(dc, old);
     ReleaseDC(hwnd_, dc);
-    int width = scale(240), height = 0;
+    int width = std::max(scale(32), std::max(static_cast<int>(headerExtent.cx), static_cast<int>(footerExtent.cx)) + padding_ * 2), height = 0;
     if (preferences.layout == 0) {
-        for (int i = 0; i < count_; ++i)
-            width = std::max(width, widths[i] + padding_ * 2);
-        width = std::min(width, std::min(scale(520), available));
-        RECT before{};
-        if (visible && sameOwner && GetWindowRect(hwnd_, &before))
-            width = std::max(width, std::min(static_cast<int>(before.right - before.left), available));
+        width = std::max(width, numberWidth_ + textColumn + (showPinyin_ ? gap + pinyinColumn : 0) + padding_ * 4);
+        width = std::min(width, available);
         for (int i = 0; i < count_; ++i)
             items_[i] = {padding_, padding_ + headerHeight_ + i * rowHeight_, width - padding_, padding_ + headerHeight_ + (i + 1) *rowHeight_};
         height = padding_ * 2 + headerHeight_ + count_ * rowHeight_ + footerHeight_;
@@ -168,7 +219,7 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         const int limit = std::min(scale(720), available);
         int x = padding_, y = padding_ + headerHeight_;
         for (int i = 0; i < count_; ++i) {
-            int itemWidth = std::min(std::max(scale(70), widths[i]), limit - padding_ * 2);
+            int itemWidth = std::min(widths[i], limit - padding_ * 2);
             if (x > padding_ && x + itemWidth > limit - padding_) {
                 x = padding_;
                 y += rowHeight_;
@@ -179,8 +230,33 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         }
         height = y + (count_ ? rowHeight_ : 0) + padding_ + footerHeight_;
     }
+    const int naturalHeight = height;
     width = std::min(width, available);
     height = std::min(height, static_cast<int>(work.bottom - work.top));
+    scrollMaximum_ = naturalHeight - height;
+    scrollOffset_ = std::clamp(scrollOffset_, 0, scrollMaximum_);
+    contentRect_ = {padding_, padding_ + headerHeight_, width - padding_, height - padding_ - footerHeight_};
+    // Keep the keyboard selection visible when work-area height is restricted.
+    if (selected_ >= 0 && selected_ < count_) {
+        if (items_[selected_].bottom - scrollOffset_ > contentRect_.bottom)
+            scrollOffset_ = std::min(scrollMaximum_, static_cast<int>(items_[selected_].bottom - contentRect_.bottom));
+        if (items_[selected_].top - scrollOffset_ < contentRect_.top)
+            scrollOffset_ = std::max(0, static_cast<int>(items_[selected_].top - contentRect_.top));
+    }
+    for (int i = 0; i < count_; ++i) {
+        textRects_[i] = items_[i];
+        textRects_[i].left += numberWidth_ + padding_;
+        textRects_[i].right -= padding_;
+        pinyinRects_[i] = textRects_[i];
+        if (showPinyin_ && preferences.layout == 0) {
+            const int start = textRects_[i].left + textColumn + gap;
+            textRects_[i].right = std::min(textRects_[i].right, static_cast<LONG>(start - gap));
+            pinyinRects_[i].left = start;
+        } else if (showPinyin_) {
+            textRects_[i].bottom = textRects_[i].top + candidateMetric.tmHeight + scale(2);
+            pinyinRects_[i].top = textRects_[i].bottom;
+        }
+    }
     footerRect_ = {padding_, height - padding_ - footerHeight_, width - padding_, height - padding_};
     const int x = std::clamp(static_cast<int>(caret.left), static_cast<int>(work.left),
                              static_cast<int>(work.right) - width);
@@ -204,8 +280,9 @@ int CandidateWindow::hit(LPARAM location) const {
     POINT point{static_cast<short>(LOWORD(location)), static_cast<short>(HIWORD(location))};
     if (!hwnd_ || !IsWindowVisible(hwnd_))
         return -1;
+    POINT contentPoint{point.x, point.y + scrollOffset_};
     for (int i = 0; i < count_; ++i)
-        if (PtInRect(&items_[i], point))
+        if (PtInRect(&contentRect_, point) && PtInRect(&items_[i], contentPoint))
             return i;
     if (PtInRect(&footerRect_, point))
         return point.x < (footerRect_.left + footerRect_.right) / 2 ? (previous_ ? 9 : -1) : (next_ ? 10 : -1);
@@ -230,8 +307,13 @@ LRESULT CALLBACK CandidateWindow::procedure(HWND hwnd, UINT msg, WPARAM w, LPARA
         return HTCLIENT;
     if (msg == WM_ERASEBKGND)
         return 1;
-    if ((msg == WM_THEMECHANGED || msg == WM_SETTINGCHANGE) && self) {
+    if ((msg == WM_THEMECHANGED || msg == WM_SETTINGCHANGE || msg == WM_SYSCOLORCHANGE) && self) {
         self->colors_ = palette(self->preferences_.theme);
+        InvalidateRect(hwnd, nullptr, FALSE);
+        return 0;
+    }
+    if (msg == WM_MOUSEWHEEL && self && self->scrollMaximum_) {
+        self->scrollOffset_ = std::clamp(self->scrollOffset_ - static_cast<short>(HIWORD(w)) / WHEEL_DELTA * self->rowHeight_, 0, self->scrollMaximum_);
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
@@ -315,46 +397,45 @@ void CandidateWindow::paint() {
     HGDIOBJ oldFont = SelectObject(dc, smallFont_ ? smallFont_ : GetStockObject(DEFAULT_GUI_FONT));
     SetTextColor(dc, colors.muted);
     RECT header{padding_ + 4, padding_, width - padding_, padding_ + headerHeight_};
-    DrawTextW(dc, rows_[0].data, rows_[0].length, &header,
-              DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
+    if (headerHeight_)
+        DrawTextW(dc, rows_[0].data, rows_[0].length, &header,
+                  DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
+    const int saved = SaveDC(dc);
+    IntersectClipRect(dc, contentRect_.left, contentRect_.top, contentRect_.right, contentRect_.bottom);
     for (int i = 0; i < count_; ++i) {
         const bool selected = i == selected_, hover = i == hover_;
         RECT row = items_[i];
-        row.top += 2;
-        row.bottom -= 2;
+        OffsetRect(&row, 0, -scrollOffset_);
         if (selected || hover)
             fillSelection(dc, row, selected ? colors.selected : colors.background);
         RECT number = row;
-        number.left += 8;
-        number.right = number.left + padding_ * 2;
+        number.left += padding_;
+        number.right = number.left + numberWidth_;
         wchar_t label[4] {association_ ? (selected ? L'›' : L' ') : static_cast<wchar_t>(L'1' + i), 0};
-        SelectObject(dc, smallFont_ ? smallFont_ : GetStockObject(DEFAULT_GUI_FONT));
+        SelectObject(dc, footerFont_ ? footerFont_ : GetStockObject(DEFAULT_GUI_FONT));
         SetTextColor(dc, selected ? colors.selectedText : colors.muted);
         DrawTextW(dc, label, 1, &number, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
-        RECT text = row;
-        text.left += padding_ * 2 + 8;
-        text.right -= 8;
-        if (preferences_.candidatePinyin && pinyin_[i].length) {
-            text.bottom -= MulDiv(18, static_cast<int>(fontDpi_), 96);
-        }
+        RECT text = textRects_[i];
+        OffsetRect(&text, 0, -scrollOffset_);
         SelectObject(dc, font_ ? font_ : GetStockObject(DEFAULT_GUI_FONT));
         SetTextColor(dc, selected ? colors.selectedText : colors.text);
         DrawTextW(dc, rows_[i + 1].data, rows_[i + 1].length, &text,
                   DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
-        if (preferences_.candidatePinyin && pinyin_[i].length) {
-            RECT pronunciation = text;
-            pronunciation.top = text.bottom - 1;
-            pronunciation.bottom = row.bottom;
+        if (showPinyin_ && pinyin_[i].length) {
+            RECT pronunciation = pinyinRects_[i];
+            OffsetRect(&pronunciation, 0, -scrollOffset_);
             SelectObject(dc, smallFont_ ? smallFont_ : GetStockObject(DEFAULT_GUI_FONT));
             SetTextColor(dc, selected ? colors.selectedText : colors.muted);
             DrawTextW(dc, pinyin_[i].data, pinyin_[i].length, &pronunciation,
-                      DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+                      DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
         }
     }
-    SelectObject(dc, smallFont_ ? smallFont_ : GetStockObject(DEFAULT_GUI_FONT));
+    RestoreDC(dc, saved);
+    SelectObject(dc, footerFont_ ? footerFont_ : GetStockObject(DEFAULT_GUI_FONT));
     SetTextColor(dc, colors.muted);
-    DrawTextW(dc, footer_.data, footer_.length, &footerRect_,
-              DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
+    if (footerHeight_)
+        DrawTextW(dc, footer_.data, footer_.length, &footerRect_,
+                  DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
     SelectObject(dc, oldFont);
     if (dc != screen)
         BitBlt(screen, 0, 0, width, height, dc, 0, 0, SRCCOPY);

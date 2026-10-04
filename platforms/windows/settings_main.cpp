@@ -23,7 +23,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command, int show) {
         }
         HMODULE richEdit = LoadLibraryW(L"Msftedit.dll");
         result = myswy::runSettings(instance, show, pump.get(), keys.get(),
-                                    std::wcscmp(command, L"--input-test") == 0 ? 4 : 0);
+                                    std::wcscmp(command, L"--input-test") == 0 ? 5 : 0,
+                                    std::wcscmp(command, L"--input-test") != 0);
         if (activated)
             manager->Deactivate();
         keys.reset();

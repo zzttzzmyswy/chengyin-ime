@@ -58,13 +58,13 @@ class ShiftSwitch {
 };
 // Pure planning: safe to call repeatedly from OnTestKeyDown. VK values are stable.
 inline KeyPlan planKey(uint32_t vk, char ascii, bool shortcut, bool caps, bool active, bool english = false,
-                       bool association = false) {
+                       bool association = false, bool shifted = false) {
     if (vk == 0x10 || vk == 0x11 || vk == 0x12 || vk == 0x5b || vk == 0x5c ||
             (vk >= 0xa0 && vk <= 0xa5))
         return {};
-    if (shortcut || caps || english || vk == 0x14)
+    if (shortcut || caps || english || shifted || (ascii >= 'A' && ascii <= 'Z') || vk == 0x14)
         return {active ? Action::finish : Action::pass, 0, 0};
-    if ((ascii >= 'a' && ascii <= 'z') || (ascii >= 'A' && ascii <= 'Z'))
+    if (ascii >= 'a' && ascii <= 'z')
         return {Action::core, static_cast<uint32_t>(ascii), 0};
     if (!active)
         return {};
@@ -93,7 +93,7 @@ inline KeyPlan planKey(uint32_t vk, char ascii, bool shortcut, bool caps, bool a
     }
     switch (vk) {
     case 0x20:
-        return {Action::core, MYSWY_KEY_SPACE, 0};
+        return {Action::core, MYSWY_KEY_ENTER, 0};
     case 0x08:
         return {Action::core, MYSWY_KEY_BACKSPACE, 0};
     case 0x1b:

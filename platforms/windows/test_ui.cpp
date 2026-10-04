@@ -76,7 +76,7 @@ void capture(HWND window, const wchar_t *name) {
 HWND embedded[3] {};
 void choosePage(HWND window, int page) {
     HWND tab = GetDlgItem(window, 10);
-    require(tab && SendMessageW(tab, TCM_GETITEMCOUNT, 0, 0) == 6, "six native tabs accessible");
+    require(tab && SendMessageW(tab, TCM_GETITEMCOUNT, 0, 0) == 7, "seven native tabs accessible");
     SendMessageW(tab, TCM_SETCURSEL, page, 0);
     NMHDR note{tab, 10, TCN_SELCHANGE};
     SendMessageW(window, WM_NOTIFY, 10, reinterpret_cast<LPARAM>(&note));
@@ -122,9 +122,30 @@ void checkLayout(HWND pane) {
         boxes.push_back({child, rect, !std::wcscmp(kind, L"Static")});
     }
 }
+void checkFonts(HWND window) {
+    EnumChildWindows(window, [](HWND child, LPARAM) -> BOOL {
+        HFONT font = reinterpret_cast<HFONT>(SendMessageW(child, WM_GETFONT, 0, 0));
+        if (font) {
+            LOGFONTW before{}, after{};
+            require(GetObjectW(font, sizeof(before), &before) == sizeof(before), "every child uses a live font handle");
+            SendMessageW(child, WM_MOUSEMOVE, 0, MAKELPARAM(4,4));
+            RedrawWindow(child, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
+            HFONT hovered = reinterpret_cast<HFONT>(SendMessageW(child, WM_GETFONT, 0, 0));
+            require(GetObjectW(hovered, sizeof(after), &after) == sizeof(after)
+                    && before.lfHeight == after.lfHeight && !std::wcscmp(before.lfFaceName, after.lfFaceName),
+                    "hover preserves font family and height after recreation");
+        }
+        return TRUE;
+    }, 0);
+}
 void CALLBACK inspect(HWND, UINT, UINT_PTR timer, DWORD) {
     KillTimer(nullptr, timer);
-    HWND window = FindWindowW(L"Myswy.Settings", nullptr);
+    HWND window = nullptr;
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND candidate, LPARAM target) -> BOOL {
+        wchar_t name[64] {}; GetClassNameW(candidate, name, 64);
+        if (!std::wcscmp(name, L"Myswy.Settings")) *reinterpret_cast<HWND *>(target) = candidate;
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&window));
     require(window != nullptr, "settings created");
     HWND pane = FindWindowExW(window, nullptr, L"Myswy.Settings.Content", nullptr);
     require(pane && GetDlgItem(window, 100) && GetDlgItem(window, 101), "apply and defaults available");
@@ -135,11 +156,13 @@ void CALLBACK inspect(HWND, UINT, UINT_PTR timer, DWORD) {
     ScreenToClient(window, &point);
     require(ChildWindowFromPointEx(window, point, CWP_SKIPINVISIBLE) == pane,
             "content pane stays above tab background");
-    if (stage < 6) {
+    if (stage < 7) {
         choosePage(window, stage);
-        const int expected[] {204, 301, 401, 501, 701, 601};
+        SendMessageW(window, WM_THEMECHANGED, 0, 0);
+        checkFonts(window);
+        const int expected[] {204, 301, 303, 401, 501, 701, 601};
         require(GetDlgItem(pane, expected[stage]), "all settings groups available");
-        if (stage == 4) {
+        if (stage == 5) {
             for (int i = 0; i < 3; ++i)
                 embedded[i] = GetDlgItem(pane, 701 + i);
             require(embedded[0] && embedded[1] && embedded[2], "embedded Edit/RichEdit/password controls");
@@ -152,28 +175,35 @@ void CALLBACK inspect(HWND, UINT, UINT_PTR timer, DWORD) {
         require(GetPixel(dc, 18, 66) == GetSysColor(COLOR_BTNFACE),
                 "native group interiors repaint with dialog background");
         ReleaseDC(pane, dc);
-        const wchar_t *names[] {L"settings-input", L"settings-candidates", L"settings-dictionary", L"settings-learning", L"settings-input-test", L"settings-about"};
+        const wchar_t *names[] {L"settings-input", L"settings-candidates", L"settings-themes", L"settings-dictionary", L"settings-learning", L"settings-input-test", L"settings-about"};
         capture(window, names[stage]);
-    } else if (stage < 12) {
-        // Exercise every page at a smaller size and 150% DPI, including wrapping/scroll.
-        RECT next{10, 10, 1090, 910};
-        SendMessageW(window, WM_DPICHANGED, MAKEWPARAM(144, 144), reinterpret_cast<LPARAM>(&next));
-        choosePage(window, stage - 6);
+    } else if (stage < 35) {
+        // All pages at 125/150/200/300%, narrow work areas and both scroll axes.
+        const UINT dpis[]{120,144,192,288};
+        const UINT dpi = dpis[(stage - 7) / 7];
+        RECT next{10, 10, 1090, 850};
+        SendMessageW(window, WM_DPICHANGED, MAKEWPARAM(dpi, dpi), reinterpret_cast<LPARAM>(&next));
+        const int page = (stage - 7) % 7;
+        choosePage(window, page);
+        checkFonts(window);
         checkLayout(pane);
         SendMessageW(pane, WM_VSCROLL, SB_BOTTOM, 0);
         checkLayout(pane);
-        if (stage == 10) {
+        SendMessageW(pane, WM_HSCROLL, SB_RIGHT, 0);
+        SendMessageW(pane, WM_HSCROLL, SB_LEFT, 0);
+        if (page == 5) {
             for (int i = 0; i < 3; ++i)
                 require(GetDlgItem(pane, 701 + i) == embedded[i], "input controls survive tab and DPI changes");
             wchar_t text[64] {};
             GetWindowTextW(embedded[0], text, 64);
             require(!std::wcscmp(text, L"retained test text"), "test text survives relayout");
-            capture(window, L"settings-input-test-144dpi");
+            const auto name = L"settings-input-test-" + std::to_wstring(dpi) + L"dpi";
+            capture(window, name.c_str());
         }
     } else
         DestroyWindow(window);
     ++stage;
-    if (stage < 13)
+    if (stage < 36)
         require(SetTimer(nullptr, timer, 100, inspect) != 0, "next UI inspection");
 }
 void inspectTestpad() {
@@ -243,7 +273,7 @@ int wmain(int argc, wchar_t **argv) {
     require(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)), "UI COM initialization");
     HMODULE richEdit = LoadLibraryW(L"Msftedit.dll");
     require(SetTimer(nullptr, 0, 100, inspect) != 0, "UI inspection timer");
-    require(myswy::runSettings(myswy::module, SW_SHOW) == 0 && stage == 13, "all settings pages painted");
+    require(myswy::runSettings(myswy::module, SW_SHOW, nullptr, nullptr, 0, false) == 0 && stage == 36, "all settings pages painted");
     HWND owner = CreateWindowW(L"STATIC", L"澄音 visual regression", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
                                10, 10, 400, 200, nullptr, nullptr, myswy::module, nullptr);
     MyswySession *session = myswy_session_new();
@@ -255,7 +285,7 @@ int wmain(int argc, wchar_t **argv) {
         myswy::CandidateWindow candidates;
         myswy::Preferences prefs;
         candidates.show(session, owner, RECT{100, 150, 101, 170}, false, nullptr, nullptr, 1, prefs);
-        HWND popup = FindWindowW(L"Myswy.Candidates.Preview1", nullptr);
+        HWND popup = candidates.handle();
         require(popup && IsWindowVisible(popup), "vertical candidate layout paints");
         capture(popup, L"candidate-light");
         prefs.theme = 2;
@@ -266,6 +296,27 @@ int wmain(int argc, wchar_t **argv) {
         prefs.density = 0;
         candidates.show(session, owner, RECT{100, 150, 101, 170}, false, nullptr, nullptr, 3, prefs);
         capture(popup, L"candidate-horizontal");
+        prefs.layout = 0;
+        prefs.candidatePinyin = true;
+        candidates.show(session, owner, RECT{100,150,101,170}, false, nullptr,nullptr,4,prefs,true);
+        RECT compact{}, comfortable{};
+        GetWindowRect(popup, &compact);
+        require(compact.right - compact.left < 240, "inline compact candidates have no 240px minimum");
+        capture(popup, L"candidate-inline-compact");
+        prefs.density = 1;
+        candidates.show(session,owner,RECT{100,150,101,170},false,nullptr,nullptr,5,prefs,true);
+        GetWindowRect(popup,&comfortable);
+        require(compact.bottom - compact.top < comfortable.bottom - comfortable.top
+                && compact.right - compact.left < comfortable.right - comfortable.left,
+                "compact reduces both dimensions without changing text size");
+        for (int theme = 0; theme < 6; ++theme) {
+            prefs.theme = theme;
+            prefs.density = 0;
+            candidates.show(session,owner,RECT{100,150,101,170},false,nullptr,nullptr,6+theme,prefs,false);
+            SendMessageW(popup,WM_SETTINGCHANGE,0,reinterpret_cast<LPARAM>(L"ImmersiveColorSet"));
+            const auto name = L"candidate-theme-" + std::to_wstring(theme);
+            capture(popup,name.c_str());
+        }
     }
     myswy_session_free(session);
     DestroyWindow(owner);
@@ -274,6 +325,6 @@ int wmain(int argc, wchar_t **argv) {
         FreeLibrary(richEdit);
     CoUninitialize();
     require(myswy::objects == 0, "UI lifetimes released");
-    std::puts("PASS: six native settings tabs, font/DPI/theme/scroll, candidate layouts and embedded input test and settings process startup/exit; no user settings written.");
+    std::puts("PASS: seven tabs, live fonts after hover/theme recreation, 96/120/144/192/288 DPI, narrow viewport/scroll, six candidate themes, compact geometry and embedded test lifetime; no user settings written.");
     return 0;
 }

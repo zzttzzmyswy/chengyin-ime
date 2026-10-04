@@ -7,18 +7,19 @@ namespace myswy {
 struct Preferences {
     std::wstring font = L"Microsoft YaHei UI";
     int fontSize = 18;
-    int theme = 0; // system/light/dark
+    int theme = 0; // system/white/black/deepseek/miku/luotianyi
     int layout = 0; // vertical/horizontal
     int density = 1; // compact/comfortable
     int pageSize = 5;
     int shiftSwitch = 1; // disabled/left/both
     bool separators = true;
-    bool candidatePinyin = false;
+    bool candidatePinyin = true; // only when the host cannot edit inline preedit
     bool learning = true;
     bool associations = true;
     bool defaultEnglish = false;
     bool caretFallback = true;
     bool chinesePunctuation = true;
+    bool autoUpdate = true; // check releases in settings, install only on user action
 };
 std::wstring userFile(const wchar_t *, bool create = false);
 bool readSmallFile(const std::wstring &, std::vector<uint8_t> &, size_t limit);
@@ -54,6 +55,8 @@ struct Palette {
     COLORREF background, surface, text, muted, border, accent, selected, selectedText;
 };
 Palette palette(int theme);
+Palette themePalette(int theme, bool systemDark, COLORREF highlight, COLORREF highlightText);
+bool systemDarkTheme();
 HFONT createUIFont(int size, UINT dpi = 96, const std::wstring &face = L"Microsoft YaHei UI",
                    int weight = FW_NORMAL);
 UINT windowDpi(HWND);

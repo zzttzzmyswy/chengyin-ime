@@ -15,14 +15,16 @@ class CandidateWindow {
     ~CandidateWindow();
     void show(MyswySession *, HWND owner, RECT caret, bool limited,
               void *target = nullptr, Choice choice = nullptr, uint64_t generation = 0,
-              const Preferences &preferences = Preferences{});
+              const Preferences &preferences = Preferences{}, bool inlineEditable = false);
     void hide();
+    HWND handle() const { return hwnd_; }
   private:
     static LRESULT CALLBACK procedure(HWND, UINT, WPARAM, LPARAM);
     void paint();
     HWND hwnd_ = nullptr;
     HFONT font_ = nullptr;
     HFONT smallFont_ = nullptr;
+    HFONT footerFont_ = nullptr;
     HDC buffer_ = nullptr;
     HBITMAP bitmap_ = nullptr;
     HGDIOBJ originalBitmap_ = nullptr;
@@ -30,6 +32,7 @@ class CandidateWindow {
     WideText rows_[10] {};
     WideText pinyin_[9] {};
     RECT items_[9] {}, footerRect_{};
+    RECT textRects_[9]{}, pinyinRects_[9]{}, contentRect_{};
     WideText footer_{};
     bool previous_ = false, next_ = false;
     bool association_ = false;
@@ -44,6 +47,8 @@ class CandidateWindow {
     int theme_ = -1;
     Palette colors_{};
     int hover_ = -1, headerHeight_ = 32, footerHeight_ = 24;
+    int numberWidth_ = 0, scrollOffset_ = 0, scrollMaximum_ = 0;
+    bool inlineEditable_ = false, showPinyin_ = false;
     void *target_ = nullptr;
     Choice choice_ = nullptr;
     uint64_t generation_ = 0, pressedGeneration_ = 0;

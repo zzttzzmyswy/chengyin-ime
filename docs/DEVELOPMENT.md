@@ -1,3 +1,18 @@
+# preview8 本机 Windows 开发补充
+
+2026-10-05：批次见 [WINDOWS_PREVIEW8_TASKLIST](WINDOWS_PREVIEW8_TASKLIST.md)。
+Windows-only 空格映射到原文提交；共享核心/C ABI 不改语义。
+设置 UI 字体在所有控件换用新句柄后才释放旧句柄；UI/桌面测试使用隔离路径。
+词库列表原子封装于 dictionary.custom，内置词库与各启用项在后台合并为只读快照。
+系统亮暗颜色读取 AppsUseLightTheme，响应系统设置/颜色通知；高对比度仍优先。
+build-only windows_desktop_test 用进程内 COM 工厂测试实际新 DLL，不安装独立测试应用。
+自动更新通过 WinHTTP 只读查询 Releases，在后台下载、验证 SHA-256/PE64 后由用户启动安装。
+
+原生构建和七项 CTest 通过；日志在 build/native-build-preview8.txt、
+build/native-test-preview8.txt。工具链和复现见 ENVIRONMENT，桌面边界见 STATUS。
+
+以下保留已有开发指南：
+
 # 开发指南
 
 ## 工程边界
@@ -85,7 +100,7 @@ TSF fixture 只在测试 DLL 编译私有配置接口，使用相同生产发布
 安装器测试会实际改变注册和文件，仅在隔离 Windows runner 或独立 Wine prefix 运行：
 
 ```powershell
-python scripts/test_windows_installer.py --package build/packages/chengyin-windows-x64-0.1.0-preview7-msvc.exe --build-dir build/windows-msvc --makensis (Get-Content -LiteralPath build/nsis-compiler-path.txt -Raw).Trim()
+python scripts/test_windows_installer.py --package build/packages/chengyin-windows-x64-0.1.0-preview8-msvc.exe --build-dir build/windows-msvc --makensis (Get-Content -LiteralPath build/nsis-compiler-path.txt -Raw).Trim()
 ```
 
 加 `--previous-package <旧版EXE>` 检查真实旧包升级。测试覆盖同版修复、外来注册保护、

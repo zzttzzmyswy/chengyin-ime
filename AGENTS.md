@@ -24,15 +24,18 @@ Windows, Linux X11, Linux Wayland, and Android.
 - Run relevant checks (`scripts/check.sh` for Linux core/ABI; CMake/CTest for
   Fcitx changes; Windows CMake/CTest for TSF changes). Do not make tests depend on a user's real input history.
 - Current repo: https://github.com/zzttzzmyswy/myswyIm, main branch. Read
-  docs/WINDOWS_TASKLIST.md and docs/DEVELOPMENT.md for preview7: classic native
+  docs/WINDOWS_TASKLIST.md and docs/DEVELOPMENT.md for historical preview7: classic native
   tabs, embedded input tests, configuration notifications, language-bar mode and
   Chinese punctuation. Keep the standalone test app removed. The settings
-  executable is myswy_settings.exe; package scripts use preview7. Environment
+  executable is myswy_settings.exe; package scripts use preview8; read docs/WINDOWS_PREVIEW8_TASKLIST.md. Environment
   reproduction is in docs/ENVIRONMENT.md.
-- Delivery: preview7 MSVC installer from commit b14116e, GitHub Actions run
+- Previous delivery: preview7 MSVC installer from commit b14116e, GitHub Actions run
   37212769471. All six jobs passed, including six native Windows CTests and the
   installer lifecycle. Native NSIS needs the pinned AMD64 preparation helper
   and explicit UTF-8 source input. Real Win11/Notepad3 validation is still pending.
+- Current slice: preview8 local Win11/MSVC seven CTests, Rust checks and real
+  Edit/RichEdit input pass; package produced locally, no new remote CI claim.
+  Physical mixed-DPI and full application matrix remain separate validation.
 - Record source and license for any imported vocabulary or corpus. The bundled
   98-entry demo dictionary is not a production vocabulary.
 - Documentation is primarily Chinese. Keep STATUS's next work items current.

@@ -14,7 +14,7 @@ inline bool verifyPackage(const std::filesystem::path& folder,
     const std::set<std::string> required{
         "myswy_tsf.dll", "myswy_probe.exe", "myswy_settings.exe", "README.md",
         "LICENSE", "THIRD_PARTY.md", "RUNTIME_LICENSES.zip", "BUILD_INFO.json",
-        "INSTALLER_LICENSE.txt"
+        "INSTALLER_LICENSE.txt", "CHANGELOG.md"
     };
     std::error_code error;
     const auto size = std::filesystem::file_size(manifest, error);

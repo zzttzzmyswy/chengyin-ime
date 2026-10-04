@@ -1,11 +1,13 @@
 #include "common.h"
 #include "settings.h"
 #include "preferences.h"
+#include "update.h"
 #include <commdlg.h>
 #include <commctrl.h>
 #include <shellapi.h>
 #include <imm.h>
 #include <inputscope.h>
+#include <richedit.h>
 #include <algorithm>
 #include <atomic>
 #include <cwchar>
@@ -15,8 +17,9 @@
 namespace myswy {
 namespace {
 constexpr UINT kImported = WM_APP + 31;
+constexpr UINT kUpdateReady = WM_APP + 32, kUpdateDownloaded = WM_APP + 33;
 constexpr int kSave = 100, kDefaults = 101;
-const wchar_t *kNames[] {L"输入", L"候选", L"词库", L"学习", L"输入测试", L"关于"};
+const wchar_t *kNames[] {L"输入", L"候选", L"主题", L"词库", L"学习", L"输入测试", L"关于"};
 struct Control {
     HWND window;
     int x, y, width, height;
@@ -28,6 +31,8 @@ class Settings {
     ~Settings() {
         if (import_.joinable())
             import_.join();
+        if (updateWorker_.joinable())
+            updateWorker_.join();
         releaseFonts();
         if (surface_)
             DeleteObject(surface_);
@@ -59,17 +64,24 @@ class Settings {
     std::wstring diagnostics();
     void copyDiagnostics();
     void testFields(int &);
+    void checkUpdate(bool download = false);
     HINSTANCE instance_;
     Preferences draft_;
     HFONT body_ = nullptr, sample_ = nullptr;
     HBRUSH surface_ = nullptr, background_ = nullptr;
     Palette colors_{};
     UINT dpi_ = 96;
-    int page_ = 0, scroll_ = 0, totalHeight_ = 0, paneWidth_ = 700;
+    int page_ = 0, scroll_ = 0, horizontal_ = 0, totalHeight_ = 0, paneWidth_ = 700;
     bool dirty_ = false, closing_ = false;
     std::wstring notification_ = L"修改后点击“应用”，已打开的应用会自动接收新设置。";
     std::vector<Control> controls_, testControls_;
     std::thread import_;
+    std::thread updateWorker_;
+    ReleaseUpdate release_;
+    ReleaseUpdate pendingRelease_;
+    std::wstring updateMessage_ = L"尚未检查更新。", updatePath_;
+    bool updating_ = false;
+    std::vector<DictionaryEntry> dictionaries_;
     std::atomic<bool> importing_{false};
 };
 void Settings::releaseFonts() {
@@ -82,9 +94,26 @@ void Settings::releaseFonts() {
 void Settings::fonts() {
     // The settings dialog follows native Windows colors. The theme option only
     // changes the candidate window, so common controls stay visually consistent.
-    releaseFonts();
-    body_ = createUIFont(14, dpi_);
-    sample_ = createUIFont(draft_.fontSize, dpi_, draft_.font);
+    const HFONT oldBody = body_, oldSample = sample_;
+    HFONT body = createUIFont(14, dpi_);
+    HFONT sample = createUIFont(draft_.fontSize, dpi_, draft_.font);
+    if (!body || !sample) {
+        if (body) DeleteObject(body);
+        if (sample) DeleteObject(sample);
+        return;
+    }
+    body_ = body;
+    sample_ = sample;
+    // All HWNDs must stop referring to the old HFONT before DeleteObject.
+    // Native themes can defer their next paint until the pointer hovers a control.
+    if (window_)
+        EnumChildWindows(window_, [](HWND child, LPARAM target) -> BOOL {
+            auto *self = reinterpret_cast<Settings *>(target);
+            SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(GetDlgCtrlID(child) == 308 ? self->sample_ : self->body_), TRUE);
+            return TRUE;
+        }, reinterpret_cast<LPARAM>(this));
+    if (oldBody) DeleteObject(oldBody);
+    if (oldSample) DeleteObject(oldSample);
     colors_ = {GetSysColor(COLOR_BTNFACE), GetSysColor(COLOR_BTNFACE), GetSysColor(COLOR_BTNTEXT), GetSysColor(COLOR_GRAYTEXT), GetSysColor(COLOR_3DSHADOW), GetSysColor(COLOR_HIGHLIGHT), GetSysColor(COLOR_HIGHLIGHT), GetSysColor(COLOR_HIGHLIGHTTEXT)};
     if (surface_)
         DeleteObject(surface_);
@@ -137,6 +166,8 @@ void Settings::testFields(int &y) {
                 field = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", style, 0, 0, 0, 0, pane_,
                                         reinterpret_cast<HMENU>(702), instance_, nullptr);
             testControls_.push_back({field, 20, 0, 0, i == 2 ? 30 : 130});
+            if (i == 1)
+                SendMessageW(field, EM_SETEDITSTYLE, SES_USECTF, SES_USECTF);
             ImmAssociateContextEx(field, nullptr, IACE_DEFAULT);
             if (i == 2) {
                 HMODULE library = LoadLibraryW(L"msctf.dll");
@@ -223,7 +254,7 @@ void Settings::buildPage() {
         end();
         begin(L"输入操作");
         paragraph(
-            L"空格或数字选词；PgUp/PgDn 或 -/= 翻页。\n左右键、Home、End 编辑拼音；Esc 取消。\n输入 xi'an 可明确选择“西安”。");
+            L"空格提交原始拼音；数字或鼠标选词。PgUp/PgDn 或 -/= 翻页。\n左右键、Home、End 编辑拼音；Esc 取消。Shift 组合键直接输入大写和特殊字符。\n输入 xi'an 可明确选择“西安”。");
         end();
         break;
     case 1: {
@@ -247,19 +278,16 @@ void Settings::buildPage() {
         label(L"间距：", 20, y, 100, 24);
         combo(305, 130, y, 250, {L"紧凑", L"标准"}, draft_.density);
         y += 36;
-        label(L"候选框颜色：", 20, y, 110, 24);
-        combo(303, 130, y, 250, {L"Windows 系统颜色", L"浅色", L"深色"}, draft_.theme);
-        y += 40;
         checkbox(306, L"显示拼音音节分隔符，如 ni'hao", draft_.separators);
-        checkbox(307, L"在候选下方显示拼音", draft_.candidatePinyin);
+        checkbox(307, L"无法在编辑框直接编辑时显示候选拼音", draft_.candidatePinyin);
+        paragraph(L"可在编辑框直接编辑拼音时，候选窗自动隐藏重复拼音。其他情况下，纵向拼音放在右侧，横向放在下方。");
         end();
         begin(L"字体预览");
-        std::wstring text = draft_.separators ? L"ni'hao" : L"nihao";
+        std::wstring text;
         if (draft_.layout)
-            text += L"\r\n1. 你好    2. 拟好    3. 你号";
+            text += L"1. 你好    2. 拟好    3. 你号";
         else
-            text += draft_.candidatePinyin ? L"\r\n1. 你好  ni hao\r\n2. 拟好  ni hao\r\n3. 你号  ni hao" :
-                    L"\r\n1. 你好\r\n2. 拟好\r\n3. 你号";
+            text += L"1. 你好\r\n2. 拟好\r\n3. 你号";
         int height = (draft_.fontSize + 8) * (draft_.layout ? 2 : 4) + 8;
         HWND preview = control(L"STATIC", text.c_str(), SS_LEFT | SS_NOPREFIX | WS_BORDER, 308, 20, y,
                                paneWidth_ - 48, height);
@@ -269,20 +297,52 @@ void Settings::buildPage() {
         break;
     }
     case 2:
+        begin(L"候选主题");
+        label(L"主题：", 20, y + 4, 100, 24);
+        combo(303, 130, y, 300, {L"Windows 系统（自动亮 / 暗）", L"白", L"黑", L"Deepseek 大肥鱼", L"初音未来", L"洛天依"}, draft_.theme);
+        y += 40;
+        paragraph(L"Windows 系统主题跟随系统应用亮暗设置实时切换。高对比度开启时优先采用系统可读颜色。角色主题使用原创配色，不包含第三方人物图片。");
+        end();
+        begin(L"主题预览");
+        control(L"STATIC", L"", SS_OWNERDRAW, 309, 20, y, paneWidth_ - 48, std::max(130, (draft_.fontSize + 18) * 3 + 12));
+        y += std::max(130, (draft_.fontSize + 18) * 3 + 12) + 10;
+        end();
+        break;
+    case 3: {
         begin(L"当前词库");
         paragraph(L"内置 87,540 条开源字词，来源为 Rime 与 jieba。");
-        paragraph(GetFileAttributesW(userFile(L"dictionary.custom").c_str()) != INVALID_FILE_ATTRIBUTES ?
-                  L"已设置自定义词库。恢复内置词库不会删除学习数据。" : L"当前使用内置词库。");
+        paragraph(L"内置词库始终保留。每个导入文件为一个独立条目，可以手动启用、停用或删除。删除条目不会删除原始文件或学习数据。");
         end();
-        begin(L"导入与恢复");
+        begin(L"自定义词库列表");
+        HWND list = control(L"LISTBOX", L"", WS_TABSTOP | WS_BORDER | WS_VSCROLL | WS_HSCROLL | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT,
+                            405, 20, y, paneWidth_ - 48, 160);
+        if (readDictionaryLibrary(customDictionaryPath(false), dictionaries_)) {
+            int extent = 0;
+            HDC dc = GetDC(list); auto old = SelectObject(dc, body_);
+            for (const auto &entry : dictionaries_) {
+                std::wstring text = (entry.enabled ? L"[启用]  " : L"[停用]  ") + entry.name;
+                SendMessageW(list, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text.c_str()));
+                SIZE size{}; GetTextExtentPoint32W(dc, text.c_str(), static_cast<int>(text.size()), &size);
+                extent = std::max(extent, static_cast<int>(size.cx) + scaled(16));
+            }
+            SelectObject(dc, old); ReleaseDC(list, dc);
+            SendMessageW(list, LB_SETHORIZONTALEXTENT, extent, 0);
+            if (!dictionaries_.empty()) SendMessageW(list, LB_SETCURSEL, 0, 0);
+        } else {
+            dictionaries_.clear();
+            paragraph(L"现有自定义词库损坏或无法读取。请备份数据目录中的 dictionary.custom 后修复；原文件保留。");
+        }
+        y += 172;
         paragraph(
-            L"追加：保留现有词条，并合并导入文件。\n替换：只使用导入文件。\n支持常见搜狗 SCEL、UTF-8 / UTF-16 / GBK 文本、TSV 和本项目二进制词库。");
-        buttons(401, L"追加词库…", 402, L"替换词库…", 403, L"恢复内置词库");
+            L"支持搜狗 SCEL、UTF-8 / UTF-16 / GBK 文本、TSV 和本项目二进制词库。最多管理 64 个文件，总容量 64 MiB。");
+        buttons(401, L"添加词库…", 406, L"启用 / 停用", 407, L"删除所选");
+        for (int id : {401,406,407}) EnableWindow(GetDlgItem(pane_, id), !importing_);
         paragraph(
             L"导入后自动同步到已打开的应用；正在输入的拼音使用原词库完成。无效文件或保存失败会保留原词库。");
         end();
         break;
-    case 3: {
+    }
+    case 4: {
         begin(L"选词学习");
         checkbox(501, L"根据选词习惯排序", draft_.learning);
         paragraph(
@@ -300,19 +360,30 @@ void Settings::buildPage() {
         end();
         break;
     }
-    case 4:
+    case 5:
         begin(L"测试输入");
         paragraph(
             L"用 Win+Space 选择澄音，在下面输入 nihao、xi'an 或整句。左 Shift 切换中英文。\n本页不会保存测试内容；密码框应只输入英文且不显示候选。");
         testFields(y);
         end();
         break;
-    case 5:
+    case 6:
         begin(L"澄音输入法");
         paragraph(
-            L"版本：0.1.0-preview7 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
+            L"版本：0.1.0-preview8 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
         paragraph(
-            L"开源代码、词库来源与许可证见安装目录的 THIRD_PARTY.md。其他平台与双拼按开发计划继续推进。");
+            L"代码开源协议：MIT License · Copyright 2026 Myswy IM contributors\n允许使用、修改和分发，须保留版权和许可声明；软件按现状提供。词库及运行库有各自许可，随安装包提供。");
+        buttons(605, L"开源协议", 606, L"仓库链接", 607, L"发行说明");
+        end();
+        begin(L"自动更新");
+        checkbox(608, L"打开设置时自动检查更新", draft_.autoUpdate);
+        paragraph(L"仅访问本项目 GitHub Releases，不上传输入或学习数据。发现更新后，点击下载并更新；校验 SHA-256 后启动安装器。未发布安装包时可查看本版发行说明。");
+        paragraph(updateMessage_.c_str());
+        control(L"BUTTON", L"检查更新", WS_TABSTOP | BS_PUSHBUTTON, 609, 20, y, 150, 30);
+        control(L"BUTTON", L"下载并更新", WS_TABSTOP | BS_PUSHBUTTON, 610, 190, y, 150, 30);
+        EnableWindow(GetDlgItem(pane_, 609), !updating_);
+        EnableWindow(GetDlgItem(pane_, 610), !updating_ && release_.available);
+        y += 40;
         end();
         begin(L"诊断与数据目录");
         paragraph(
@@ -335,6 +406,10 @@ void Settings::buildPage() {
     scroll_ = std::min(scroll_, std::max(0, totalHeight_ - visible));
     SCROLLINFO info{sizeof(info), SIF_RANGE | SIF_PAGE | SIF_POS, 0, totalHeight_ - 1, static_cast<UINT>(visible), scroll_, 0};
     SetScrollInfo(pane_, SB_VERT, &info, TRUE);
+    const int viewportWidth = MulDiv(rect.right, 96, static_cast<int>(dpi_));
+    horizontal_ = std::min(horizontal_, std::max(0, paneWidth_ - viewportWidth));
+    SCROLLINFO horizontal{sizeof(horizontal), SIF_RANGE | SIF_PAGE | SIF_POS, 0, paneWidth_ - 1, static_cast<UINT>(viewportWidth), horizontal_, 0};
+    SetScrollInfo(pane_, SB_HORZ, &horizontal, TRUE);
     scroll(scroll_);
     SendMessageW(pane_, WM_SETREDRAW, TRUE, 0);
     RedrawWindow(pane_, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
@@ -379,11 +454,11 @@ void Settings::scroll(int position) {
     int visible = MulDiv(rect.bottom, 96, static_cast<int>(dpi_));
     scroll_ = std::clamp(position, 0, std::max(0, totalHeight_ - visible));
     for (auto &c : controls_)
-        SetWindowPos(c.window, nullptr, scaled(c.x), scaled(c.y - scroll_), scaled(c.width), scaled(c.height),
+        SetWindowPos(c.window, nullptr, scaled(c.x - horizontal_), scaled(c.y - scroll_), scaled(c.width), scaled(c.height),
                      SWP_NOZORDER | SWP_NOACTIVATE);
-    if (page_ == 4)
+    if (page_ == 5)
         for (auto &c : testControls_)
-            SetWindowPos(c.window, nullptr, scaled(c.x), scaled(c.y - scroll_), scaled(c.width), scaled(c.height),
+            SetWindowPos(c.window, nullptr, scaled(c.x - horizontal_), scaled(c.y - scroll_), scaled(c.width), scaled(c.height),
                          SWP_NOZORDER | SWP_NOACTIVATE);
     SetScrollPos(pane_, SB_VERT, scroll_, TRUE);
     InvalidateRect(pane_, nullptr, FALSE);
@@ -457,6 +532,9 @@ void Settings::collect(int id) {
     case 601:
         draft_.caretFallback = checked(id);
         break;
+    case 608:
+        draft_.autoUpdate = checked(id);
+        break;
     default:
         return;
     }
@@ -471,7 +549,7 @@ void Settings::collect(int id) {
     InvalidateRect(window_, nullptr, FALSE);
     InvalidateRect(pane_, nullptr, FALSE);
 }
-void Settings::importDictionary(bool append) {
+void Settings::importDictionary(bool) {
     if (importing_)
         return;
     std::wstring source;
@@ -488,9 +566,9 @@ void Settings::importDictionary(bool append) {
     notify(L"正在校验并导入词库，输入法仍可继续使用…");
     buildPage();
     try {
-        import_ = std::thread([this, source, target, append] {bool ok = false;
+        import_ = std::thread([this, source, target] {bool ok = false;
         try {
-            ok = installCustomDictionary(source, target, append);
+            ok = addDictionaryLibrary(source, target);
         } catch (...) {
             ok = false;
         }
@@ -507,13 +585,36 @@ void Settings::finishImport(bool ok) {
     if (import_.joinable())
         import_.join();
     importing_ = false;
-    if (closing_) {
+    if (closing_ && !updating_) {
         DestroyWindow(window_);
         return;
     }
-    notify(ok ? L"词库已导入。正在输入的拼音完成后自动使用新词库。" :
+    notify(ok ? L"词库列表已更新。正在输入的拼音完成后自动使用新词库。" :
            L"导入未完成：格式、容量或保存校验失败；原词库保留。", !ok);
     buildPage();
+}
+void Settings::checkUpdate(bool download) {
+    if (updating_ || (download && !release_.available)) return;
+    if (updateWorker_.joinable()) updateWorker_.join();
+    if (download) {
+        updatePath_ = userFile((L"update-" + release_.version + L"-" + std::to_wstring(GetCurrentProcessId()) + L".exe").c_str(), true);
+        if (updatePath_.empty()) { notify(L"无法创建更新文件。", true); return; }
+    }
+    updating_ = true;
+    updateMessage_ = download ? L"正在下载并校验安装包…" : L"正在检查 GitHub Releases…";
+    if (page_ == 6) buildPage();
+    try {
+        const auto release = release_;
+        const auto path = updatePath_;
+        updateWorker_ = std::thread([this, download, release, path] {
+            bool ok = false;
+            try {
+                if (download) ok = downloadReleaseUpdate(release, path);
+                else pendingRelease_ = checkReleaseUpdate();
+            } catch (...) { pendingRelease_.message = L"更新检查失败，请稍后重试。"; }
+            PostMessageW(window_, download ? kUpdateDownloaded : kUpdateReady, ok ? 1 : 0, 0);
+        });
+    } catch (...) { updating_ = false; updateMessage_ = L"无法启动更新检查。"; if (page_ == 6) buildPage(); }
 }
 std::wstring Settings::diagnostics() {
     std::wostringstream text;
@@ -523,7 +624,7 @@ std::wstring Settings::diagnostics() {
     LSTATUS status = RegGetValueW(HKEY_LOCAL_MACHINE,
                                   L"Software\\Classes\\CLSID\\{65C32A54-219A-4F0A-B44C-B963D7BA532F}\\InprocServer32", nullptr, RRF_RT_REG_SZ,
                                   nullptr, registered, &size);
-    text << L"澄音 0.1.0-preview7\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
+    text << L"澄音 0.1.0-preview8\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
          (status == ERROR_SUCCESS ? registered : L"not registered") << L"\r\nDPI: " << dpi_ << L"\r\nFont: " <<
          draft_.font << L" / " << draft_.fontSize << L"\r\nPage size: " << draft_.pageSize << L"\r\nLearning: " <<
          draft_.learning << L"\r\nAssociation: " << draft_.associations << L"\r\nCaret fallback: " <<
@@ -557,7 +658,7 @@ void Settings::copyDiagnostics() {
     notify(ok ? L"诊断信息已复制，不含输入正文。" : L"无法复制诊断信息。");
 }
 void Settings::command(int id, int event) {
-    if (id >= 10 && id < 16) {
+    if (id >= 11 && id < 17) {
         page_ = id - 10;
         scroll_ = 0;
         buildPage();
@@ -565,7 +666,7 @@ void Settings::command(int id, int event) {
         return;
     }
     if ((event == CBN_SELCHANGE && (id == 200 || id == 201 || (id >= 302 && id <= 305))) || (event == BN_CLICKED
-            && (id == 202 || id == 203 || id == 204 || id == 306 || id == 307 || id == 501 || id == 601))) {
+            && (id == 202 || id == 203 || id == 204 || id == 306 || id == 307 || id == 501 || id == 601 || id == 608))) {
         collect(id);
         return;
     }
@@ -614,32 +715,57 @@ void Settings::command(int id, int event) {
         }
         return;
     }
-    if (id == 401 || id == 402) {
-        importDictionary(id == 401);
+    if (id == 401) {
+        importDictionary(true);
         return;
     }
-    if (id == 403) {
-        if (importing_)
-            return;
-        if (MessageBoxW(window_, L"恢复内置词库？这会移除本地词库快照，学习数据会保留。",
-                        L"恢复内置词库", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) == IDYES) {
-            const auto path = customDictionaryPath(false);
-            HANDLE mutex = CreateMutexW(nullptr, FALSE, L"Local\\MyswyIME.DictionaryImport");
-            DWORD result = mutex ? WaitForSingleObject(mutex, 5000) : WAIT_FAILED;
-            bool held = result == WAIT_OBJECT_0 || result == WAIT_ABANDONED;
-            bool ok = held && (DeleteFileW(path.c_str()) || GetLastError() == ERROR_FILE_NOT_FOUND);
-            if (ok)
-                notifyConfiguration();
-            if (held)
-                ReleaseMutex(mutex);
-            if (mutex)
-                CloseHandle(mutex);
-            notify(ok ? L"已恢复内置词库，会自动同步到已打开的应用。" :
-                   L"无法恢复词库，请稍后重试。", !ok);
-            buildPage();
-        }
+    if (id == 406 || id == 407) {
+        if (importing_) return;
+        const int selected = static_cast<int>(SendMessageW(GetDlgItem(pane_, 405), LB_GETCURSEL, 0, 0));
+        if (selected < 0 || static_cast<size_t>(selected) >= dictionaries_.size()) return;
+        const auto entry = dictionaries_[selected];
+        const auto path = customDictionaryPath(false);
+        if (id == 407 && MessageBoxW(window_, (L"从词库列表删除“" + entry.name + L"”？原文件和学习数据保留。").c_str(),
+                                    L"删除自定义词库", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES) return;
+        if (import_.joinable()) import_.join();
+        importing_ = true;
+        buildPage();
+        try {
+            import_ = std::thread([this, path, entry, id] {
+                bool ok = false;
+                try { ok = changeDictionaryLibrary(path, entry, id == 407); } catch (...) {}
+                PostMessageW(window_, kImported, ok ? 1 : 0, 0);
+            });
+        } catch (...) { importing_ = false; notify(L"无法启动词库管理。", true); buildPage(); }
         return;
     }
+    if (id == 605) {
+        // Show the full bundled license even when installed offline.
+        MessageBoxW(window_,
+            L"MIT License\n\nCopyright (c) 2026 Myswy IM contributors\n\n"
+            L"Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the Software), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\n"
+            L"The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\n"
+            L"THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
+            L"澄音开源协议 · MIT", MB_OK);
+        return;
+    }
+    if (id == 606) {
+        ShellExecuteW(window_, L"open", kRepository, nullptr, nullptr, SW_SHOWNORMAL); return;
+    }
+    if (id == 607) {
+        MessageBoxW(window_, L"0.1.0-preview8 · 2026-10-05\n\n"
+                    L"• 候选按文字尺寸布局，紧凑间距；可编辑临时拼音时隐藏重复拼音。\n"
+                    L"• 新增六种主题和 Windows 亮暗自动切换。\n"
+                    L"• 修复设置字体生命周期，改进 DPI、工作区和滚动。\n"
+                    L"• 自定义词库列表支持添加、启用、停用和删除。\n"
+                    L"• 空格提交原始拼音；数字和鼠标选词；Shift 组合键透传。\n"
+                    L"• 关于页包含 MIT、仓库、发行说明和可校验更新。\n\n完整发行历史见项目 GitHub Releases。",
+                    L"澄音发行说明", MB_OK);
+        if (release_.available && !release_.notes.empty())
+            MessageBoxW(window_, release_.notes.c_str(), release_.version.c_str(), MB_OK);
+        return;
+    }
+    if (id == 609 || id == 610) { checkUpdate(id == 610); return; }
     if (id == 502) {
         std::wstring target;
         if (chooseFile(target, true, L"澄音学习备份\0*.chengyinuser;*.myswyuser\0所有文件\0*.*\0\0")) {
@@ -673,7 +799,7 @@ void Settings::command(int id, int event) {
         return;
     }
     if (id == 602) {
-        page_ = 4;
+        page_ = 5;
         scroll_ = 0;
         SendMessageW(GetDlgItem(window_, 10), TCM_SETCURSEL, page_, 0);
         buildPage();
@@ -706,10 +832,10 @@ LRESULT Settings::message(HWND hwnd, UINT message, WPARAM w, LPARAM l, bool pane
             window_ = hwnd;
             dpi_ = windowDpi(hwnd);
             fonts();
-            HWND tabs = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_CLIPSIBLINGS, 0, 0, 0,
+            HWND tabs = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_CLIPSIBLINGS | TCS_MULTILINE, 0, 0, 0,
                                       0, hwnd, reinterpret_cast<HMENU>(10), instance_, nullptr);
             SendMessageW(tabs, WM_SETFONT, reinterpret_cast<WPARAM>(body_), FALSE);
-            for (int i = 0; i < 6; ++i) {
+            for (int i = 0; i < 7; ++i) {
                 TCITEMW item{};
                 item.mask = TCIF_TEXT;
                 item.pszText = const_cast<wchar_t *>(kNames[i]);
@@ -717,7 +843,7 @@ LRESULT Settings::message(HWND hwnd, UINT message, WPARAM w, LPARAM l, bool pane
             }
             SendMessageW(tabs, TCM_SETCURSEL, page_, 0);
             pane_ = CreateWindowExW(WS_EX_CONTROLPARENT, L"Myswy.Settings.Content", L"",
-                                    WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_CLIPSIBLINGS, 0, 0, 0, 0, hwnd, nullptr, instance_,
+                                    WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL | WS_CLIPSIBLINGS, 0, 0, 0, 0, hwnd, nullptr, instance_,
                                     this);
             CreateWindowW(L"BUTTON", L"应用", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, 0, 0, 0, 0, hwnd,
                           reinterpret_cast<HMENU>(100), instance_, nullptr);
@@ -741,8 +867,13 @@ LRESULT Settings::message(HWND hwnd, UINT message, WPARAM w, LPARAM l, bool pane
         }
         return 0;
     case WM_GETMINMAXINFO:
-        if (!pane)
-            reinterpret_cast<MINMAXINFO *>(l)->ptMinTrackSize = {scaled(720), scaled(600)};
+        if (!pane) {
+            MONITORINFO monitor{sizeof(monitor), {}, {}, 0};
+            GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitor);
+            reinterpret_cast<MINMAXINFO *>(l)->ptMinTrackSize = {
+                std::min<LONG>(scaled(620), monitor.rcWork.right - monitor.rcWork.left),
+                std::min<LONG>(scaled(420), monitor.rcWork.bottom - monitor.rcWork.top)};
+        }
         return 0;
     case WM_SIZE:
         if (!pane && pane_)
@@ -765,6 +896,33 @@ LRESULT Settings::message(HWND hwnd, UINT message, WPARAM w, LPARAM l, bool pane
         }
         command(LOWORD(w), HIWORD(w));
         return 0;
+    case WM_DRAWITEM:
+        if (pane && w == 309) {
+            auto *item = reinterpret_cast<DRAWITEMSTRUCT *>(l);
+            const auto colors = palette(draft_.theme);
+            HBRUSH brush = CreateSolidBrush(colors.surface);
+            FillRect(item->hDC, &item->rcItem, brush); DeleteObject(brush);
+            RECT selected = item->rcItem;
+            selected.left += scaled(6); selected.right -= scaled(6);
+            auto old = SelectObject(item->hDC, sample_);
+            TEXTMETRICW metrics{}; GetTextMetricsW(item->hDC, &metrics);
+            const int rowHeight = metrics.tmHeight + scaled(6);
+            selected.top += scaled(6); selected.bottom = selected.top + rowHeight;
+            brush = CreateSolidBrush(colors.selected);
+            FillRect(item->hDC, &selected, brush); DeleteObject(brush);
+            SetBkMode(item->hDC, TRANSPARENT);
+            SetTextColor(item->hDC, colors.selectedText);
+            selected.left += scaled(8);
+            DrawTextW(item->hDC, L"1. 你好", -1, &selected, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+            RECT rest = selected; rest.top += rowHeight; rest.bottom += rowHeight;
+            SetTextColor(item->hDC, colors.text);
+            DrawTextW(item->hDC, L"2. 拟好", -1, &rest, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+            rest.top += rowHeight; rest.bottom += rowHeight;
+            DrawTextW(item->hDC, L"3. 你号", -1, &rest, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+            SelectObject(item->hDC, old);
+            return TRUE;
+        }
+        break;
     case WM_CTLCOLORSTATIC:
     case WM_CTLCOLORBTN: {
         HDC dc = reinterpret_cast<HDC>(w);
@@ -820,14 +978,46 @@ LRESULT Settings::message(HWND hwnd, UINT message, WPARAM w, LPARAM l, bool pane
             scroll(at);
         }
         return 0;
+    case WM_HSCROLL:
+        if (pane) {
+            SCROLLINFO info{sizeof(info), SIF_ALL, 0,0,0,0,0};
+            GetScrollInfo(pane_, SB_HORZ, &info);
+            int at = horizontal_;
+            switch (LOWORD(w)) {
+            case SB_LINELEFT: at -= 24; break; case SB_LINERIGHT: at += 24; break;
+            case SB_PAGELEFT: at -= info.nPage; break; case SB_PAGERIGHT: at += info.nPage; break;
+            case SB_LEFT: at = 0; break; case SB_RIGHT: at = info.nMax; break;
+            case SB_THUMBTRACK: case SB_THUMBPOSITION: at = info.nTrackPos; break;
+            default: break;
+            }
+            horizontal_ = std::clamp(at, 0, std::max(0, info.nMax + 1 - static_cast<int>(info.nPage)));
+            SetScrollPos(pane_, SB_HORZ, horizontal_, TRUE);
+            scroll(scroll_);
+        }
+        return 0;
     case kImported:
         finishImport(w != 0);
         return 0;
+    case kUpdateReady:
+    case kUpdateDownloaded:
+        if (updateWorker_.joinable()) updateWorker_.join();
+        updating_ = false;
+        if (message == kUpdateReady) {
+            release_ = std::move(pendingRelease_);
+            updateMessage_ = release_.message;
+        } else {
+            updateMessage_ = w ? L"安装包校验成功，正在启动更新安装器。" : L"下载或 SHA-256 校验失败，未运行安装包。请稍后重试。";
+            if (w && reinterpret_cast<INT_PTR>(ShellExecuteW(window_, L"open", updatePath_.c_str(), nullptr, nullptr, SW_SHOWNORMAL)) <= 32)
+                updateMessage_ = L"安装包已校验，但启动失败。请稍后重试。";
+        }
+        if (closing_ && !importing_) DestroyWindow(window_);
+        else if (page_ == 6) buildPage();
+        return 0;
     case WM_CLOSE:
         if (!pane) {
-            if (importing_) {
+            if (importing_ || updating_) {
                 closing_ = true;
-                notify(L"正在完成词库保存，完成后关闭。");
+                notify(L"正在完成后台操作，完成后关闭。");
                 return 0;
             }
             if (dirty_) {
@@ -871,7 +1061,7 @@ LRESULT CALLBACK settingsProcedure(HWND hwnd, UINT message, WPARAM w, LPARAM l) 
                                         L"Myswy.Settings.Content")) : DefWindowProcW(hwnd, message, w, l);
 }
 }
-int runSettings(HINSTANCE instance, int show, ITfMessagePump *pump, ITfKeystrokeMgr *keys, int initialPage) {
+int runSettings(HINSTANCE instance, int show, ITfMessagePump *pump, ITfKeystrokeMgr *keys, int initialPage, bool automaticUpdates) {
     INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_TAB_CLASSES | ICC_STANDARD_CLASSES};
     InitCommonControlsEx(&controls);
     for (const wchar_t *name : {
@@ -885,7 +1075,7 @@ int runSettings(HINSTANCE instance, int show, ITfMessagePump *pump, ITfKeystroke
         if (!RegisterClassW(&cls) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
             return 1;
     }
-    Settings settings(instance, std::clamp(initialPage, 0, 5));
+    Settings settings(instance, std::clamp(initialPage, 0, 6));
     RECT work{};
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
     HWND window = CreateWindowExW(0, L"Myswy.Settings", L"澄音输入法设置",
@@ -899,6 +1089,12 @@ int runSettings(HINSTANCE instance, int show, ITfMessagePump *pump, ITfKeystroke
                  static_cast<int>(work.right - work.left) - 24), std::min(MulDiv(760, static_cast<int>(dpi), 96),
                          static_cast<int>(work.bottom - work.top) - 24), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     ShowWindow(window, show);
+    // Select a real child after the window is shown. An implicit first-key
+    // focus change can otherwise leave TSF attached to its floating context.
+    HWND pane = FindWindowExW(window, nullptr, L"Myswy.Settings.Content", nullptr);
+    SetFocus(initialPage == 5 ? GetDlgItem(pane, 701) : GetDlgItem(window, 10));
+    if (automaticUpdates && loadPreferences(userFile(L"preferences.ini")).autoUpdate)
+        PostMessageW(window, WM_COMMAND, MAKEWPARAM(609, BN_CLICKED), 0);
     MSG message{};
     for (;;) {
         BOOL received = FALSE;

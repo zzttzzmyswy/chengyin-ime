@@ -70,7 +70,7 @@ bool atomicWrite(const std::wstring &path, const std::vector<uint8_t> &bytes) {
     return ok;
 }
 bool validPreferences(const Preferences &p) {
-    return p.fontSize >= 12 && p.fontSize <= 32 && p.theme >= 0 && p.theme <= 2 && p.layout >= 0 && p.layout <= 1
+    return p.fontSize >= 12 && p.fontSize <= 32 && p.theme >= 0 && p.theme <= 5 && p.layout >= 0 && p.layout <= 1
            && p.density >= 0 && p.density <= 1 && (p.pageSize == 5 || p.pageSize == 7 || p.pageSize == 9)
            && p.shiftSwitch >= 0 && p.shiftSwitch <= 2 && !p.font.empty() && p.font.size() < LF_FACESIZE
            && p.font.find_first_of(L"\r\n\t=\0", 0, 5) == std::wstring::npos
@@ -125,7 +125,8 @@ bool tryLoadPreferences(const std::wstring &path, Preferences &result) {
     bool ok = flag(L"Separators", p.separators) && flag(L"CandidatePinyin", p.candidatePinyin)
               && flag(L"Learning", p.learning)
               && flag(L"Associations", p.associations) && flag(L"DefaultEnglish", p.defaultEnglish)
-              && flag(L"CaretFallback", p.caretFallback) && flag(L"ChinesePunctuation", p.chinesePunctuation);
+              && flag(L"CaretFallback", p.caretFallback) && flag(L"ChinesePunctuation", p.chinesePunctuation)
+              && flag(L"AutoUpdate", p.autoUpdate);
     if (!ok || !validPreferences(p))
         return false;
     result = std::move(p);
@@ -146,7 +147,7 @@ bool savePreferences(const std::wstring &path, const Preferences &p) {
       << L"\nSeparators=" << p.separators << L"\nCandidatePinyin=" << p.candidatePinyin << L"\nLearning=" <<
       p.learning
       << L"\nAssociations=" << p.associations << L"\nDefaultEnglish=" << p.defaultEnglish << L"\nCaretFallback=" <<
-      p.caretFallback << L"\nChinesePunctuation=" << p.chinesePunctuation << L"\n";
+      p.caretFallback << L"\nChinesePunctuation=" << p.chinesePunctuation << L"\nAutoUpdate=" << p.autoUpdate << L"\n";
     const auto text = s.str();
     std::vector<uint8_t> bytes(2 + text.size()*sizeof(wchar_t));
     bytes[0] = 0xff;
@@ -290,6 +291,28 @@ HFONT createUIFont(int size, UINT dpi, const std::wstring &face, int weight) {
                        DEFAULT_CHARSET,
                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, chosen.c_str());
 }
+bool systemDarkTheme() {
+    DWORD light = 1, size = sizeof(light);
+    return RegGetValueW(HKEY_CURRENT_USER,
+                       L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                       L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size) == ERROR_SUCCESS && light == 0;
+}
+Palette themePalette(int theme, bool systemDark, COLORREF highlight, COLORREF highlightText) {
+    if (theme == 3)
+        return {RGB(235,243,255), RGB(245,249,255), RGB(18,40,85), RGB(64,87,128), RGB(91,135,208),
+                RGB(45,88,201), RGB(45,88,201), RGB(255,255,255)};
+    if (theme == 4)
+        return {RGB(228,251,248), RGB(239,255,253), RGB(14,64,62), RGB(49,106,101), RGB(89,176,166),
+                RGB(12,113,105), RGB(12,113,105), RGB(255,255,255)};
+    if (theme == 5)
+        return {RGB(235,243,255), RGB(247,250,255), RGB(43,53,95), RGB(91,99,137), RGB(130,157,215),
+                RGB(79,101,170), RGB(79,101,170), RGB(255,255,255)};
+    if (theme == 2 || (theme == 0 && systemDark))
+        return {RGB(24,24,24), RGB(32,32,32), RGB(245,245,245), RGB(190,190,190), RGB(100,100,100),
+                highlight, highlight, highlightText};
+    return {RGB(248,248,248), RGB(255,255,255), RGB(20,20,20), RGB(95,95,95), RGB(145,145,145),
+            highlight, highlight, highlightText};
+}
 Palette palette(int theme) {
     HIGHCONTRASTW contrast{sizeof(contrast), 0, nullptr};
     if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0)
@@ -297,14 +320,6 @@ Palette palette(int theme) {
         return {GetSysColor(COLOR_WINDOW), GetSysColor(COLOR_WINDOW), GetSysColor(COLOR_WINDOWTEXT), GetSysColor(COLOR_WINDOWTEXT),
                 GetSysColor(COLOR_WINDOWTEXT), GetSysColor(COLOR_HIGHLIGHT), GetSysColor(COLOR_HIGHLIGHT), GetSysColor(COLOR_HIGHLIGHTTEXT)};
     }
-    if (theme == 0)
-        return {GetSysColor(COLOR_WINDOW), GetSysColor(COLOR_WINDOW), GetSysColor(COLOR_WINDOWTEXT),
-                GetSysColor(COLOR_GRAYTEXT), GetSysColor(COLOR_WINDOWFRAME), GetSysColor(COLOR_HIGHLIGHT),
-                GetSysColor(COLOR_HIGHLIGHT), GetSysColor(COLOR_HIGHLIGHTTEXT)};
-    if (theme == 2)
-        return {RGB(32, 32, 32), RGB(32, 32, 32), RGB(245, 245, 245), RGB(190, 190, 190), RGB(100, 100, 100),
-                GetSysColor(COLOR_HIGHLIGHT), GetSysColor(COLOR_HIGHLIGHT), GetSysColor(COLOR_HIGHLIGHTTEXT)};
-    return {RGB(240, 240, 240), RGB(255, 255, 255), RGB(0, 0, 0), RGB(100, 100, 100), RGB(100, 100, 100),
-            GetSysColor(COLOR_HIGHLIGHT), GetSysColor(COLOR_HIGHLIGHT), GetSysColor(COLOR_HIGHLIGHTTEXT)};
+    return themePalette(theme, systemDarkTheme(), GetSysColor(COLOR_HIGHLIGHT), GetSysColor(COLOR_HIGHLIGHTTEXT));
 }
 }

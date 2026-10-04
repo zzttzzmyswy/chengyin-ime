@@ -218,6 +218,48 @@ int main() {
     write(profilePath, "");
     require(!myswy::loadProfile(profilePath), "empty existing profile is damaged");
     DeleteFileW(preferences.c_str());
+    const auto library = folder + L"\\library.custom";
+    write(source, "ni\tcustom-one\t10\n");
+    require(myswy::addDictionaryLibrary(source, library), "add independent library entry");
+    require(myswy::addDictionaryLibrary(source, library), "duplicate library import is idempotent");
+    std::vector<myswy::DictionaryEntry> entries;
+    require(myswy::readDictionaryLibrary(library, entries) && entries.size() == 1 && entries[0].enabled,
+            "one named enabled library entry");
+    const auto firstEntry = entries[0];
+    write(source, "hao\tcustom-two\t10\n");
+    require(myswy::addDictionaryLibrary(source, library), "second import retained separately");
+    require(myswy::readDictionaryLibrary(library, entries) && entries.size() == 2, "two imports remain individually manageable");
+    require(myswy::changeDictionaryLibrary(library, firstEntry, false), "disable one entry");
+    require(!myswy::changeDictionaryLibrary(library, firstEntry, true), "stale UI cannot delete changed entry");
+    require(myswy::readDictionaryFile(library, after), "read atomic library container");
+    auto *base = myswy_dictionary_new_demo();
+    auto *effective = myswy::loadEffectiveDictionary(after, base);
+    require(effective != nullptr, "enabled entries merge with built-in dictionary");
+    session = myswy_session_new_with_dictionary(effective);
+    myswy_dictionary_free(effective);
+    myswy_session_process(session, 'n', 0); myswy_session_process(session, 'i', 0);
+    uint8_t candidate[64]{};
+    require(myswy_session_text(session, MYSWY_TEXT_CANDIDATE, 0, candidate, sizeof(candidate)) > 1
+            && std::strcmp(reinterpret_cast<const char *>(candidate), "custom-one"), "disabled entry absent; built-in survives");
+    myswy_session_free(session);
+    require(myswy::readDictionaryLibrary(library, entries) && !entries[0].enabled, "disabled state persists");
+    const auto disabled = entries[0];
+    require(myswy::changeDictionaryLibrary(library, disabled, false), "re-enable independently");
+    require(myswy::readDictionaryLibrary(library, entries) && entries[0].enabled, "enabled state persists");
+    require(myswy::changeDictionaryLibrary(library, entries[0], true), "delete first entry");
+    require(myswy::readDictionaryLibrary(library, entries) && entries.size() == 1
+            && myswy::changeDictionaryLibrary(library, entries[0], true), "delete last entry retains managed container");
+    require(myswy::readDictionaryFile(library, after), "empty library remains valid");
+    effective = myswy::loadEffectiveDictionary(after, base);
+    require(effective != nullptr, "empty library uses built-in vocabulary");
+    myswy_dictionary_free(effective); myswy_dictionary_free(base);
+    before = after; write(source, "ni\tbad\t0\n");
+    require(!myswy::addDictionaryLibrary(source, library) && myswy::readDictionaryFile(library, after) && before == after,
+            "invalid import preserves complete library");
+    write(library, "CYLIB\x01");
+    require(!myswy::readDictionaryLibrary(library, entries) && !myswy::addDictionaryLibrary(source, library),
+            "damaged library is preserved for recovery");
+    DeleteFileW(library.c_str());
     DeleteFileW(profilePath.c_str());
     DeleteFileW(scelPath.c_str());
     DeleteFileW(source.c_str());

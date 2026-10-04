@@ -49,8 +49,11 @@ MyswyDictionary *acquireDictionary() {
     if (!sharedDictionary || changed) {
         MyswyDictionary *replacement = nullptr;
         std::vector<uint8_t> bytes;
-        if (custom && readDictionaryFile(path, bytes))
-            replacement = loadDictionaryBytes(bytes);
+        if (custom && readDictionaryFile(path, bytes)) {
+            auto *base = embeddedDictionary();
+            replacement = loadEffectiveDictionary(bytes, base);
+            myswy_dictionary_free(base);
+        }
         if (!custom || (!replacement && !sharedDictionary))
             replacement = embeddedDictionary();
         // Failed custom reload keeps the last valid shared snapshot. Each service
@@ -180,6 +183,28 @@ HRESULT coreCaret(MyswySession *session, TfEditCookie cookie, ITfRange *range, P
         hr = out->Collapse(cookie, TF_ANCHOR_END);
     return hr;
 }
+bool followInlineCaret(MyswySession *session, TfEditCookie cookie, ITfRange *range, ITfRange *selection) {
+    LONG before = -1, after = 1, collapsed = 1;
+    if (FAILED(selection->CompareStart(cookie, range, TF_ANCHOR_START, &before)) || before < 0
+        || FAILED(selection->CompareEnd(cookie, range, TF_ANCHOR_END, &after)) || after > 0
+        || FAILED(selection->CompareStart(cookie, selection, TF_ANCHOR_END, &collapsed)) || collapsed) return false;
+    Ptr<ITfRange> prefix;
+    if (FAILED(range->Clone(prefix.put())) || FAILED(prefix->ShiftEndToRange(cookie, selection, TF_ANCHOR_START))) return false;
+    wchar_t text[MYSWY_MAX_TEXT_BYTES + 1]{};
+    ULONG length = 0;
+    if (FAILED(prefix->GetText(cookie, 0, text, MYSWY_MAX_TEXT_BYTES, &length))) return false;
+    const int position = length ? WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text, length, nullptr, 0, nullptr, nullptr) : 0;
+    if (length && position <= 0) return false;
+    const int original = myswy_session_preedit_cursor(session);
+    myswy_session_process(session, MYSWY_KEY_HOME, 0);
+    const int minimum = myswy_session_preedit_cursor(session);
+    if (position < minimum) {
+        for (int i = minimum; i < original; ++i) myswy_session_process(session, MYSWY_KEY_RIGHT, 0);
+        return false;
+    }
+    for (int i = minimum; i < position; ++i) myswy_session_process(session, MYSWY_KEY_RIGHT, 0);
+    return myswy_session_preedit_cursor(session) == position;
+}
 
 bool shortcutDown() {
     BYTE state[256] {};
@@ -208,10 +233,11 @@ KeyPlan translate(WPARAM key, LPARAM lparam, bool active, bool english, bool ass
             ascii = '\'';
     }
     const bool caps = (state[VK_CAPITAL] & 1) != 0;
-    if ((!active || association) && !english && !shortcut && !caps && chinesePunctuation
+    const bool shifted = (state[VK_SHIFT] & 0x80) != 0;
+    if ((!active || association) && !english && !shortcut && !caps && !shifted && chinesePunctuation
             && PunctuationState::supported(ascii))
         return {Action::punctuation, static_cast<uint32_t>(static_cast<unsigned char>(ascii)), ascii};
-    return planKey(static_cast<uint32_t>(key), ascii, shortcut, caps, active, english, association);
+    return planKey(static_cast<uint32_t>(key), ascii, shortcut, caps, active, english, association, shifted);
 }
 }
 
@@ -595,20 +621,23 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
                 hr = coreCaret(session_, cookie, range.get(), expected);
             wchar_t text[MYSWY_MAX_TEXT_BYTES + 1] {};
             ULONG count = 0;
-            if (range && SUCCEEDED(range->GetText(cookie, 0, text, MYSWY_MAX_TEXT_BYTES, &count))) {
-                WideText preedit;
-                if (!readText(session_, MYSWY_TEXT_PREEDIT, 0, preedit) || count != static_cast<ULONG>(preedit.length)
-                        || std::wmemcmp(text, preedit.data, count)) {
-                    unbind();
-                    return S_OK;
-                }
+            WideText preedit;
+            if (!range || FAILED(range->GetText(cookie, 0, text, MYSWY_MAX_TEXT_BYTES, &count))
+                    || !readText(session_, MYSWY_TEXT_PREEDIT, 0, preedit) || count != static_cast<ULONG>(preedit.length)
+                    || std::wmemcmp(text, preedit.data, count)) {
+                unbind();
+                return S_OK;
             }
         } else
             hr = associationRange_->Clone(expected.put());
         LONG start = 1, end = 1;
         if (FAILED(hr) || !expected || FAILED(selected->CompareStart(cookie, expected.get(), TF_ANCHOR_END, &start))
-                || FAILED(selected->CompareEnd(cookie, expected.get(), TF_ANCHOR_END, &end)) || start || end)
-            unbind();
+                || FAILED(selected->CompareEnd(cookie, expected.get(), TF_ANCHOR_END, &end)) || start || end) {
+            if (composition_ && range && followInlineCaret(session_, cookie, range.get(), selected.get())) {
+                ++uiGeneration_;
+                showCandidates(cookie, context);
+            } else unbind();
+        }
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnLayoutChange(ITfContext *context, LayoutCode code, ITfContextView *) override;
@@ -957,12 +986,15 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             anchor_ = rect;
             anchorOwner_ = owner;
             haveAnchor_ = true;
+            TF_STATUS status{};
+            const bool inlineEditable = composition_ && SUCCEEDED(caretResult) && SUCCEEDED(context->GetStatus(&status))
+                                        && !(status.dwStaticFlags & TF_SS_TRANSITORY);
             candidates_.show(session_, owner, rect, limited_, this, [](void *target, uint64_t generation, int index) {
                 auto *service = static_cast<Service *>(target);
                 service->AddRef();
                 service->requestChoice(generation, index);
                 service->Release();
-            }, uiGeneration_, preferences_);
+            }, uiGeneration_, preferences_, inlineEditable);
         } else
             candidates_.hide();
     }

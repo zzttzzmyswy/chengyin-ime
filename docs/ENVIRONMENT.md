@@ -1,3 +1,31 @@
+# 当前本机 Windows 环境 · preview8
+
+2026-10-05：Windows 11 build 26200，AMD Ryzen 9 9950X（16 核/32 线程），x64。
+工作目录是 Codex 的中文路径 Git worktree；源码不依赖绝对路径。
+分支 codex/preview8-windows-polish，基于 f3ec729；当前未运行新的远程 CI。
+
+- VS 2022 Build Tools 17.14.41，MSVC 19.44.35229 / 14.44.35207；SDK 10.0.26100.0。
+- Rust 1.99.0 x86_64-pc-windows-msvc，rustfmt/clippy/rust-docs；静态核心用 +crt-static。
+- CMake/CTest 4.4.3；NSIS 3.11 portable + 仓库 prepare_windows_nsis.py 的固定 AMD64 组件。
+- 官方 NSIS 3.11 ZIP SHA-256：c7d27f780ddb6cffb4730138cd1591e841f4b7edb155856901cdf5f214394fa1。
+  来源 https://sourceforge.net/projects/nsis/files/NSIS%203/3.11/nsis-3.11.zip/download 。
+- AMD64 组件来源、哈希和许可由准备助手写入 CHENGYIN_AMD64_COMPONENTS.json，随包收入许可 ZIP。
+- Rustup、VS、CMake 通过官方 Windows 安装/winget 配置；Python 使用 Codex bundled runtime。
+
+```powershell
+$env:PATH="C:\Users\xhxez\.cargo\bin;C:\Program Files\CMake\bin;" + $env:PATH
+$env:RUSTFLAGS='-C target-feature=+crt-static'
+cargo build --release -p myswy-ffi --target x86_64-pc-windows-msvc --locked
+cmake -S platforms/windows -B build/windows-msvc -G 'Visual Studio 17 2022' -A x64
+cmake --build build/windows-msvc --config Release --parallel 3
+ctest --test-dir build/windows-msvc -C Release --output-on-failure
+python scripts/package_windows.py --build-dir build/windows-msvc --toolchain msvc --makensis build/nsis-amd64/makensis.exe --nsis-notice packaging/windows/NSIS-LICENSE.txt
+```
+
+只有隔离 runner 运行安装器的安装/卸载/故障注入生命周期，不能拿当前用户的既有安装作 fixture。
+本机真实 Edit/RichEdit 按键已通过；物理混合 DPI 多屏与完整应用矩阵未完成。
+以下为 prior preview7 云环境记录，不代表本轮新 CI 或实机结果。
+
 # 开发环境与复现
 
 更新：2026-10-04。仓库工作目录为 `/workspace/myswyIm`，远程仓库为

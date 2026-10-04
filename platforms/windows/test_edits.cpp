@@ -11,6 +11,19 @@
 #include <string>
 
 namespace myswy::test {
+HWND testCandidateWindow() {
+    struct Search { HWND any = nullptr, visible = nullptr; } found;
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND window, LPARAM parameter) -> BOOL {
+        auto *result = reinterpret_cast<Search *>(parameter);
+        wchar_t name[64]{}; GetClassNameW(window, name, 64);
+        if (!std::wcscmp(name, L"Myswy.Candidates.Preview1")) {
+            result->any = window;
+            if (IsWindowVisible(window)) result->visible = window;
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&found));
+    return found.visible ? found.visible : found.any;
+}
 void require(bool ok, const char *name) {
     if (!ok) {
         std::fprintf(stderr, "TSF edit FAIL: %s\n", name);
@@ -178,6 +191,11 @@ class Range final : public RangeStub {
         auto *other = static_cast<Range *>(range);
         *out = begin - (anchor == TF_ANCHOR_START ? other->begin : other->finish);
         return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE ShiftEndToRange(TfEditCookie, ITfRange *range, TfAnchor anchor) override {
+        auto *other = static_cast<Range *>(range);
+        finish = anchor == TF_ANCHOR_START ? other->begin : other->finish;
+        return finish >= begin ? S_OK : E_FAIL;
     }
     HRESULT STDMETHODCALLTYPE CompareEnd(TfEditCookie, ITfRange *range, TfAnchor anchor, LONG *out) override {
         auto *other = static_cast<Range *>(range);
@@ -488,12 +506,12 @@ void runEditTests(ITfKeyEventSink *keys) {
         require(key(keys, editing.get(), 'I') && editing->doc.text == L"nihao"
                 && editing->doc.end == 2, "insert at middle in TSF write lock");
         require(key(keys, editing.get(), VK_DELETE) && editing->doc.text == L"niao", "Delete at caret");
-        require(key(keys, editing.get(), 'H') && key(keys, editing.get(), VK_SPACE)
+        require(key(keys, editing.get(), 'H') && key(keys, editing.get(), '1')
                 && editing->doc.text == L"你好", "edited pinyin commits once");
         editing->doc.text.clear();
         editing->doc.start = editing->doc.end = 0;
         type(keys, editing.get(), "woxihuanzhongwen");
-        require(key(keys, editing.get(), VK_SPACE)
+        require(key(keys, editing.get(), '1')
                 && editing->doc.text == L"我喜欢中文", "daily whole-sentence TSF commit");
         const auto prefix = editing->doc.text;
         type(keys, editing.get(), "shi");
@@ -502,7 +520,7 @@ void runEditTests(ITfKeyEventSink *keys) {
         require(editing->doc.text == prefix + L"shi", "paging never changes composition text");
         key(keys, editing.get(), VK_ESCAPE);
         type(keys, editing.get(), "wovvvv");
-        require(key(keys, editing.get(), VK_SPACE)
+        require(key(keys, editing.get(), '1')
                 && editing->doc.text == prefix + L"我vvvv",
                 "prefix selection preserves untranslated remainder in one composition");
         require(key(keys, editing.get(), VK_HOME)
@@ -512,6 +530,34 @@ void runEditTests(ITfKeyEventSink *keys) {
                 && editing->doc.text == prefix + L"wovvvv", "Backspace unlocks confirmed segment");
         key(keys, editing.get(), VK_ESCAPE);
 
+    }
+    {
+        Ptr<Context> raw;
+        raw.attach(new Context);
+        type(keys, raw.get(), "nihao");
+        raw->doc.start = raw->doc.end = 2;
+        raw->notifyAcceptedEdit();
+        require(key(keys, raw.get(), VK_DELETE) && raw->doc.text == L"niao", "mouse caret edits existing inline pinyin");
+        require(key(keys, raw.get(), 'H') && raw->doc.text == L"nihao", "insert follows mouse caret");
+        const int writes = raw->doc.writes;
+        require(key(keys, raw.get(), VK_SPACE) && raw->doc.text == L"nihao" && raw->doc.ends == 1
+                && raw->doc.writes == writes + 1, "space commits raw spelling once, no candidate conversion");
+        require(!key(keys, raw.get(), VK_SPACE), "idle space passes through to application");
+        type(keys, raw.get(), "xi");
+        key(keys, raw.get(), VK_OEM_7); type(keys, raw.get(), "an");
+        require(key(keys, raw.get(), VK_SPACE) && raw->doc.text == L"nihaoxi'an", "raw space preserves explicit apostrophe");
+        for (UINT vk : {0x36u, 0x37u, 0x4au, 0x31u, static_cast<UINT>(VK_OEM_PLUS)}) {
+            BYTE shifted[256]{}; shifted[VK_SHIFT] = shifted[VK_LSHIFT] = 0x80;
+            require(SetKeyboardState(shifted), "shift chord keyboard state");
+            require(!key(keys, raw.get(), vk), "idle shifted symbol/capital is passed to host");
+            require(SetKeyboardState(neutral), "clear shift chord");
+            type(keys, raw.get(), "ni");
+            const auto text = raw->doc.text;
+            require(SetKeyboardState(shifted), "shift held during composition");
+            require(!key(keys, raw.get(), vk) && raw->doc.text == text,
+                    "shift finishes raw preedit and leaves actual character to host");
+            require(SetKeyboardState(neutral), "restore neutral keyboard");
+        }
     }
     {
         Ptr<Context> modern;
@@ -525,18 +571,18 @@ void runEditTests(ITfKeyEventSink *keys) {
         require(key(keys, modern.get(), VK_ESCAPE)
                 && modern->doc.text == L"中国", "association cancel preserves committed text");
         type(keys, modern.get(), "nihao");
-        require(key(keys, modern.get(), VK_SPACE), "association source commit");
+        require(key(keys, modern.get(), '1'), "association source commit");
         require(key(keys, modern.get(), VK_TAB)
                 && modern->doc.text == L"中国你好世界", "Tab inserts only the continuation");
         type(keys, modern.get(), "nihao");
-        require(key(keys, modern.get(), VK_SPACE), "new association source");
+        require(key(keys, modern.get(), '1'), "new association source");
         require(!key(keys, modern.get(), VK_SPACE)
                 && modern->doc.text == L"中国你好世界你好", "space dismisses continuation and is left to the host");
         type(keys, modern.get(), "wxhzw");
-        require(key(keys, modern.get(), VK_SPACE)
+        require(key(keys, modern.get(), '1')
                 && modern->doc.text == L"中国你好世界你好我喜欢中文", "continuous initials sentence TSF commit");
         type(keys, modern.get(), "zhongg");
-        require(key(keys, modern.get(), VK_SPACE)
+        require(key(keys, modern.get(), '1')
                 && modern->doc.text == L"中国你好世界你好我喜欢中文中国", "mixed full and initial spelling");
         const auto original = modern->doc.text;
         modern->doc.start = modern->doc.end = 0;
@@ -550,7 +596,7 @@ void runEditTests(ITfKeyEventSink *keys) {
         delayed->notifyAcceptedEdit();
         type(keys, delayed.get(), "hao");
         delayed->notifyAcceptedEdit();
-        require(key(keys, delayed.get(), VK_SPACE)
+        require(key(keys, delayed.get(), '1')
                 && delayed->doc.text == L"你好", "delayed own edit notifications preserve composition");
         type(keys, delayed.get(), "ni");
         delayed->doc.start = delayed->doc.end = 0;
@@ -568,7 +614,7 @@ void runEditTests(ITfKeyEventSink *keys) {
         type(keys, manual.get(), "xi");
         require(key(keys, manual.get(), VK_OEM_7), "manual apostrophe consumed");
         type(keys, manual.get(), "an");
-        require(manual->doc.text == L"xi'an" && key(keys, manual.get(), VK_SPACE)
+        require(manual->doc.text == L"xi'an" && key(keys, manual.get(), '1')
                 && manual->doc.text == L"西安", "explicit syllable split survives host editing");
         const LPARAM left = static_cast<LPARAM>(0x2a) << 16;
         BOOL eaten = FALSE;
@@ -616,10 +662,10 @@ void runEditTests(ITfKeyEventSink *keys) {
                                                 sizeof(replacement) - 1)), "live configuration accepted during composition");
         require(live->doc.text == L"ni", "configuration refresh cannot discard raw input");
         type(keys, live.get(), "hao");
-        require(key(keys, live.get(), VK_SPACE)
+        require(key(keys, live.get(), '1')
                 && live->doc.text == L"你好", "active composition retains original dictionary");
         type(keys, live.get(), "nihao");
-        require(key(keys, live.get(), VK_SPACE)
+        require(key(keys, live.get(), '1')
                 && live->doc.text == L"你好热更新", "next composition in same app uses new dictionary");
         require(!key(keys, live.get(), VK_OEM_COMMA), "punctuation preference changes without reopening app");
         require(SUCCEEDED(configuration->Update(9, TRUE, TRUE, TRUE, nullptr, 0)), "restore default fixture");
@@ -633,7 +679,7 @@ void runEditTests(ITfKeyEventSink *keys) {
             && SUCCEEDED(a->layout->OnLayoutChange(a, LayoutCode::change, nullptr)), "layout notification");
     require(a->doc.reads == 1
             && a->doc.writes == writes, "layout refresh acquires a read lock without mutating text");
-    require(key(keys, a, VK_SPACE) && a->doc.text == L"你好"
+    require(key(keys, a, '1') && a->doc.text == L"你好"
             && a->doc.ends == 1, "commit ends composition once");
     type(keys, a, "nihao");
     require(key(keys, a, VK_OEM_COMMA) && a->doc.text == L"你好你好，", "punctuation and commit in order");
@@ -701,11 +747,11 @@ void runEditTests(ITfKeyEventSink *keys) {
     require(b->doc.owner != nullptr, "candidate owner");
     b->externalMove(static_cast<LONG>(b->doc.text.size()));
     type(keys, b, "nihao");
-    HWND stablePopup = FindWindowW(L"Myswy.Candidates.Preview1", nullptr);
+    HWND stablePopup = testCandidateWindow();
     require(stablePopup && IsWindowVisible(stablePopup), "layout baseline candidate");
     b->doc.failExt = true;
     require(key(keys, b, VK_LEFT), "typing continues while TSF layout unavailable");
-    require(stablePopup == FindWindowW(L"Myswy.Candidates.Preview1", nullptr)
+    require(stablePopup == testCandidateWindow()
             && IsWindowVisible(stablePopup), "temporary NOLAYOUT retains candidate anchor");
     b->doc.failExt = false;
     b->doc.collapsedExtFails = true;
@@ -718,9 +764,9 @@ void runEditTests(ITfKeyEventSink *keys) {
     b->layout->OnLayoutChange(b, LayoutCode::change, nullptr);
     require(IsWindowVisible(stablePopup), "layout recovery restores candidate");
     const auto prefix = b->doc.text.substr(0, b->doc.text.size() - 5);
-    const LPARAM row = MAKELPARAM(20, 52);
+    const LPARAM row = MAKELPARAM(20, 15);
     auto click = [&] {
-        HWND popup = FindWindowW(L"Myswy.Candidates.Preview1", nullptr);
+        HWND popup = testCandidateWindow();
         require(popup &&IsWindowVisible(popup), "actual candidate popup available");
         SendMessageW(popup, WM_LBUTTONDOWN, MK_LBUTTON, row);
         SendMessageW(popup, WM_LBUTTONUP, 0, row);
@@ -766,7 +812,7 @@ void runEditTests(ITfKeyEventSink *keys) {
     require(key(keys, b, VK_SPACE), "Ctrl+Space toggles back to Chinese");
     require(SetKeyboardState(neutral), "clear Ctrl");
     type(keys, b, "nihao");
-    require(key(keys, b, VK_SPACE) && b->doc.text == raw + L"你好", "Chinese restored after toggle");
+    require(key(keys, b, '1') && b->doc.text == raw + L"你好", "Chinese restored after toggle");
     BOOL eaten = FALSE;
     keys->OnKeyDown(b, 'N', 0, &eaten);
     require(eaten, "held key before focus loss");
@@ -910,7 +956,7 @@ void runServiceTests(myswy::ProcessorEx *service, ITfKeyEventSink *keys) {
         Ptr<Context> context;
         context.attach(new Context);
         type(keys, context.get(), "nihao");
-        require(key(keys, context.get(), VK_SPACE)
+        require(key(keys, context.get(), '1')
                 && context->doc.text == L"你好", "repeated activation dictionary remains valid");
         require(service->Deactivate() == S_OK && context->refs == 1 && manager->refs == 1 &&
                 !manager->keys && !manager->thread
@@ -967,7 +1013,7 @@ void runServiceTests(myswy::ProcessorEx *service, ITfKeyEventSink *keys) {
         associationContext.attach(new Context);
         associationContext->doc.queueChoices = true;
         type(keys, associationContext.get(), "nihao");
-        require(key(keys, associationContext.get(), VK_SPACE), "host UI association source commit");
+        require(key(keys, associationContext.get(), '1'), "host UI association source commit");
         Ptr<CandidateBehavior> association;
         require(SUCCEEDED(query(manager->ui.get(), kCandidateBehavior, association)),
                 "host receives postcommit association UI");
@@ -977,7 +1023,7 @@ void runServiceTests(myswy::ProcessorEx *service, ITfKeyEventSink *keys) {
         require(associationContext->doc.text == L"你好x", "new typing invalidates queued association choice");
         key(keys, associationContext.get(), VK_ESCAPE);
         type(keys, associationContext.get(), "nihao");
-        require(key(keys, associationContext.get(), VK_SPACE), "second association source");
+        require(key(keys, associationContext.get(), '1'), "second association source");
         association.reset();
         require(SUCCEEDED(query(manager->ui.get(), kCandidateBehavior, association)), "second host association UI");
         require(association->Finalize() == S_OK
@@ -987,7 +1033,7 @@ void runServiceTests(myswy::ProcessorEx *service, ITfKeyEventSink *keys) {
                 "host association inserts once at collapsed caret");
         require(association->Finalize() == E_UNEXPECTED, "retired association UI rejects late choice");
         type(keys, associationContext.get(), "nihao");
-        require(key(keys, associationContext.get(), VK_SPACE), "sensitive association source");
+        require(key(keys, associationContext.get(), '1'), "sensitive association source");
         association.reset();
         require(SUCCEEDED(query(manager->ui.get(), kCandidateBehavior, association)), "privacy test association UI");
         associationContext->doc.inputScope = IS_PASSWORD;

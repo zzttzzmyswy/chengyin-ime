@@ -14,7 +14,7 @@ import tomllib
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-REVISION = 7
+REVISION = 8
 BINARIES = {"myswy_tsf.dll": True, "myswy_probe.exe": False, "myswy_settings.exe": False}
 
 
@@ -151,6 +151,12 @@ def main() -> None:
         (stage / "BUILD_INFO.json").write_text(json.dumps(info, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest().upper() for p in sorted(stage.iterdir())}
         (stage / "SHA256SUMS.txt").write_text("".join(f"{digest}  {name}\n" for name, digest in hashes.items()), encoding="ascii")
+        if platform.system() == "Windows":
+            # Exercise the exact verifier used by the installer before emitting
+            # an EXE. A new payload filename must agree with its allowlist.
+            subprocess.run([str(stage / "myswy_probe.exe"), "--verify-files", str(stage),
+                            str(stage / "SHA256SUMS.txt")], check=True)
+            subprocess.run([str(stage / "myswy_probe.exe"), str(stage / "myswy_tsf.dll")], check=True)
         candidate = Path(temporary) / "myswy-package.exe"
         build_installer(stage, candidate, args.makensis, tag, args.revision)
         with output.open("xb") as destination:

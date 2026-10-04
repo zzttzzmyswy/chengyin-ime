@@ -37,6 +37,12 @@ int main() {
             })
         require(planKey(vk, 0, false, false, true).action == Action::core, "composition navigation stays in core");
     require(planKey('1', '!', false, false, true).punctuation == '!', "Shift+1 is punctuation");
+    for (char symbol : {'^', '&', 'J', '!', '+'}) {
+        require(planKey('J', symbol, false, false, false, false, false, true).action == Action::pass,
+                "shifted symbol/capital passes when idle");
+        require(planKey('J', symbol, false, false, true, false, false, true).action == Action::finish,
+                "shifted symbol/capital finishes raw composition without conversion");
+    }
     require(planKey(0xde, '\'', false, false, true).punctuation == 0, "apostrophe separates syllables");
     require(planKey(VK_TAB, 0, false, false, true, false, true).key == MYSWY_KEY_TAB,
             "Tab explicitly accepts idle association");
@@ -76,7 +82,7 @@ int main() {
     require(session != nullptr, "session");
     type(session, "nihao");
     for (int i = 0; i < 10; ++i)
-        require(planKey(0x20, ' ', false, false, true).key == MYSWY_KEY_SPACE, "repeated test key");
+        require(planKey(0x20, ' ', false, false, true).key == MYSWY_KEY_ENTER, "repeated raw-space planning");
     WideText output;
     require(readText(session, MYSWY_TEXT_PREEDIT, 0, output)
             && std::wcscmp(output.data, L"nihao") == 0, "test key planning is pure");
@@ -117,7 +123,9 @@ int main() {
                                    0, 0, 300, 200, nullptr, nullptr, module, nullptr);
         require(owner != nullptr, "candidate test owner");
         candidates.show(session, owner, RECT{100, 100, 101, 120}, false, &clicks, clicked, 1);
-        HWND popup = FindWindowW(L"Myswy.Candidates.Preview1", nullptr);
+        HWND popup = candidates.handle();
+        if (!popup || !IsWindowVisible(popup))
+            std::fprintf(stderr, "Popup=%p visible=%d error=%lu\n", popup, popup ? IsWindowVisible(popup) : 0, GetLastError());
         require(popup && IsWindowVisible(popup)
                 && (GetWindowLongPtrW(popup, GWL_EXSTYLE) & WS_EX_NOACTIVATE), "passive candidate popup");
         const HWND focus = GetFocus();
@@ -136,7 +144,7 @@ int main() {
         for (int i = 0; i < 150; ++i) {
             candidates.show(session, owner, RECT{100, 100, 101, 120}, false, &clicks, clicked, 1);
             UpdateWindow(popup);
-            require(popup == FindWindowW(L"Myswy.Candidates.Preview1", nullptr)
+            require(popup == candidates.handle()
                     && IsWindowVisible(popup), "continuous redraw retains visible window");
         }
         RECT after{};
@@ -171,7 +179,7 @@ int main() {
         owner = CreateWindowW(L"STATIC", L"Myswy second owner", WS_OVERLAPPEDWINDOW,
                               0, 0, 300, 200, nullptr, nullptr, module, nullptr);
         candidates.show(session, owner, RECT{200, 100, 201, 120}, false);
-        popup = FindWindowW(L"Myswy.Candidates.Preview1", nullptr);
+        popup = candidates.handle();
         require(popup && IsWindowVisible(popup), "popup can be recreated after owner destruction");
         candidates.hide();
         require(!IsWindowVisible(popup), "popup hides on cleanup");

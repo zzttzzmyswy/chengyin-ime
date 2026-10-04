@@ -34,12 +34,18 @@ struct ImportLock {
 constexpr size_t kMaximum = 64 * 1024 * 1024;
 }
 std::wstring customDictionaryPath(bool create) {
+#ifdef MYSWY_ISOLATED_UI_TEST
+    wchar_t temporary[MAX_PATH] {};
+    if (!GetTempPathW(MAX_PATH, temporary)) return {};
+    std::wstring path = std::wstring(temporary) + L"Myswy-UI-fixture-" + std::to_wstring(GetCurrentProcessId());
+#else
     PWSTR folder = nullptr;
     if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &folder)))
         return {};
     std::wstring path(folder);
     CoTaskMemFree(folder);
     path += L"\\MyswyIME";
+#endif
     if (create && !CreateDirectoryW(path.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
         return {};
     if (create && (GetFileAttributesW(path.c_str())&FILE_ATTRIBUTE_REPARSE_POINT))

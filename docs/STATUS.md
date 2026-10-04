@@ -1,5 +1,51 @@
 # 开发记录 / 下次从这里继续
 
+更新：2026-10-05。当前阶段：**preview8 十一项反馈已实现；本机 Win11/MSVC 七项 CTest、Rust 38 项集成测试、fmt/clippy 与原生 C ABI 检查通过。真实设置 Edit/RichEdit 的输入、原文空格、Shift ^&J、内嵌时隐藏候选拼音及启动焦点通过。单 EXE 打包和解包负载/COM 校验通过。不能把模拟 DPI 和本机两类控件写成任意应用/多屏 100% 兼容。**
+
+## 最新批次：preview8
+
+任务见 [WINDOWS_PREVIEW8_TASKLIST](WINDOWS_PREVIEW8_TASKLIST.md)，发行说明见
+[CHANGELOG](../platforms/windows/CHANGELOG.md)。候选按字宽/字体指标布局，取消最小 240px
+宽度和累计增长；紧凑边距 3px，标准 7px，实际按 DPI 缩放，候选字号保持。
+候选拼音在纵向右侧/横向下方，至少 16px；能内嵌编辑时隐藏重复显示。
+TSF 验证同一组合原文和选择范围后支持鼠标移动光标继续编辑；浮动上下文保留回退拼音。
+
+七页原生设置新增主题：系统、白、黑、Deepseek 大肥鱼、初音未来、洛天依，
+后者为原创配色。系统主题动态读取 AppsUseLightTheme，响应设置/颜色通知；高对比度优先。
+所有控件切换新字体后再销毁旧句柄，避免鼠标悬停触发悬空句柄导致字体变化。
+多页长文本按实际高度布局，窄窗口纵横滚动；候选按光标所在屏幕 DPI 排版并限制工作区，
+极小工作区可滚动候选。主题预览也按字体指标排版。
+
+删除“替换词库”界面：列表可添加、启停、删除独立导入项，内置词库保留；
+相同内容去重、最多 64 项/64 MiB、旧文件原子迁移、陈旧窗口变更拒绝，损坏文件保留。
+各上下文仍独立会话并引用不可变词库。共享 Rust 核心和 C ABI 事件/所有权不变。
+Windows Space 仅改平台映射为原文提交；数字/鼠标选中文。Shift 组合保持键盘布局符号/大写，
+单独 Shift 仍切换。关于新增 MIT 全文、仓库、离线发行说明、自动检查更新开关与按钮。
+只查询本仓库 Releases，下载前验证更高版本及本仓库 URL，启动前验证 SHA-256/PE64 EXE。
+真实 WinHTTP 查询成功，当前没有发布可校验的新安装包，不能冒称远程升级安装已测。
+
+交付：`build/packages/chengyin-windows-x64-0.1.0-preview8-msvc.exe`，4,299,339 bytes；
+SHA-256 `d1141b206f8f82a44f21bb4e208b931f3b33db1e9a061e39f91392421abc888b`。
+打包器原生预检查、7-Zip 完整性、解包后的全负载哈希/PE64/COM 探测通过；三个运行二进制与最终构建逐字节一致，许可 ZIP 通过。
+交付摘要 `build/delivery-preview8.json`，安装器未在当前用户系统安装，本轮正常系统升级/安装生命周期仍待专门执行。
+
+## preview8 验证证据
+
+- Windows 11 build 26200，Ryzen 9 9950X 16C/32T；MSVC 19.44.35229，SDK 10.0.26100，Rust 1.99，CMake 4.4.3。
+- 七个 CTest：配置通知/语言栏、更新解析校验、七页 UI、词库/学习、按键/候选、COM、TSF 编辑故障与状态回归全部通过。
+- UI 回归：96/120/144/192/288 DPI，所有页不重叠，窄视口纵横滚动，Edit/RichEdit/密码框保留，字体重建与悬停一致；六主题与紧凑候选截图人工查看。
+- 当前真实桌面：build-only 进程内工厂加载新 fixture DLL（同一服务代码、人工词库/无个人历史），实测 Edit/RichEdit；不改系统 DLL 注册、不写个人学习数据；fixture 不进包。
+- 核心：38 项测试，零分配回归、fmt/clippy、release，VS 原生 ffi_smoke；日志 build/rust-test-preview8.txt、rust-clippy-preview8.txt、native-core-check-preview8.txt。
+- 原生构建/测试日志 build/native-build-preview8.txt、native-test-preview8.txt；截图 build/ui-preview8/；桌面工厂激活 HRESULT 0，日志 build/desktop-stderr.txt。
+- Windows 核心独立基准：日常逐键 P50/P95/P99 70.3/280.3/308.2µs；首拼混输 213.9/1276.7/1774.7µs；连续上下文 1037.2/2714.0/3574.4µs。不含 TSF/显示或准确率，完整范围与样本见 PERFORMANCE。
+- 新远程 CI 未运行；preview7 GitHub CI 的六个 job/安装生命周期记录在下方历史。
+
+下一步：在干净隔离 runner 验证 preview8 安装/修复/升级/卸载；物理混合 DPI 多屏，
+Notepad3/浏览器/WinUI/UWP/管理员/RDP 的完整应用矩阵；发布带 digest 的 Release 后
+验证新版本下载和安装全链路。继续独立核心性能、语料质量，随后双拼与 ARM64/x86/Android。
+
+以下为 preview7 及以前历史，不代表本轮新执行证据。
+
 更新：2026-10-04。当前阶段：**澄音 preview7 的七项任务已实现并推送指定 GitHub main。核心检查、六个 Windows/Wine CTest、六页/DPI 截图检查和旧 preview6 升级通过；GitHub CI 六个 job 全部通过，包含 Windows 2022/MSVC 原生六项 CTest 和完整安装生命周期。交付通过该 CI 的单个 MSVC 安装 EXE。真实 Win11 任务栏与 Notepad3 桌面验收仍待完成。**
 
 ## 最新批次：preview7
