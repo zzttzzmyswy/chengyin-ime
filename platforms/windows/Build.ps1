@@ -30,7 +30,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
     & cmake --build build/windows-msvc --config Release
     if ($LASTEXITCODE -ne 0) { throw 'C++ build failed' }
-    & ctest --test-dir build/windows-msvc -C Release --output-on-failure
+    & ctest --test-dir build/windows-msvc -C Release --verbose
     if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
     & python scripts/package_windows.py --build-dir build/windows-msvc --toolchain msvc --makensis $MakeNsis --nsis-notice packaging/windows/NSIS-LICENSE.txt
     if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }

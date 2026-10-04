@@ -125,8 +125,13 @@ int main() {
         GetWindowRect(popup, &stable);
         const DWORD gdiCold = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
         // show() deliberately defers painting. Warm the persistent back buffer
-        // and GDI font linking before measuring repaint resource growth.
-        UpdateWindow(popup);
+        // and Windows' drawing caches. Flush batched deletions before counting;
+        // a tight UpdateWindow loop does not perform the usual message-pump flush.
+        for (int i = 0; i < 10; ++i) {
+            candidates.show(session, owner, RECT{100, 100, 101, 120}, false, &clicks, clicked, 1);
+            UpdateWindow(popup);
+        }
+        require(GdiFlush() != FALSE, "initial GDI batch completed");
         const DWORD gdiBefore = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
         for (int i = 0; i < 150; ++i) {
             candidates.show(session, owner, RECT{100, 100, 101, 120}, false, &clicks, clicked, 1);
@@ -137,8 +142,9 @@ int main() {
         RECT after{};
         GetWindowRect(popup, &after);
         require(EqualRect(&stable, &after), "same candidates retain geometry");
+        require(GdiFlush() != FALSE, "repaint GDI batch completed");
         const DWORD gdiAfter = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
-        std::printf("GDI objects: before first paint=%lu, after first paint=%lu, after 150 repaints=%lu\n",
+        std::printf("GDI objects: before painting=%lu, after warmup/flush=%lu, after 150 repaints/flush=%lu\n",
                     static_cast<unsigned long>(gdiCold), static_cast<unsigned long>(gdiBefore),
                     static_cast<unsigned long>(gdiAfter));
         require(gdiAfter <= gdiBefore,
