@@ -1,6 +1,6 @@
 # 开发记录 / 下次从这里继续
 
-更新：2026-10-04。当前阶段：**澄音 preview7 的配置同步、内嵌输入测试、经典原生界面与布局、中/英语言栏及中文标点已实现。核心检查、六个 Windows/Wine CTest、六页/DPI 截图检查、真实 preview6 升级和完整安装生命周期通过。源码与文档已推送指定 GitHub main 分支（初始实现 7cbb7e4）；首次远程 CI 已触发，结果单独记录。真实 Win11/Notepad3 桌面验收仍待完成。**
+更新：2026-10-04。当前阶段：**澄音 preview7 的七项任务已实现并推送指定 GitHub main。核心检查、六个 Windows/Wine CTest、六页/DPI 截图检查和旧 preview6 升级通过；GitHub CI 六个 job 全部通过，包含 Windows 2022/MSVC 原生六项 CTest 和完整安装生命周期。交付通过该 CI 的单个 MSVC 安装 EXE。真实 Win11 任务栏与 Notepad3 桌面验收仍待完成。**
 
 ## 最新批次：preview7
 
@@ -14,13 +14,17 @@
 增加语言栏 INPUTMODE 按钮、SYSTRAY 注册类别、澄音图标和中/英状态通知；
 中文标点只在宿主成功写入后推进引号配对，保留手工音节分隔及翻页。
 
-最新包：`build/packages/chengyin-windows-x64-0.1.0-preview7-gnu.exe`，7,534,770 bytes，
-SHA-256 `9d6c5fdc8d36d1095eab3a53f97f1dd8099e73e5923185071876ffde7bb6f0c2`。
+交付包：`build/packages/chengyin-windows-x64-0.1.0-preview7-msvc.exe`，4,312,794 bytes，
+SHA-256 `9c8f4d22e324808a5a378b93856ceda0cee8d1cd6931cb222e67835e0a5faa3d`。
+源码提交 `b14116e`；[通过的原生 CI](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37212769471)。
+已取回 artifact 并验证 ZIP/EXE 哈希、大小与 PE64；原 GNU 内部 preview7 包保留。
 验证日志位于忽略的 `build/core-check-preview7.txt`、`build/windows-test-preview7-final.txt`、
-`build/ui-preview7.txt`、`build/installer-preview7-final.txt`；截图位于 `build/ui-preview7/`。
+`build/ui-preview7.txt`、`build/installer-preview7-final.txt`；原生验证摘要
+`build/native-ci-preview7.json`、同一交付 EXE 的旧版升级日志
+`build/installer-preview7-msvc-from6.txt`；截图位于 `build/ui-preview7/`。
 原有 preview3/4/5/6 安装包保留。README、DEVELOPMENT、ENVIRONMENT、AGENTS 与路线图已更新。
 
-后续优先：Win11 任务栏与 Notepad3 实机、多屏 DPI/现代宿主、原生 MSVC CI 证据、
+后续优先：Win11 任务栏与 Notepad3 实机、多屏 DPI/现代宿主、
 首拼/上下文性能与独立语料质量；随后双拼、ARM64/x86 与 Android。以下保留历史开发记录。
 
 ## 用户已确定
@@ -296,7 +300,7 @@ profile Description；原生 Windows 仍要求正式 TSF getter 通过。最终�
 `build/windows-tests-preview6.txt`、`build/probe-tests-preview6-final.txt`、
 `build/installer-preview6-final.txt`、`build/package-preview6.txt`。
 
-## 下一步
+## preview6 时的下一步（历史）
 
 1. 本批单 EXE 内部完成后，集中复测真实 Windows 输入测试/Edit/RichEdit、Notepad3、ChatGPT 及常用应用的激活、定位、Shift、习惯排序、缩放和隐私；记录版本/架构。无需测试开发切片。
 2. 优化连续上下文候选展开、增量解码、预编译索引；扩大独立中文语料，记录首选率/按键数和反例。当前 P99 与加载目标仍未达标。
@@ -304,7 +308,8 @@ profile Description；原生 Windows 仍要求正式 TSF getter 通过。最终�
 4. Linux 保留 Fcitx 插件和后台 TSV 加载；正式预载/导入界面、X11/Wayland 实测继续。Android JNI/IME 服务尚未实现。
 5. 专门环境测 Windows 端到端呈现、长期 GDI/COM/内存、冷启动与峰值；微基准和模拟 text store 不能代替。
 
-源码和产物均在本地，未推送、未执行远程 CI、未配置后台自动继续任务。
+preview6 当时源码和产物均在本地，未推送、未执行远程 CI。preview7 已推送并执行，见开头；
+没有配置后台自动继续任务。
 
 ## 首次远程 CI 与环境修正
 
@@ -312,3 +317,26 @@ profile Description；原生 Windows 仍要求正式 TSF getter 通过。最终�
 Rust 1.82 与 ARM 核心检查通过。Windows Rust 的核心测试通过，但 C ABI 步骤写死了 VS 2022 路径；
 TSF job 使用 runner 已有的 NSIS 3.10，未达到原生 amd64 installer 所需 3.11。
 现改为 vswhere 查找 VS，并显式升级到 NSIS 3.11.0；原生 Windows 完整结果以修正后的 CI 为准。
+
+## preview7 原生 Windows 通过记录
+
+交付代码 `b14116e` 的 GitHub Actions `37212769471` 六个 job 全部通过：
+Linux/Windows Rust 格式、Clippy、38 项测试、release 与 C ABI，最低 Rust 1.82，
+Linux/Android ARM 核心检查，Fcitx CTest/sanitizer/Debian 生命周期，以及 Windows TSF。
+Windows job 使用 Windows 2022 / VS 2022，原生六个 CTest 全通过，100 次 TSF
+激活/输入/停用通过；GDI 对象在预热/flush 后及 150 次重绘后均为 7。
+
+首次原生验证补齐 MSVC 的 SDK 宏冲突、局部变量遮蔽、显式 manifest 与自动 manifest
+重复问题。GDI 检查改为创建绘图缓冲、预热缓存并 GdiFlush 后计数，仍要求连续重绘零增长；
+Wine 的 GetGuiResources 返回 0，不能作为原生 GDI 计数证据。
+
+官方 NSIS 3.11 Windows 安装缺少 AMD64 stubs/plugins；现用固定 SHA-256 的 Debian
+3.11 Windows PE 组件准备私有构建工具链。NSIS 源文件显式按 UTF-8 读取，修复 Windows
+默认代码页导致中文安装名称、菜单及应用列表名称错误的问题。来源/组件哈希随包保存。
+
+原生隔离安装回归六阶段通过：安装/完整负载哈希/注册 COM/同版修复；故障注册回滚；
+外来注册与修改文件保护；占用 DLL 升级/降级拒绝/用户文件保留；重复卸载与失败新装回滚；
+旧 ZIP 迁移及正常系统卸载命令。故障和测试 DLL 不进入交付包。
+同一交付 MSVC EXE 从真实旧 preview6 GNU EXE 升级另在独立 Wine prefix 验证，七阶段全通过，
+含旧测试程序/入口删除、用户词库/设置/学习保留、回滚/修复/卸载和旧 ZIP 迁移。
+这与原生 CI 的版本 fixture 区分记录。

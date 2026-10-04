@@ -2,7 +2,8 @@
 
 更新：2026-10-04。仓库工作目录为 `/workspace/myswyIm`，远程仓库为
 https://github.com/zzttzzmyswy/myswyIm 。源码不依赖该绝对路径。`main` 已推送并跟踪 `origin/main`；
-初始实现提交 `7cbb7e4`，首次远程 CI 已触发。
+初始实现提交 `7cbb7e4`；交付代码 `b14116e` 的远程 CI 六个 job 全部通过。
+验证运行：https://github.com/zzttzzmyswy/myswyIm/actions/runs/37212769471 。
 
 ## 当前云环境
 
@@ -51,6 +52,8 @@ BUILD_INFO.json 记录工具链与构建信息，SHA256SUMS.txt 覆盖完整安�
 多显示器缩放和端到端延迟仍需实机。GitHub Actions 的 Windows job 使用 Windows 2022 +
 VS 2022/MSVC，能补原生构建与回归证据，不能代表 Windows 11 桌面验收。
 远程 CI 的执行状态单独更新，不能仅依据 workflow 文件声称通过。
+本次已在 Windows 2022 + MSVC 工具集 14.44.35207 完成原生六项 CTest、单 EXE 构建和
+安装/修复/升级/回滚/卸载；Linux Rust、最低 Rust、ARM 核心与 Fcitx 检查也全部通过。
 
 Windows 构建安装 NSIS 3.11 后，Build.ps1 自动补齐其缺失的 AMD64 stubs/plugins；
 固定来源为 `https://deb.debian.org/debian/pool/main/n/nsis/nsis-common_3.11-1_all.deb`，

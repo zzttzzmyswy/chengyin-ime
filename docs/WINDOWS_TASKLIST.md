@@ -17,14 +17,19 @@
 
 - Rust 格式、Clippy、38 项工作区测试、release 构建与 C ABI 冒烟通过。
 - Windows MinGW /Werror 构建与六个 CTest 全部通过（Wine 10）。
+- Windows 2022 / VS 2022 / MSVC 原生六个 CTest 与完整安装生命周期通过。
+  GDI 对象在预热/flush 后及 150 次重绘后均为 7；另有 100 次 TSF 激活/输入/停用。
 - 六页实际截图、96/144 DPI、文字不重叠、窗口层级、原生分组背景重绘、测试框保留检查通过。
 - 真实 preview6→preview7 EXE 升级、旧测试 EXE/入口移除、数据保留、完整哈希、同版修复、
   故障注册回滚、外来注册保护、占用 DLL 升级、降级拒绝、卸载与旧 ZIP 迁移七阶段通过。
-- 当前安装包：`build/packages/chengyin-windows-x64-0.1.0-preview7-gnu.exe`，7,534,770 bytes。
-  SHA-256：`9d6c5fdc8d36d1095eab3a53f97f1dd8099e73e5923185071876ffde7bb6f0c2`。
+- 交付原生 CI 安装包：`build/packages/chengyin-windows-x64-0.1.0-preview7-msvc.exe`，4,312,794 bytes。
+  SHA-256：`9c8f4d22e324808a5a378b93856ceda0cee8d1cd6931cb222e67835e0a5faa3d`。
+  已取回 CI artifact，并核对 ZIP/EXE 哈希、大小与 PE64；原有 GNU 内部包保留。
 - preview6 保持原文件/哈希，供回退与升级对照；新包不覆盖旧包。
 
 任务 5 的实现及内部协议回归已完成；Windows 11 外壳最终呈现仍待实机确认。
 
-源码已推送 `origin/main`，初始实现提交 `7cbb7e4`；首次 GitHub CI 已触发，
-运行链接：https://github.com/zzttzzmyswy/myswyIm/actions/runs/37209334988 。
+源码已推送 `origin/main`。交付代码提交 `b14116e`，GitHub CI 的全部六个 job 通过，
+运行链接：https://github.com/zzttzzmyswy/myswyIm/actions/runs/37212769471 。
+原生 CI 使用安装版本样本验证升级；交付的 MSVC EXE 从真实旧 preview6 GNU EXE
+升级另在隔离 Wine 验证，七阶段全通过，日志 `build/installer-preview7-msvc-from6.txt`。

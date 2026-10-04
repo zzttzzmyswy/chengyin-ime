@@ -18,7 +18,7 @@
 
 | 平台 | 目前实现 | 验证边界 |
 | --- | --- | --- |
-| Windows 10 2004+/11 x64 | TSF、候选、设置、学习、单 EXE 安装器 | MinGW 交叉构建、Wine/模拟宿主回归；真实 Win11 任务栏、Notepad3、现代宿主待验收 |
+| Windows 10 2004+/11 x64 | TSF、候选、设置、学习、单 EXE 安装器 | Windows 2022/MSVC 原生测试及安装生命周期、Wine 回归通过；真实 Win11 任务栏、Notepad3、现代宿主待验收 |
 | Linux X11 / Wayland | Fcitx 5 插件、自定义词库后台切换、Debian 测试包 | 无头事件测试与包生命周期；真实桌面应用矩阵待验收 |
 | Android | 共享核心 ARM64 编译检查 | 输入服务与软键盘尚未实现 |
 | 双拼、Windows ARM64/x86 | 已规划 | 尚未实现 |
@@ -34,6 +34,9 @@ Windows 原生构建文件为 `chengyin-windows-x64-0.1.0-preview7-msvc.exe`；�
 使用、升级、卸载和集中实测步骤见 [Windows 指南](platforms/windows/README.md)。
 构建产物不提交到源码库；[GitHub Actions](https://github.com/zzttzzmyswy/myswyIm/actions/workflows/ci.yml)
 通过 Windows 构建及安装回归后保存安装 EXE，可在对应运行的 Artifacts 中下载。
+preview7 的[已通过构建](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37212769471)
+提供 `chengyin-windows-x64-msvc-preview` artifact。单个 EXE 为 4,312,794 bytes，
+SHA-256：`9c8f4d22e324808a5a378b93856ceda0cee8d1cd6931cb222e67835e0a5faa3d`。
 
 Linux 安装与构建见 [Fcitx 5 指南](platforms/fcitx5/README.md)。
 

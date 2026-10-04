@@ -29,6 +29,10 @@ Windows, Linux X11, Linux Wayland, and Android.
   Chinese punctuation. Keep the standalone test app removed. The settings
   executable is myswy_settings.exe; package scripts use preview7. Environment
   reproduction is in docs/ENVIRONMENT.md.
+- Delivery: preview7 MSVC installer from commit b14116e, GitHub Actions run
+  37212769471. All six jobs passed, including six native Windows CTests and the
+  installer lifecycle. Native NSIS needs the pinned AMD64 preparation helper
+  and explicit UTF-8 source input. Real Win11/Notepad3 validation is still pending.
 - Record source and license for any imported vocabulary or corpus. The bundled
   98-entry demo dictionary is not a production vocabulary.
 - Documentation is primarily Chinese. Keep STATUS's next work items current.

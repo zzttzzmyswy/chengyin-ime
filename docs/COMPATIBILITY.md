@@ -7,17 +7,17 @@
 | 范围 | 当前状态 | 证据与边界 |
 | --- | --- | --- |
 | Linux x86_64 Rust 核心 | 已测 | Debian 13、Rust 1.99，行为/索引参考对比/零分配测试 |
-| C ABI 动态链接 | 已测 | GCC 14 C 程序调用 release `.so`，UTF-8、空指针、缓冲区、句柄生命周期 |
+| C ABI 动态链接 | 已测 | 本地 GCC 14 调用 release `.so`；GitHub Linux/Windows MSVC C 程序调用动态库通过，UTF-8、空指针、缓冲区、句柄生命周期 |
 | Fcitx 5 插件 | 本地构建及无头测试已测 | Debian Fcitx 5.1.12；事件/热切换测试及 C++ ASan/UBSan 通过；无头测试不代表 GUI/协议通过 |
 | Debian amd64 测试包 | 隔离文件布局和生命周期已测 | dpkg 安装/重装/升级/回滚/移除/purge；依赖解析已生成，依赖安装和真实桌面待测 |
 | Linux aarch64 共享核心 | 构建检查 | `cargo check`，未链接或运行 ARM 原生程序 |
 | Android aarch64 共享核心 | 构建检查 | `cargo check`，无 JNI、APK、NDK 链接和设备测试 |
-| Windows x64 Rust + TSF | 交叉链接及 Wine 回归已测 | Rust 1.99、MinGW GCC 14.2；PE64 DLL/EXE；Wine 10 下 5 个 CTest、隔离注册往返；不是 Windows 桌面验收 |
-| Windows 单 EXE 安装器 | 隔离 Wine 生命周期已测 | NSIS 3.11 amd64 Unicode，完整 SHA-256 负载校验、安装/修复/升级/回滚/卸载；旧 ZIP 布局迁移、占用 DLL 升级和用户文件保留通过；澄音 preview6 实际旧 EXE 升级/名称及菜单迁移通过；Wine 的 TSF 名称 getter 用已保存 Description 核对，原生 Windows 尚待测试 |
-| Windows MSVC | 待测 | CI 已配置原生 Rust/C ABI/TSF 构建、五个 CTest、安装/升级/回滚/卸载的隔离 runner 测试与 EXE，尚未远程执行 |
+| Windows x64 Rust + TSF | 原生 CI 与 Wine 回归已测 | Windows 2022/MSVC 与 MinGW/Wine 10 六个 CTest 通过，含 100 次激活/输入/停用；真实 Windows 11 应用验收待测 |
+| Windows 单 EXE 安装器 | 原生 CI 与隔离 Wine 生命周期已测 | NSIS 3.11 amd64 Unicode，完整 SHA-256 负载、安装/修复/升级/回滚/卸载、旧 ZIP 迁移、占用 DLL 和用户文件保留通过；Wine 另做真实旧 EXE 升级；原生 profile 名称 getter 已通过，Wine 的 E_NOTIMPL 仅在该环境用保存的 Description 核对 |
+| Windows MSVC | 原生 CI 已测 | 提交 b14116e、GitHub Actions 37212769471：Rust/C ABI/TSF 构建、六个 CTest、安装生命周期与 MSVC EXE 通过；Windows 2022 不能代替 Win11 桌面 |
 | 首拼/声母混输与连续组句 | 核心与模拟 TSF 已测 | 穷举音节别名对照、同音翻页、中间编辑、完整输入优先；真实语料质量及 Windows 端到端延迟待测 |
 | 上屏联想与会话偏好 | 核心与模拟 TSF 已测 | Tab/鼠标确认、普通空格透传、焦点/插入点变化、陈旧宿主提交、密码作用域；上下文不跨会话；Windows 独立持久 Profile 另见下一行 |
-| Windows 设置/候选与持久学习 | Wine 原生 UI 与模拟 TSF 已测 | 五页/滚动/96→144 DPI/主题字体；稳定 popup/GDI 资源；Profile 重载、深页排序、并发/清除 epoch、失败保留与隐私；真实 Windows 外观/端到端仍待测 |
+| Windows 设置/候选与持久学习 | 原生 CI/Wine UI 与模拟 TSF 已测 | 六页经典设置/嵌入测试/滚动/96→144 DPI；配置通知、语言栏与中文标点；原生 GDI 150 次重绘零增长；Profile 重载、深页排序、并发/清除 epoch、失败保留与隐私；真实 Win11 外观/端到端仍待测 |
 | 搜狗词库导入 | 核心与 Windows 设置 Wine 回归已测 | 经典 SCEL 0x44/0x45、Unicode/GBK 文本、追加/替换、损坏拒绝与原子保存；其他私有/加密格式不支持，见 SOGOU_COMPATIBILITY |
 
 ## Linux 桌面验收计划（以下全部待真实会话测试）
