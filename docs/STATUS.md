@@ -1,6 +1,6 @@
 # 开发记录 / 下次从这里继续
 
-更新：2026-10-04。当前阶段：**澄音 preview7 的配置同步、内嵌输入测试、经典原生界面与布局、中/英语言栏及中文标点已实现。核心检查、六个 Windows/Wine CTest、六页/DPI 截图检查、真实 preview6 升级和完整安装生命周期通过。源码与文档准备推送指定 GitHub main 分支；远程 CI 结果单独记录。真实 Win11/Notepad3 桌面验收仍待完成。**
+更新：2026-10-04。当前阶段：**澄音 preview7 的配置同步、内嵌输入测试、经典原生界面与布局、中/英语言栏及中文标点已实现。核心检查、六个 Windows/Wine CTest、六页/DPI 截图检查、真实 preview6 升级和完整安装生命周期通过。源码与文档已推送指定 GitHub main 分支（初始实现 7cbb7e4）；首次远程 CI 已触发，结果单独记录。真实 Win11/Notepad3 桌面验收仍待完成。**
 
 ## 最新批次：preview7
 
@@ -305,3 +305,10 @@ profile Description；原生 Windows 仍要求正式 TSF getter 通过。最终�
 5. 专门环境测 Windows 端到端呈现、长期 GDI/COM/内存、冷启动与峰值；微基准和模拟 text store 不能代替。
 
 源码和产物均在本地，未推送、未执行远程 CI、未配置后台自动继续任务。
+
+## 首次远程 CI 与环境修正
+
+初始提交 `7cbb7e4` 已推送 main。首次运行的 Linux Rust、Fcitx（含 sanitizer/包生命周期）、
+Rust 1.82 与 ARM 核心检查通过。Windows Rust 的核心测试通过，但 C ABI 步骤写死了 VS 2022 路径；
+TSF job 使用 runner 已有的 NSIS 3.10，未达到原生 amd64 installer 所需 3.11。
+现改为 vswhere 查找 VS，并显式升级到 NSIS 3.11.0；原生 Windows 完整结果以修正后的 CI 为准。

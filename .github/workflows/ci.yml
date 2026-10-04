@@ -32,8 +32,12 @@ jobs:
       - if: runner.os == 'Windows'
         shell: cmd
         run: |
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "MYSWY_VS_PATH=%%i"
+          if not defined MYSWY_VS_PATH exit /b 1
+          call "%MYSWY_VS_PATH%\VC\Auxiliary\Build\vcvars64.bat"
+          if errorlevel 1 exit /b 1
           cl /nologo /utf-8 /W4 /WX /Iinclude tests\ffi_smoke.c target\release\myswy_ime.dll.lib /Fe:target\release\ffi-smoke.exe
+          if errorlevel 1 exit /b 1
           target\release\ffi-smoke.exe
   portable-core:
     runs-on: ubuntu-24.04
@@ -56,7 +60,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: choco install nsis -y --no-progress
+      - run: choco upgrade nsis --version=3.11.0 -y --no-progress
       - name: Build static core, TSF, native tests and single EXE
         shell: powershell
         run: ./platforms/windows/Build.ps1

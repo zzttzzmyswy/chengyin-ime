@@ -1,7 +1,8 @@
 # 开发环境与复现
 
 更新：2026-10-04。仓库工作目录为 `/workspace/myswyIm`，远程仓库为
-https://github.com/zzttzzmyswy/myswyIm 。源码不依赖该绝对路径。
+https://github.com/zzttzzmyswy/myswyIm 。源码不依赖该绝对路径。`main` 已推送并跟踪 `origin/main`；
+初始实现提交 `7cbb7e4`，首次远程 CI 已触发。
 
 ## 当前云环境
 

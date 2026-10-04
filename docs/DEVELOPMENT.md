@@ -4,9 +4,9 @@
 
 | 目录 | 职责 |
 | --- | --- |
-| `crates/myswy-core` | 词典、音节图、有界解码、会话、联想与选词偏好；不访问平台文件或 GUI |
-| `crates/myswy-ffi`、`include/myswy_ime.h` | C ABI、句柄所有权、UTF-8 缓冲区、panic 边界 |
-| `crates/myswy-cli` | 查询、词库转换、交互演示 |
+| `crates/ime-core` | 词典、音节图、有界解码、会话、联想与选词偏好；不访问平台文件或 GUI |
+| `crates/ime-ffi`、`include/myswy_ime.h` | C ABI、句柄所有权、UTF-8 缓冲区、panic 边界 |
+| `crates/ime-cli` | 查询、词库转换、交互演示 |
 | `platforms/windows` | TSF、原生设置、候选、学习保存、语言栏、安装器 |
 | `platforms/fcitx5` | Fcitx 5 适配、后台词库切换与配置 |
 | `scripts`、`.github/workflows` | 检查、词库编译、打包、安装生命周期与 CI |
