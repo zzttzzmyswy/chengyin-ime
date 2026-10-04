@@ -90,16 +90,16 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
                                 preferences.density ? 36 : 28) + (preferences.candidatePinyin ? 18 : 0));
     if (fontDpi_ != dpi || fontSize_ != preferences.fontSize || fontFace_ != preferences.font) {
         HFONT font = createUIFont(preferences.fontSize, dpi, preferences.font);
-        HFONT small = createUIFont(13, dpi, preferences.font);
+        HFONT nextSmallFont = createUIFont(13, dpi, preferences.font);
         if (font) {
             if (font_)
                 DeleteObject(font_);
             font_ = font;
         }
-        if (small) {
+        if (nextSmallFont) {
             if (smallFont_)
                 DeleteObject(smallFont_);
-            smallFont_ = small;
+            smallFont_ = nextSmallFont;
         }
         fontDpi_ = dpi;
         fontSize_ = preferences.fontSize;

@@ -129,11 +129,11 @@ bool installCustomDictionary(const std::wstring &source, const std::wstring &tar
         if (!dictionary)
             return false;
     }
-    const int count = myswy_dictionary_binary(dictionary, nullptr, 0);
-    bool valid = count > 0;
+    const int binarySize = myswy_dictionary_binary(dictionary, nullptr, 0);
+    bool valid = binarySize > 0;
     if (valid) {
-        bytes.resize(static_cast<size_t>(count));
-        valid = myswy_dictionary_binary(dictionary, bytes.data(), bytes.size()) == count;
+        bytes.resize(static_cast<size_t>(binarySize));
+        valid = myswy_dictionary_binary(dictionary, bytes.data(), bytes.size()) == binarySize;
     }
     myswy_dictionary_free(dictionary);
     if (!valid)
