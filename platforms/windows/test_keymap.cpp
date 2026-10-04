@@ -123,6 +123,10 @@ int main() {
         const HWND focus = GetFocus();
         RECT stable{};
         GetWindowRect(popup, &stable);
+        const DWORD gdiCold = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
+        // show() deliberately defers painting. Warm the persistent back buffer
+        // and GDI font linking before measuring repaint resource growth.
+        UpdateWindow(popup);
         const DWORD gdiBefore = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
         for (int i = 0; i < 150; ++i) {
             candidates.show(session, owner, RECT{100, 100, 101, 120}, false, &clicks, clicked, 1);
@@ -133,7 +137,11 @@ int main() {
         RECT after{};
         GetWindowRect(popup, &after);
         require(EqualRect(&stable, &after), "same candidates retain geometry");
-        require(GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) <= gdiBefore + 2,
+        const DWORD gdiAfter = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
+        std::printf("GDI objects: before first paint=%lu, after first paint=%lu, after 150 repaints=%lu\n",
+                    static_cast<unsigned long>(gdiCold), static_cast<unsigned long>(gdiBefore),
+                    static_cast<unsigned long>(gdiAfter));
+        require(gdiAfter <= gdiBefore,
                 "repeated paints do not leak GDI handles");
         require(SendMessageW(popup, WM_ERASEBKGND, 0, 0) == 1, "candidate erasing is suppressed");
         const LPARAM firstRow = MAKELPARAM(20, 52);
