@@ -9,7 +9,9 @@ fn type_keys(s: &mut Session, text: &str) {
 #[test]
 fn cache_reuses_queries_and_invalidates_snapshot_flags_and_capacity_budget() {
     let mut p = Profile::default();
-    p.record("nihao", "拟好");
+    for _ in 0..3 {
+        p.record("nihao", "拟好");
+    }
     let mut s = Session::new(demo_dictionary());
     s.set_profile(Arc::new(p));
     type_keys(&mut s, "nihao");
@@ -62,4 +64,27 @@ fn cache_capacity_adapts_to_reused_working_set_and_remains_bounded() {
     assert!(mixed.entries <= mixed.capacity);
     let other = Session::new(demo_dictionary());
     assert_eq!(other.history_cache_stats().hits, 0);
+}
+
+#[test]
+fn dictionary_replacement_invalidates_history_attestation() {
+    use myswy_core::Dictionary;
+    let mut p = Profile::default();
+    p.record("nihao", "拟好");
+    let mut s = Session::new(demo_dictionary());
+    s.set_profile(Arc::new(p));
+    type_keys(&mut s, "nihao");
+    assert_eq!(s.candidate(0).unwrap().text, "你好");
+    s.reset();
+    assert!(s.history_cache_stats().entries > 0);
+    s.set_dictionary(Arc::new(
+        Dictionary::from_tsv("ni'hao\t你好\t100\nni'hao\t拟好\t1\n").unwrap(),
+    ));
+    assert_eq!(s.history_cache_stats().entries, 0);
+    type_keys(&mut s, "nihao");
+    assert_eq!(
+        s.candidate(0).unwrap().text,
+        "拟好",
+        "one explicit selection of an attested word still learns promptly"
+    );
 }

@@ -1,7 +1,7 @@
 use crate::{Dictionary, LookupError, MAX_INPUT_BYTES, MAX_TEXT_BYTES};
 
-/// Unigram Viterbi baseline: 16 paths at every raw-input position. No language
-/// model, history or I/O. Each edge retains a word and an explicit input span.
+/// Bounded lexical Viterbi baseline with attested boundary constraints.
+/// Each edge retains a word and an explicit input span; no platform I/O.
 pub(crate) const BEAM: usize = 16;
 #[derive(Clone, Copy)]
 struct Path {
@@ -12,6 +12,7 @@ struct Path {
     abbreviated: bool,
     predicted: bool,
     corrected: bool,
+    unsupported: u8,
 }
 impl Default for Path {
     fn default() -> Self {
@@ -23,6 +24,7 @@ impl Default for Path {
             abbreviated: false,
             predicted: false,
             corrected: false,
+            unsupported: 0,
         }
     }
 }
@@ -34,6 +36,7 @@ pub(crate) struct Sentence {
     pinyin_len: u8,
     pub corrected: bool,
     pub exact: bool,
+    weak: bool,
 }
 impl Default for Sentence {
     fn default() -> Self {
@@ -44,6 +47,7 @@ impl Default for Sentence {
             pinyin_len: 0,
             corrected: false,
             exact: true,
+            weak: false,
         }
     }
 }
@@ -66,6 +70,7 @@ struct Pair {
     right: u32,
     bonus: f32,
     allowed: bool,
+    unsupported: bool,
 }
 impl Default for Pair {
     fn default() -> Self {
@@ -74,12 +79,13 @@ impl Default for Pair {
             right: u32::MAX,
             bonus: 0.0,
             allowed: true,
+            unsupported: false,
         }
     }
 }
 pub(crate) struct Decoder {
     paths: [[Path; BEAM]; MAX_INPUT_BYTES + 1],
-    pairs: [Pair; 32],
+    pairs: [Pair; 128],
     lengths: [u8; MAX_INPUT_BYTES + 1],
     pub sentences: [Sentence; BEAM * 2],
     pub count: usize,
@@ -88,12 +94,13 @@ pub(crate) struct Decoder {
     pub primary_abbreviated: bool,
     pub full_coverage: bool,
     pub fast_ready: bool,
+    protected_word: bool,
 }
 impl Decoder {
     pub fn new() -> Self {
         Self {
             paths: [[Path::default(); BEAM]; MAX_INPUT_BYTES + 1],
-            pairs: [Pair::default(); 32],
+            pairs: [Pair::default(); 128],
             lengths: [0; MAX_INPUT_BYTES + 1],
             sentences: [Sentence::default(); BEAM * 2],
             count: 0,
@@ -102,13 +109,14 @@ impl Decoder {
             primary_abbreviated: false,
             full_coverage: false,
             fast_ready: false,
+            protected_word: false,
         }
     }
     pub fn clear_cache(&mut self) {
         self.pairs.fill(Pair::default());
     }
     fn transition(&mut self, d: &Dictionary, left: u32, right: u32) -> Pair {
-        let at = ((left.wrapping_mul(2654435761) ^ right.wrapping_mul(2246822519)) & 31) as usize;
+        let at = ((left.wrapping_mul(2654435761) ^ right.wrapping_mul(2246822519)) & 127) as usize;
         let old = self.pairs[at];
         if old.left == left && old.right == right {
             return old;
@@ -116,22 +124,32 @@ impl Decoder {
         let a = d.entry(left).text;
         let b = d.entry(right).text;
         let bonus = crate::language::bonus(a, b);
-        // Isolated characters are not evidence of a word. Require an attested
-        // pair or an authored transition before multiplying their homophones.
-        // Phrase-sized edges still support ordinary continuous sentences.
-        let allowed = if a.chars().nth(1).is_none() && b.chars().nth(1).is_none() && bonus == 0.0 {
-            let mut text = [0u8; 8]; // two Unicode scalar values, no key-path allocation
-            text[..a.len()].copy_from_slice(a.as_bytes());
-            text[a.len()..a.len() + b.len()].copy_from_slice(b.as_bytes());
-            d.contains_text(std::str::from_utf8(&text[..a.len() + b.len()]).expect("copied UTF-8"))
-        } else {
-            true
+        let a_single = a.chars().nth(1).is_none();
+        let b_single = b.chars().nth(1).is_none();
+        let lexical = bonus > 0.0 || d.attests_boundary(a, b);
+        // A small explicit pronoun frame preserves free sentence composition.
+        // It never opens the homophone product of arbitrary single characters.
+        let pronoun = |s: &str| {
+            matches!(
+                s,
+                "我" | "你" | "他" | "她" | "它" | "我们" | "你们" | "他们" | "她们" | "它们"
+            )
         };
+        let frame = (pronoun(a) && !b_single) || (!a_single && pronoun(b));
+        let unsupported = !lexical && !frame;
+        let allowed = !unsupported || (!a_single && !b_single);
         let pair = Pair {
             left,
             right,
-            bonus,
+            bonus: if lexical {
+                bonus
+            } else if frame {
+                -2.0
+            } else {
+                -6.0
+            },
             allowed,
+            unsupported,
         };
         self.pairs[at] = pair;
         pair
@@ -146,6 +164,7 @@ impl Decoder {
         let compare = |a: &Path, b: &Path| {
             a.corrected
                 .cmp(&b.corrected)
+                .then(a.unsupported.cmp(&b.unsupported))
                 .then(a.cost.total_cmp(&b.cost))
                 .then(a.id.cmp(&b.id))
                 .then(a.next.cmp(&b.next))
@@ -168,6 +187,7 @@ impl Decoder {
     ) -> Result<bool, LookupError> {
         self.lengths.fill(0);
         self.primary_abbreviated = false;
+        self.protected_word = false;
         let size = input.len();
         if size == 0 {
             return Ok(false);
@@ -178,6 +198,23 @@ impl Decoder {
             ..Path::default()
         };
         self.lengths[size] = 1;
+        // Whole lexical matches need no sentence graph. This also avoids paying
+        // for the homophone products that would subsequently be discarded.
+        d.matches(input, 0, 1, |id, end| {
+            if end == size && d.entry(id).text.chars().nth(1).is_some() {
+                self.protected_word = true;
+                self.paths[0][0] = Path {
+                    cost: d.word_cost(id),
+                    id,
+                    next: size as u8,
+                    ..Path::default()
+                };
+                self.lengths[0] = 1;
+            }
+        })?;
+        if self.protected_word {
+            return Ok(false);
+        }
         for start in (0..size).rev() {
             if input.as_bytes()[start] == b'\'' {
                 continue;
@@ -190,7 +227,15 @@ impl Decoder {
                     } else {
                         Pair::default()
                     };
-                    if !pair.allowed {
+                    let unsupported =
+                        self.paths[end][rank].unsupported + u8::from(pair.unsupported);
+                    if !pair.allowed
+                        || unsupported > 1
+                        || (unsupported != 0
+                            && (self.paths[end][rank].corrected
+                                || self.paths[end][rank].abbreviated
+                                || self.paths[end][rank].predicted))
+                    {
                         continue;
                     }
                     let item = Path {
@@ -207,6 +252,7 @@ impl Decoder {
                         abbreviated: self.paths[end][rank].abbreviated,
                         predicted: self.paths[end][rank].predicted,
                         corrected: self.paths[end][rank].corrected,
+                        unsupported,
                     };
                     self.insert(start, item);
                 }
@@ -218,7 +264,7 @@ impl Decoder {
                     } else {
                         Pair::default()
                     };
-                    if !pair.allowed {
+                    if !pair.allowed || pair.unsupported || self.paths[end][rank].unsupported != 0 {
                         continue;
                     }
                     self.insert(
@@ -234,6 +280,7 @@ impl Decoder {
                             abbreviated: self.paths[end][rank].abbreviated,
                             predicted: self.paths[end][rank].predicted,
                             corrected: true,
+                            unsupported: 0,
                         },
                     );
                 }
@@ -255,7 +302,10 @@ impl Decoder {
                         } else {
                             Pair::default()
                         };
-                        if !pair.allowed {
+                        if !pair.allowed
+                            || pair.unsupported
+                            || self.paths[end][rank].unsupported != 0
+                        {
                             continue;
                         }
                         self.insert(
@@ -274,6 +324,7 @@ impl Decoder {
                                 abbreviated: true,
                                 predicted: self.paths[end][rank].predicted,
                                 corrected: self.paths[end][rank].corrected,
+                                unsupported: 0,
                             },
                         );
                     }
@@ -295,6 +346,7 @@ impl Decoder {
                                 abbreviated: false,
                                 predicted: true,
                                 corrected: false,
+                                unsupported: 0,
                             },
                         );
                     }
@@ -308,8 +360,26 @@ impl Decoder {
         let mut limited = false;
         let size = input.len();
         self.count = base;
+        // A complete attested word owns its input span. Do not dilute it with
+        // alternative homophone products obtained by splitting that same span.
+        if self.protected_word {
+            return false;
+        }
+        let supported_exact = self.sentences[..base].iter().any(|s| s.exact && !s.weak)
+            || self.paths[0][..self.lengths[0] as usize]
+                .iter()
+                .any(|p| p.unsupported == 0 && !p.corrected && !p.abbreviated && !p.predicted);
+        let mut weak_rendered = self.sentences[..base].iter().any(|s| s.weak);
         for initial in 0..self.lengths[0] as usize {
-            let mut sentence = Sentence::default();
+            // Unknown phrase joins are an exact-input fallback only. Once a
+            // completely witnessed parse exists, do not fill pages with them.
+            if (supported_exact || weak_rendered) && self.paths[0][initial].unsupported != 0 {
+                continue;
+            }
+            let mut sentence = Sentence {
+                weak: self.paths[0][initial].unsupported != 0,
+                ..Sentence::default()
+            };
             let mut pinyin_overflow = false;
             let (mut pos, mut rank, mut words) = (0, initial, 0);
             while pos < size {
@@ -358,6 +428,7 @@ impl Decoder {
             {
                 self.sentences[self.count] = sentence;
                 self.count += 1;
+                weak_rendered |= sentence.weak;
             }
         }
         limited

@@ -1,3 +1,12 @@
+# 当前本机 Windows 环境 · preview15
+
+沿用以下 MSVC/Rust/NSIS 环境及显式生产/七测试 target，包 revision 为 15。
+61 Rust 测试、fmt、Clippy -D warnings、MSVC C ABI、七 CTest 通过；
+边界索引只在字典初始化分配，按键路径仍零堆分配，会话 64,878 bytes。
+MYSWY_BENCH_ROUNDS=100，语料与百分位见 STATUS 和 build/bench-preview15.txt。
+完整包哈希/COM/字节一致和许可校验、正则候选/学习页截图通过，独立 fixture 不依赖个人历史。
+真实现代宿主矩阵、物理混合 DPI、新安装生命周期和远程 CI 继续单独验收。
+
 # 当前本机 Windows 环境 · preview14
 
 本批重用以下工具链及生产/七项测试 target。Rust 全工作区 53 项测试；

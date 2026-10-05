@@ -190,7 +190,7 @@ fn daily_vocabulary_composes_phrases_absent_from_the_source() {
 }
 
 #[test]
-fn sentence_order_matches_independent_exhaustive_unigram_oracle() {
+fn sentence_order_matches_independent_exhaustive_lexical_oracle() {
     let entries = [
         ("a", "阿", 100.0f64),
         ("a", "啊", 10.0),
@@ -223,13 +223,21 @@ fn sentence_order_matches_independent_exhaustive_unigram_oracle() {
             let plain = key.replace('\'', "");
             if let Some(rest) = remaining.strip_prefix(&plain) {
                 if let Some(left) = previous {
-                    // Independently enumerate only attested single-character
-                    // joins; this corpus has no authored transition links.
-                    if left.chars().count() == 1
-                        && text.chars().count() == 1
-                        && !entries.iter().any(|e| e.1 == format!("{left}{text}"))
-                    {
-                        continue;
+                    // Exhaustively check witnesses crossing every boundary that
+                    // touches a character. This fixture has no authored frames.
+                    if left.chars().count() == 1 || text.chars().count() == 1 {
+                        let a: Vec<_> = left.chars().collect();
+                        let b: Vec<_> = text.chars().collect();
+                        let mut witnessed = false;
+                        for i in 1..=a.len().min(3) {
+                            for j in 1..=b.len().min(3) {
+                                let join: String = a[a.len() - i..].iter().chain(&b[..j]).collect();
+                                witnessed |= entries.iter().any(|e| e.1 == join);
+                            }
+                        }
+                        if !witnessed {
+                            continue;
+                        }
                     }
                 }
                 enumerate(

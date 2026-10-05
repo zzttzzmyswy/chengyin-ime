@@ -442,6 +442,37 @@ int wmain(int argc, wchar_t **argv) {
         }
     }
     myswy_session_free(session);
+    // One-off wrong learned phrase must not displace the complete technical term.
+    dictionary = myswy_dictionary_new_binary(dailyBytes, SizeofResource(myswy::module, dailyResource));
+    require(dictionary != nullptr, "embedded regex fixture dictionary");
+    session = myswy_session_new_with_dictionary(dictionary);
+    myswy_dictionary_free(dictionary);
+    auto history = myswy_profile_new(nullptr, 0);
+    constexpr char regexRaw[] = "zhengzebiaodashi";
+    constexpr char wrongRegex[] = "正则表达是";
+    require(session && history && myswy_profile_record(history,
+        reinterpret_cast<const uint8_t *>(regexRaw), sizeof(regexRaw) - 1,
+        reinterpret_cast<const uint8_t *>(wrongRegex), sizeof(wrongRegex) - 1) == 0,
+        "synthetic one-off regex history");
+    require(myswy_session_set_profile(session, history) == 0 && myswy_session_configure(session, 5, 3) == 0
+        && myswy_session_configure_matching(session, MYSWY_MATCHING_MASK) == 0, "regex history and matching fixture");
+    myswy_profile_free(history);
+    for (const char *c = regexRaw; *c; ++c) myswy_session_process(session, static_cast<uint32_t>(*c), 0);
+    uint8_t firstRegex[257]{};
+    require(myswy_session_text(session, MYSWY_TEXT_CANDIDATE, 0, firstRegex, sizeof(firstRegex)) > 0
+        && std::strcmp(reinterpret_cast<const char *>(firstRegex), "正则表达式") == 0,
+        "technical term wins despite one wrong historical selection");
+    require(myswy_session_candidate_count(session) == 1, "no split homophone alternatives for complete regex term");
+    {
+        myswy::CandidateWindow candidates;
+        myswy::Preferences prefs; prefs.candidatePinyin = true;
+        for (int layout = 0; layout < 2; ++layout) {
+            prefs.layout = layout;
+            candidates.show(session, owner, RECT{100, 150, 101, 170}, false, nullptr, nullptr, 300, prefs, true);
+            capture(candidates.handle(), layout == 0 ? L"candidate-regex-vertical" : L"candidate-regex-horizontal");
+        }
+    }
+    myswy_session_free(session);
     DestroyWindow(owner);
     inspectTestpad();
     if (richEdit)

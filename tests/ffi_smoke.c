@@ -21,6 +21,9 @@ static void expect_text(MyswySession *s, uint32_t field, size_t index, const cha
     assert(myswy_session_text(s, field, index, buffer, (size_t)length - 1) == length);
     for (size_t i = 0; i < sizeof(buffer); ++i) { assert(buffer[i] == 0x55); }
     assert(myswy_session_text(s, field, index, buffer, sizeof(buffer)) == length);
+    if (strcmp((char *)buffer, text) != 0) {
+        fprintf(stderr, "text mismatch: field=%u index=%zu expected=%s actual=%s\n", field, index, text, buffer);
+    }
     assert(strcmp((char *)buffer, text) == 0);
 }
 
@@ -150,6 +153,14 @@ int main(void) {
     assert(myswy_profile_record_selection(profile, (const uint8_t *)"shi", 3, (const uint8_t *)"是", 3, 1u << 31) == MYSWY_INVALID);
     assert(myswy_profile_count(profile) == 0);
     assert(myswy_profile_record(profile, (const uint8_t *)"nihao", 5, (const uint8_t *)"拟好", 6) == 0);
+    s = myswy_session_new(); assert(s);
+    assert(myswy_session_set_profile(s, profile) == 0);
+    type_ascii(s, "nihao");
+    expect_text(s, MYSWY_TEXT_CANDIDATE, 0, "你好"); /* Unknown one-off preference is probationary. */
+    myswy_session_free(s);
+    for (int i = 0; i < 2; ++i) {
+        assert(myswy_profile_record(profile, (const uint8_t *)"nihao", 5, (const uint8_t *)"拟好", 6) == 0);
+    }
     assert(myswy_profile_record(profile, (const uint8_t *)"nihao", 5, (const uint8_t *)"ASCII", 5) == MYSWY_INVALID);
     int32_t profile_size = myswy_profile_binary(profile, NULL, 0); assert(profile_size > 20);
     uint8_t *profile_bytes = malloc((size_t)profile_size); assert(profile_bytes);

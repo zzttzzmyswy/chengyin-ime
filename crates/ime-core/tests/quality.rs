@@ -15,6 +15,218 @@ fn replay(dictionary: Arc<Dictionary>, input: &str, options: u32) -> Session {
     session
 }
 
+fn complete_rows(session: &mut Session, raw: &str) -> Vec<(String, u32)> {
+    let mut rows = Vec::new();
+    loop {
+        for i in 0..session.candidate_count() {
+            if session.candidate_consumed(i) == Some(raw.len()) {
+                let c = session.candidate(i).unwrap();
+                rows.push((c.text.to_owned(), c.frequency));
+            }
+        }
+        if !session.has_next_page() {
+            break;
+        }
+        assert!(rows.len() < 4096);
+        session.process(Key::PageDown, Modifiers::default());
+    }
+    rows
+}
+
+#[test]
+fn complete_terms_are_not_diluted_by_split_homophone_sentences() {
+    let dictionary =
+        Arc::new(Dictionary::from_binary(include_bytes!("../../../data/daily.mswydict")).unwrap());
+    for flags in [
+        0,
+        PHONETIC_MASK,
+        SWAP | OMIT | NEIGHBOR | REPEAT,
+        OPTIONS_MASK,
+    ] {
+        for (raw, wanted) in [
+            ("zhengzebiaodashi", "正则表达式"),
+            ("zheng'ze'biao'da'shi", "正则表达式"),
+            ("rengongzhineng", "人工智能"),
+            ("caozuoxitong", "操作系统"),
+        ] {
+            let mut s = replay(Arc::clone(&dictionary), raw, flags);
+            assert_eq!(s.candidate(0).unwrap().text, wanted, "{raw}, {flags}");
+            let rows = complete_rows(&mut s, raw);
+            assert!(
+                rows.iter().all(|(_, frequency)| *frequency > 0),
+                "{raw}: synthesized term alternatives {rows:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn supported_long_compositions_suppress_weak_alternative_phrase_joins() {
+    let dictionary =
+        Arc::new(Dictionary::from_binary(include_bytes!("../../../data/daily.mswydict")).unwrap());
+    for flags in [0, OPTIONS_MASK] {
+        for (raw, wanted) in [
+            ("jisuanjikexue", "计算机科学"),
+            ("zhonghuarenmingongheguo", "中华人民共和国"),
+            ("woxihuanzhongwen", "我喜欢中文"),
+            ("womenmingtianjian", "我们明天见"),
+        ] {
+            let mut s = replay(Arc::clone(&dictionary), raw, flags);
+            assert_eq!(s.candidate(0).unwrap().text, wanted, "{raw}, {flags}");
+            let rows = complete_rows(&mut s, raw);
+            assert!(
+                !rows.iter().any(|(text, _)| text == "计算计科学"),
+                "{rows:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn corrected_technical_terms_remain_available_with_letter_marks() {
+    let dictionary =
+        Arc::new(Dictionary::from_binary(include_bytes!("../../../data/daily.mswydict")).unwrap());
+    for (raw, flags) in [("zhengzebiaodahsi", SWAP), ("zengzebiaodasi", 1 | 1 << 2)] {
+        let s = replay(Arc::clone(&dictionary), raw, flags);
+        let i = (0..s.candidate_count())
+            .find(|&i| s.candidate(i).unwrap().text == "正则表达式")
+            .expect("corrected technical term");
+        assert!(s.candidate_marks(i).unwrap().iter().any(|&n| n != 0));
+    }
+}
+
+#[test]
+fn unknown_phrase_joins_offer_one_exact_fallback_instead_of_homophone_products() {
+    let dictionary = Arc::new(
+        Dictionary::from_tsv(
+            "mo'xing\t模型\t100\nmo'xing\t魔性\t10\nshi'yan\t实验\t100\nshi'yan\t誓言\t10\n",
+        )
+        .unwrap(),
+    );
+    for flags in [0, OPTIONS_MASK] {
+        let mut s = replay(Arc::clone(&dictionary), "moxingshiyan", flags);
+        let rows = complete_rows(&mut s, "moxingshiyan");
+        assert_eq!(
+            rows,
+            [("模型实验".to_owned(), 0)],
+            "only the strongest exact fallback survives: {flags}"
+        );
+    }
+}
+
+#[test]
+fn one_off_unknown_history_cannot_override_terms_but_repeated_intent_can() {
+    let dictionary =
+        Arc::new(Dictionary::from_binary(include_bytes!("../../../data/daily.mswydict")).unwrap());
+    for flags in [0, OPTIONS_MASK] {
+        for count in [1, 2, 3] {
+            let mut p = Profile::default();
+            for _ in 0..count {
+                p.record("zhengzebiaodashi", "正则表达是");
+            }
+            let bytes = p.to_binary();
+            let history = Arc::new(Profile::from_binary(&bytes).unwrap());
+            let mut s = Session::new(Arc::clone(&dictionary));
+            s.set_profile(Arc::clone(&history));
+            s.configure_matching(flags);
+            for c in "zhengzebiaodashi".chars() {
+                s.process(Key::Character(c), Modifiers::default());
+            }
+            assert_eq!(
+                s.candidate(0).unwrap().text,
+                if count < 3 {
+                    "正则表达式"
+                } else {
+                    "正则表达是"
+                }
+            );
+            assert_eq!(
+                history.to_binary(),
+                bytes,
+                "query must not delete probationary history"
+            );
+        }
+    }
+}
+
+#[test]
+fn boundaries_reject_unsupported_characters_and_keep_attested_sentence_frames() {
+    // No whole-word entry for the sentence: its joining evidence is lexical.
+    let source = "ruan'jian\t软件\t100\nshe'ji\t设计\t100\nwan'cheng\t完成\t100\nshe\t设\t99999\nshe\t社\t99998\nji\t计\t99999\nji\t集\t99998\njian'she\t建设\t1\nshe'ji'wan'cheng\t设计完成\t1\n";
+    let dictionary = Arc::new(Dictionary::from_tsv(source).unwrap());
+    for flags in [0, OPTIONS_MASK] {
+        let mut s = replay(Arc::clone(&dictionary), "ruanjiansheji", flags);
+        assert_eq!(s.candidate(0).unwrap().text, "软件设计");
+        let rows = complete_rows(&mut s, "ruanjiansheji");
+        assert!(
+            !rows
+                .iter()
+                .any(|(text, _)| text.contains('社') || text.ends_with('集')),
+            "{rows:?}"
+        );
+    }
+    // Crossing witnesses cannot be fabricated from a word wholly on one side.
+    let d = Arc::new(Dictionary::from_tsv("ruan'jian\t软件\t100\nshe\t设\t99999\n").unwrap());
+    let mut s = replay(d, "ruanjianshe", OPTIONS_MASK);
+    assert!(!complete_rows(&mut s, "ruanjianshe")
+        .iter()
+        .any(|(text, _)| text == "软件设"));
+}
+
+#[test]
+fn unobserved_legacy_history_and_poor_recent_hits_do_not_receive_promotion() {
+    fn crc32(bytes: &[u8]) -> u32 {
+        let mut crc = !0u32;
+        for &b in bytes {
+            crc ^= u32::from(b);
+            for _ in 0..8 {
+                crc = (crc >> 1) ^ if crc & 1 != 0 { 0xedb88320 } else { 0 };
+            }
+        }
+        !crc
+    }
+    let key = "zhengzebiaodashi";
+    let text = "正则表达是";
+    let mut legacy = b"MSWYUSR1".to_vec();
+    for n in [1u32, 1, 0] {
+        legacy.extend(n.to_le_bytes());
+    }
+    legacy.extend((key.len() as u16).to_le_bytes());
+    legacy.extend((text.len() as u16).to_le_bytes());
+    for n in [1u32, 1] {
+        legacy.extend(n.to_le_bytes());
+    }
+    legacy.extend(key.as_bytes());
+    legacy.extend(text.as_bytes());
+    let crc = crc32(&legacy[20..]);
+    legacy[16..20].copy_from_slice(&crc.to_le_bytes());
+    let dictionary =
+        Arc::new(Dictionary::from_binary(include_bytes!("../../../data/daily.mswydict")).unwrap());
+    let mut p = Profile::from_binary(&legacy).unwrap();
+    for count in [0, 2] {
+        for _ in 0..count {
+            p.record(key, text);
+        }
+        if count == 2 {
+            for _ in 0..8 {
+                p.record_selection(key, "正则表达式", 0);
+            }
+        }
+        let mut s = Session::new(Arc::clone(&dictionary));
+        s.set_profile(Arc::new(p.clone()));
+        s.configure_matching(OPTIONS_MASK);
+        for c in key.chars() {
+            s.process(Key::Character(c), Modifiers::default());
+        }
+        assert_eq!(s.candidate(0).unwrap().text, "正则表达式");
+        assert_eq!(
+            p.entry_count(),
+            if count == 0 { 1 } else { 2 },
+            "demotion does not prematurely forget data"
+        );
+    }
+}
+
 #[test]
 fn daily_mapping_words_precede_and_exclude_unattested_character_pairs() {
     let dictionary =

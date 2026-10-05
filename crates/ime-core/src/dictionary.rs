@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
 
 pub const MAX_INPUT_BYTES: usize = 63;
@@ -100,6 +100,7 @@ pub struct Dictionary {
     total_frequency: f64,
     shortcuts: Vec<u32>,
     text_index: Vec<u32>,
+    boundary_words: HashSet<u128>,
     max_letters: usize,
 }
 impl Dictionary {
@@ -174,6 +175,7 @@ impl Dictionary {
             total_frequency: 0.0,
             shortcuts: Vec::new(),
             text_index: Vec::new(),
+            boundary_words: HashSet::new(),
             max_letters: 0,
         };
         result
@@ -263,6 +265,23 @@ impl Dictionary {
         text_index
             .sort_unstable_by(|&a, &b| self.entry(a).text.cmp(self.entry(b).text).then(a.cmp(&b)));
         self.text_index = text_index;
+        // Collision-free encoding of up to six Unicode scalars, including their
+        // length (each digit is scalar+1). This immutable derived index avoids
+        // repeated UTF-8 binary searches for every decoder boundary.
+        self.boundary_words = (0..self.entries.len() as u32)
+            .filter_map(|id| {
+                let mut code = 0u128;
+                let mut count = 0;
+                for c in self.entry(id).text.chars() {
+                    count += 1;
+                    if count > 6 {
+                        return None;
+                    }
+                    code = (code << 21) | u128::from(u32::from(c) + 1);
+                }
+                (count >= 2).then_some(code)
+            })
+            .collect();
         self.max_letters = (0..self.entries.len() as u32)
             .map(|id| {
                 self.entry(id)
@@ -498,6 +517,7 @@ impl Dictionary {
             + self.pool.capacity()
             + self.shortcuts.capacity() * 4
             + self.text_index.capacity() * 4
+            + (self.boundary_words.capacity() * 8 / 7 + 1) * 17
     }
     pub(crate) fn entry(&self, id: u32) -> Candidate<'_> {
         let e = self.entries[id as usize];
@@ -507,13 +527,32 @@ impl Dictionary {
             frequency: e.frequency,
         }
     }
-    pub(crate) fn contains_text(&self, text: &str) -> bool {
-        let at = self
+    /// Evidence for learning promotion must attest both text and pronunciation.
+    pub(crate) fn attests(&self, text: &str, input: &str, flags: u32) -> bool {
+        let start = self
             .text_index
             .partition_point(|&id| self.entry(id).text < text);
-        self.text_index
-            .get(at)
-            .is_some_and(|&id| self.entry(id).text == text)
+        self.text_index[start..]
+            .iter()
+            .take_while(|&&id| self.entry(id).text == text)
+            .any(|&id| {
+                crate::fuzzy::complete_annotations(input, self.entry(id).pinyin, flags).is_some()
+            })
+    }
+    /// A lexical witness must cross the boundary, not merely occur on one side.
+    pub(crate) fn attests_boundary(&self, left: &str, right: &str) -> bool {
+        for (start, _) in left.char_indices().rev().take(3) {
+            let mut code = left[start..]
+                .chars()
+                .fold(0u128, |v, c| (v << 21) | u128::from(u32::from(c) + 1));
+            for c in right.chars().take(3) {
+                code = (code << 21) | u128::from(u32::from(c) + 1);
+                if self.boundary_words.contains(&code) {
+                    return true;
+                }
+            }
+        }
+        false
     }
     pub(crate) fn word_cost(&self, id: u32) -> f32 {
         self.entries[id as usize].cost
@@ -919,6 +958,7 @@ impl Dictionary {
             total_frequency: 0.0,
             shortcuts: Vec::new(),
             text_index: Vec::new(),
+            boundary_words: HashSet::new(),
             max_letters: 0,
         };
         let half = |at: usize| u16::from_le_bytes(bytes[at..at + 2].try_into().unwrap());

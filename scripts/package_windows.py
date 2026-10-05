@@ -14,7 +14,7 @@ import tomllib
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-REVISION = 14
+REVISION = 15
 BINARIES = {"myswy_tsf.dll": True, "myswy_probe.exe": False, "myswy_settings.exe": False}
 
 

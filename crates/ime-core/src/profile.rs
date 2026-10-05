@@ -149,6 +149,13 @@ impl Preference {
     }
 }
 impl Profile {
+    /// Unattested text is probationary until selected repeatedly. Unknown legacy
+    /// observations are neutral; sufficiently observed poor habits lose promotion.
+    pub(crate) fn reliable(&self, row: &Preference, attested: bool) -> bool {
+        let (hits, trials) = row.recent(self.sequence);
+        (attested || row.count >= 3)
+            && !(trials >= 8 && (u32::from(hits) + 1) * 2 < u32::from(trials) + 2)
+    }
     pub fn entry_count(&self) -> usize {
         self.rows.len()
     }

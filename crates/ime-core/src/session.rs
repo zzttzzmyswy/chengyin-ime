@@ -326,6 +326,7 @@ impl Session {
         self.context.clear();
         self.recent_len = 0;
         self.decoder.clear_cache();
+        self.history_cache.invalidate();
         self.dictionary = dictionary;
         true
     }
@@ -881,6 +882,15 @@ impl Session {
                     if (!accurate && !matches)
                         || self.completed.len() + row.text.len() > MAX_TEXT_BYTES
                     {
+                        continue;
+                    }
+                    if !self.profile.reliable(
+                        row,
+                        row.count < 3
+                            && self
+                                .dictionary
+                                .attests(&row.text, &row.key, self.matching_options),
+                    ) {
                         continue;
                     }
                     let lane = usize::from(row.text.chars().nth(1).is_none());

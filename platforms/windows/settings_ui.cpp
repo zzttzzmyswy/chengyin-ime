@@ -361,7 +361,7 @@ void Settings::buildPage() {
         begin(L"选词学习");
         checkbox(501, L"根据选词习惯排序", draft_.learning);
         paragraph(
-            L"成功提交中文后记录拼写、选词、频次与顺序。整词、单字独立排序，准确和模糊历史各最多两项，数据只保存在本机。\n密码和私密输入不参与学习；关闭此项会停止记录和个性化排序。");
+            L"成功提交中文后记录拼写、选词、频次与顺序。整词、单字独立排序，准确和模糊历史各最多两项，数据只保存在本机。\n词库确认的词可立即学习；未知组合需选中三次才优先显示，近期低命中历史会取消优先。\n密码和私密输入不参与学习；关闭此项会停止记录和个性化排序。");
         end();
         begin(L"学习数据");
         auto *profile = loadProfile(userFile(L"learning.profile"));
@@ -386,7 +386,7 @@ void Settings::buildPage() {
     case 6:
         begin(L"澄音输入法");
         paragraph(
-            L"版本：0.1.0-preview14 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
+            L"版本：0.1.0-preview15 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
         paragraph(
             L"代码开源协议：MIT License · Copyright 2026 Myswy IM contributors\n允许使用、修改和分发，须保留版权和许可声明；软件按现状提供。词库及运行库有各自许可，随安装包提供。");
         buttons(605, L"开源协议", 606, L"仓库链接", 607, L"发行说明");
@@ -645,7 +645,7 @@ std::wstring Settings::diagnostics() {
     LSTATUS status = RegGetValueW(HKEY_LOCAL_MACHINE,
                                   L"Software\\Classes\\CLSID\\{65C32A54-219A-4F0A-B44C-B963D7BA532F}\\InprocServer32", nullptr, RRF_RT_REG_SZ,
                                   nullptr, registered, &size);
-    text << L"澄音 0.1.0-preview14\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
+    text << L"澄音 0.1.0-preview15\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
          (status == ERROR_SUCCESS ? registered : L"not registered") << L"\r\nDPI: " << dpi_ << L"\r\nFont: " <<
          draft_.font << L" / " << draft_.fontSize << L"\r\nPage size: " << draft_.pageSize << L"\r\nLearning: " <<
          draft_.learning << L"\r\nAssociation: " << draft_.associations << L"\r\nCaret fallback: " <<
@@ -775,7 +775,9 @@ void Settings::command(int id, int event) {
         ShellExecuteW(window_, L"open", kRepository, nullptr, nullptr, SW_SHOWNORMAL); return;
     }
     if (id == 607) {
-        MessageBoxW(window_, L"0.1.0-preview14 · 2026-10-05\n\n"
+        MessageBoxW(window_, L"0.1.0-preview15 · 2026-10-05\n\n"
+                    L"• 完整词条优先，过滤长拼音无搭配依据的同音拼接。\n"
+                    L"• 未知组合学习三次后才提权，近期低命中历史提前取消提权。\n"
                     L"• 学习上限扩至 8,192，增加动态查询缓存和按近期命中率遗忘。\n"
                     L"• 旧学习备份可导入，新备份保存命中统计。\n"
                     L"• 修复模糊音与纠错时无依据的单字拼接，短词优先查询完整词库词。\n"
