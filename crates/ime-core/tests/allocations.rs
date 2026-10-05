@@ -58,6 +58,10 @@ fn initialized_key_path_does_not_allocate() {
         "yingshe",
         "yinshe",
         "yin'she",
+        "ssdd",
+        "s's'd'd",
+        "zgrm",
+        "zhrm",
     ] {
         for c in raw.chars() {
             real.process(Key::Character(c), Modifiers::default());

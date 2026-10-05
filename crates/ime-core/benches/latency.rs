@@ -77,6 +77,33 @@ fn main() {
     corrected_samples.sort_unstable();
     let n = corrected_samples.len();
     println!("all matching flags, 6 inputs, per key + all visible annotations: n={n} p50={}ns p95={}ns p99={}ns max={}ns",corrected_samples[n/2],corrected_samples[n*95/100],corrected_samples[n*99/100],corrected_samples[n-1]);
+    let mut initials_samples = Vec::new();
+    let mut initials_final_samples = Vec::new();
+    for _ in 0..rounds {
+        for spelling in ["ssdd", "zgrm", "zhrm", "zg", "zzbds", "rmyh"] {
+            real.reset();
+            for (at, c) in spelling.chars().enumerate() {
+                let start = Instant::now();
+                black_box(real.process(Key::Character(c), Modifiers::default()));
+                for i in 0..real.candidate_count() {
+                    black_box(real.candidate_marks(i));
+                }
+                let elapsed = start.elapsed().as_nanos();
+                initials_samples.push(elapsed);
+                if at + 1 == spelling.len() {
+                    initials_final_samples.push(elapsed);
+                }
+            }
+        }
+    }
+    for (scope, samples) in [
+        ("all keys", &mut initials_samples),
+        ("final key", &mut initials_final_samples),
+    ] {
+        samples.sort_unstable();
+        let n = samples.len();
+        println!("all matching flags, 6 initial-head inputs, {scope} + visible annotations: n={n} p50={}ns p95={}ns p99={}ns max={}ns",samples[n/2],samples[n*95/100],samples[n*99/100],samples[n-1]);
+    }
     let mut mapping_samples = Vec::new();
     for _ in 0..rounds {
         for spelling in ["yingshe", "yinshe", "yignshe"] {

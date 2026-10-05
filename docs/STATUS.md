@@ -1,5 +1,33 @@
 # 项目状态
 
+## 最新：preview17 完整声母缩写优先 · 2026-10-05
+
+任务见 [preview17 清单](WINDOWS_PREVIEW17_TASKLIST.md)，新分支 `codex/initials-word-priority`。
+修复开启全部模糊音/纠错后 `ssdd` 首页被“舍得、杀得”等较少字候选占据的问题。
+共享不可变首字母索引优先完整的一字一个声母匹配，`ssdd` 首选“世世代代”，
+`zgrm` 首选“中国人民”，`zhrm` 首选四字的“走火入魔”。有完整同字数词条时仅显示对应词语和
+最多两项对应字数的准确历史；没有才走既有较少字、纠错、组句回退。全拼和前缀选择保持原行为。
+完整索引避免旧有界首拼搜索提前裁掉低频词，完整同音词分页；正常缩写不标为错拼。
+
+**73 项 Rust**、fmt、Clippy -D warnings、MSVC /W4 /WX C ABI、**7/7 原生 CTest（25.91 s）**通过。
+新增 6 项回归覆盖 11 单独模糊音规则、四类独立纠错及合并规则、137 同音词分页、历史上限/短词过滤、
+缓存、编辑、词库替换、分隔符、长规范拼音安全及 2/3/4/5/40 字输入；初始化后路径仍零按键分配。
+会话 inline+预留 **64,902 bytes** <64 KiB，共享词库堆估算 **13,209,127 bytes**；单次加载 86.957 ms。
+100 轮、87540 条真实词库、全规则六个声母缩写的全部逐键/可见标记 P50/P95/P99 为
+**1.3/217.8/2260.9 µs**；只计完整匹配的最后一键为 **0.9/1.2/2.3 µs**，不可代替整串或 UI 延迟。
+Win11 build 26200、Ryzen 9 9950X 16C/32T、Rust 1.99 MSVC release，详见 [性能口径](PERFORMANCE.md)。
+
+原生生产词库的横/纵候选窗口及 ABI 选词上屏检查通过，截图 build/ui-preview17/。
+交付：build/packages/chengyin-windows-x64-0.1.0-preview17-msvc.exe，**4353979 bytes**；
+SHA-256 **71b82e45dcf68750d8a095a4ce64407646a055a04ffe7082ef58259e5a610173**。
+7-Zip、完整负载/COM、最终三二进制逐字节一致与 21 项许可 ZIP CRC 通过。
+证据：build/tests-preview17.txt、initials-test-preview17.txt、clippy-preview17.txt、abi-test-preview17.txt、
+native-test-preview17.txt、bench-preview17.txt、ui-test-preview17.txt、package-preview17.txt、delivery-preview17.json。
+未修改个人安装、设置、学习；未运行新远程 CI、公开 Release 或安装生命周期。
+下一步：安装 preview17 后复验真实宿主的首拼输入及前缀上屏，物理混合 DPI 和安装生命周期继续独立验收。
+
+## 已结项阶段：preview8–16
+
 **2026-10-05：Windows preview8–16 开发阶段已结束。** 整理、分支合入及交付清单见
 [阶段结项记录](WINDOWS_PHASE_WRAPUP.md)。后续需求另起开发分支，未验收范围保留在记录中。
 

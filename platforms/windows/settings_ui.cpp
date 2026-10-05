@@ -386,7 +386,7 @@ void Settings::buildPage() {
     case 6:
         begin(L"澄音输入法");
         paragraph(
-            L"版本：0.1.0-preview16 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
+            L"版本：0.1.0-preview17 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
         paragraph(
             L"代码开源协议：MIT License · Copyright 2026 Myswy IM contributors\n允许使用、修改和分发，须保留版权和许可声明；软件按现状提供。词库及运行库有各自许可，随安装包提供。");
         buttons(605, L"开源协议", 606, L"仓库链接", 607, L"发行说明");
@@ -645,7 +645,7 @@ std::wstring Settings::diagnostics() {
     LSTATUS status = RegGetValueW(HKEY_LOCAL_MACHINE,
                                   L"Software\\Classes\\CLSID\\{65C32A54-219A-4F0A-B44C-B963D7BA532F}\\InprocServer32", nullptr, RRF_RT_REG_SZ,
                                   nullptr, registered, &size);
-    text << L"澄音 0.1.0-preview16\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
+    text << L"澄音 0.1.0-preview17\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
          (status == ERROR_SUCCESS ? registered : L"not registered") << L"\r\nDPI: " << dpi_ << L"\r\nFont: " <<
          draft_.font << L" / " << draft_.fontSize << L"\r\nPage size: " << draft_.pageSize << L"\r\nLearning: " <<
          draft_.learning << L"\r\nAssociation: " << draft_.associations << L"\r\nCaret fallback: " <<
@@ -775,7 +775,9 @@ void Settings::command(int id, int event) {
         ShellExecuteW(window_, L"open", kRepository, nullptr, nullptr, SW_SHOWNORMAL); return;
     }
     if (id == 607) {
-        MessageBoxW(window_, L"0.1.0-preview16 · 2026-10-05\n\n"
+        MessageBoxW(window_, L"0.1.0-preview17 · 2026-10-05\n\n"
+                    L"• 完整声母缩写先匹配同字数词条，找不到时再尝试较少字或纠错方案。\n"
+                    L"• 正常缩写展开不标为错拼；四字词完整分页，最多两项准确历史提权。\n"
                     L"• 新增从开头选择词组或单字：所选部分立即上屏，剩余拼音重新匹配。\n"
                     L"• 整词、整句保持优先；取消和局部编辑仅影响剩余拼音。\n"
                     L"• 完整词条优先，过滤长拼音无搭配依据的同音拼接。\n"

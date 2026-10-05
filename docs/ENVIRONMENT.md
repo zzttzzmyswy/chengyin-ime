@@ -1,6 +1,6 @@
 # 开发环境与复现
 
-2026-10-05。本阶段最终交付为 Windows x64 preview16；67 项 Rust 测试、C ABI 和七项原生 CTest 已通过。
+2026-10-05。最新交付为 Windows x64 preview17（完整声母缩写优先）；73 项 Rust 测试、C ABI 和七项原生 CTest 已通过。
 本机为 Windows 11 build 26200 / Ryzen 9 9950X 16C/32T，当前构建环境：
 
 - VS 2022 Build Tools 17.14.41，MSVC 19.44.35229 / 14.44.35207；SDK 10.0.26100.0。
@@ -21,8 +21,8 @@ ctest --test-dir build/windows-msvc -C Release --output-on-failure
 python scripts/package_windows.py --build-dir build/windows-msvc --toolchain msvc --makensis build/nsis-amd64/makensis.exe --nsis-notice packaging/windows/NSIS-LICENSE.txt
 ```
 
-临时脚本、旧安装包和旧截图已归档到忽略的 build/archive/，最新安装包及 preview16 证据仍保留。
-NSIS AMD64 与 portable 工具目录、最终 Rust release 和 Windows 原生构建目录保留，debug 缓存已由 cargo clean --profile dev 清理，可重新生成。
+临时脚本、旧安装包和旧截图已归档到忽略的 build/archive/，最新安装包及 preview16/17 证据仍保留。
+NSIS AMD64 与 portable 工具目录、最终 Rust release 和 Windows 原生构建目录保留，preview16 结项时 debug 缓存由 cargo clean --profile dev 清理，preview17 已重新生成。
 windows_desktop_test 是可选的开发者桌面驱动，仅显式指定该 target 时构建；不随默认 ALL 或安装包交付。
 核心复查：cargo fmt --all -- --check；cargo clippy --workspace --all-targets --locked -- -D warnings；cargo test --workspace --locked。
 

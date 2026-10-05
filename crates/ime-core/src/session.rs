@@ -131,6 +131,9 @@ pub struct Session {
     recalled_index: usize,
     word_line: bool,
     character_line: bool,
+    initials_index: u32,
+    initials_end: u32,
+    initials_count: u8,
 }
 impl Session {
     pub fn new(dictionary: Arc<Dictionary>) -> Self {
@@ -176,6 +179,9 @@ impl Session {
             recalled_index: 0,
             word_line: false,
             character_line: false,
+            initials_index: 0,
+            initials_end: 0,
+            initials_count: 0,
         }
     }
     pub fn preedit(&self) -> &str {
@@ -339,6 +345,7 @@ impl Session {
         let candidate = self.candidate(index)?;
         let item = self.results[self.page * self.page_size + index];
         if item.association()
+            || self.initials_count != 0
             || self.matching_options == 0
             || (item.sentence() && !self.decoder.sentences[item.id() as usize].corrected)
         {
@@ -417,6 +424,7 @@ impl Session {
         self.boundary_count = 0;
         self.exhausted = true;
         self.budget_limited = false;
+        self.initials_count = 0;
     }
     pub fn reset(&mut self) {
         self.clear_composition();
@@ -427,6 +435,36 @@ impl Session {
         self.decoder.clear_cache();
     }
     fn next_result(&mut self) -> Option<ResultRef> {
+        if self.initials_count != 0 {
+            let size = (self.raw.len() - self.offset) as u8;
+            if self.matching_options != 0 && self.recalled_index < self.exact_count[0] {
+                let id = self.exact_history[self.recalled_index];
+                self.recalled_index += 1;
+                return Some(ResultRef::new(
+                    LEARNED | id,
+                    size,
+                    false,
+                    false,
+                    EXACT_HISTORY,
+                ));
+            }
+            if self.initials_index == self.initials_end {
+                return None;
+            }
+            let id = self.dictionary.initials_word(self.initials_index);
+            self.initials_index += 1;
+            return Some(ResultRef::new(
+                id,
+                size,
+                false,
+                false,
+                if self.matching_options == 0 {
+                    EXACT_WORD
+                } else {
+                    MATCHED_WORD
+                },
+            ));
+        }
         if self.matching_options != 0 {
             return self.next_matched_result();
         }
@@ -901,32 +939,44 @@ impl Session {
         }
     }
     fn refresh(&mut self) {
+        (self.initials_index, self.initials_end, self.initials_count) = self
+            .dictionary
+            .initials_range(&self.raw[self.offset..])
+            .unwrap_or((0, 0, 0));
         self.cursor
             .reset(&self.dictionary, &self.raw[self.offset..])
             .expect("validated input");
         self.lexical_matches = self.cursor.has_matches();
-        match self.decoder.decode(
-            &self.dictionary,
-            &self.raw[self.offset..],
-            if self.completed.is_empty() {
-                &self.context
-            } else {
-                &self.completed
-            },
-            self.matching_options,
-        ) {
-            Err(_) => {
-                // Full-input trie validation already passed; an unusually ambiguous
-                // suffix only limits sentence suggestions, without corrupting input.
-                self.decoder.count = 0;
-                self.decoder.segment_count = 0;
-                self.budget_limited = true;
+        if self.initials_count != 0 {
+            self.decoder.count = 0;
+            self.decoder.segment_count = 0;
+            self.budget_limited = false;
+        } else {
+            match self.decoder.decode(
+                &self.dictionary,
+                &self.raw[self.offset..],
+                if self.completed.is_empty() {
+                    &self.context
+                } else {
+                    &self.completed
+                },
+                self.matching_options,
+            ) {
+                Err(_) => {
+                    // Full-input trie validation already passed; an unusually ambiguous
+                    // suffix only limits sentence suggestions, without corrupting input.
+                    self.decoder.count = 0;
+                    self.decoder.segment_count = 0;
+                    self.budget_limited = true;
+                }
+                Ok(limited) => self.budget_limited = limited,
             }
-            Ok(limited) => self.budget_limited = limited,
         }
         self.prefix_end = 0;
         self.prefix_ends = 0;
-        if self.incremental && crate::syllables::count_spelling(&self.raw[self.offset..]) != Some(1)
+        if self.initials_count == 0
+            && self.incremental
+            && crate::syllables::count_spelling(&self.raw[self.offset..]) != Some(1)
         {
             let input = &self.raw[self.offset..];
             self.budget_limited |= self
@@ -975,6 +1025,11 @@ impl Session {
                 for id in range {
                     let row = &self.profile.rows[id];
                     let accurate = row.key.as_ref() == &self.raw[self.offset..];
+                    if self.initials_count != 0
+                        && (!accurate || row.text.chars().count() != self.initials_count as usize)
+                    {
+                        continue;
+                    }
                     if row.key.as_ref() != previous {
                         previous = &row.key;
                         matches = !accurate

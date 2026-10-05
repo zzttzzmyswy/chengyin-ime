@@ -68,6 +68,13 @@ struct Edge {
     label: u8,
     target: u32,
 }
+#[derive(Debug)]
+struct InitialGroup {
+    key_start: u32,
+    word_start: u32,
+    word_len: u32,
+    key_len: u8,
+}
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Candidates {
     ids: [u32; MAX_CANDIDATES],
@@ -102,8 +109,96 @@ pub struct Dictionary {
     text_index: Vec<u32>,
     boundary_words: HashSet<u128>,
     max_letters: usize,
+    initials_keys: String,
+    initials_groups: Vec<InitialGroup>,
+    initials_words: Vec<u32>,
 }
 impl Dictionary {
+    // Immutable, complete terminal groups for one-letter-per-character queries.
+    // Unlike the bounded ambiguous trie search, this cannot discard rare words
+    // before the session sees them. The serialized dictionary remains unchanged.
+    fn build_initials(&mut self) {
+        let mut groups: BTreeMap<String, Vec<u32>> = BTreeMap::new();
+        for id in 0..self.entries.len() as u32 {
+            let word = self.entry(id);
+            let count = word.text.chars().count();
+            if !(2..=MAX_INPUT_BYTES).contains(&count) {
+                continue;
+            }
+            let mut key = String::with_capacity(count);
+            for part in word.pinyin.split('\'') {
+                // Canonical dictionary spelling may exceed the input's 63-byte
+                // limit. Keep its initialization-only parser independently bounded.
+                let mut ends = [0usize; MAX_PINYIN_BYTES + 1];
+                ends[part.len()] = part.len();
+                for at in (0..part.len()).rev() {
+                    for end in (at + 1..=(at + 6).min(part.len())).rev() {
+                        if (end == part.len() || ends[end] != 0)
+                            && crate::syllables::contains(&part[at..end])
+                        {
+                            ends[at] = end;
+                            break;
+                        }
+                    }
+                }
+                if part.is_empty() || ends[0] == 0 {
+                    key.clear();
+                    break;
+                }
+                let mut at = 0;
+                while at < part.len() {
+                    key.push(char::from(part.as_bytes()[at]));
+                    at = ends[at];
+                }
+            }
+            if key.len() == count {
+                groups.entry(key).or_default().push(id);
+            }
+        }
+        self.initials_keys
+            .reserve_exact(groups.keys().map(String::len).sum());
+        self.initials_groups.reserve_exact(groups.len());
+        self.initials_words
+            .reserve_exact(groups.values().map(Vec::len).sum());
+        for (key, words) in groups {
+            self.initials_groups.push(InitialGroup {
+                key_start: self.initials_keys.len() as u32,
+                key_len: key.len() as u8,
+                word_start: self.initials_words.len() as u32,
+                word_len: words.len() as u32,
+            });
+            self.initials_keys.push_str(&key);
+            self.initials_words.extend(words);
+        }
+    }
+    pub(crate) fn initials_range(&self, input: &str) -> Option<(u32, u32, u8)> {
+        if !input
+            .bytes()
+            .all(|b| b == b'\'' || b"bcdfghjklmnpqrstwxyz".contains(&b))
+            || crate::syllables::count_spelling(input) == Some(1)
+        {
+            return None;
+        }
+        let index = self
+            .initials_groups
+            .binary_search_by(|group| {
+                let start = group.key_start as usize;
+                self.initials_keys.as_bytes()[start..start + group.key_len as usize]
+                    .iter()
+                    .copied()
+                    .cmp(input.bytes().filter(|&b| b != b'\''))
+            })
+            .ok()?;
+        let group = &self.initials_groups[index];
+        Some((
+            group.word_start,
+            group.word_start + group.word_len,
+            group.key_len,
+        ))
+    }
+    pub(crate) fn initials_word(&self, index: u32) -> u32 {
+        self.initials_words[index as usize]
+    }
     pub fn from_tsv(source: &str) -> Result<Self, DictionaryError> {
         if source.len() > MAX_DICTIONARY_BYTES {
             return Err(error("file exceeds 64 MiB"));
@@ -177,6 +272,9 @@ impl Dictionary {
             text_index: Vec::new(),
             boundary_words: HashSet::new(),
             max_letters: 0,
+            initials_keys: String::new(),
+            initials_groups: Vec::new(),
+            initials_words: Vec::new(),
         };
         result
             .pool
@@ -261,6 +359,7 @@ impl Dictionary {
     // Each first-letter node points to legal syllable ends within that syllable.
     fn build_shortcuts(&mut self) {
         let _ = crate::language::links();
+        self.build_initials();
         let mut text_index: Vec<_> = (0..self.entries.len() as u32).collect();
         text_index
             .sort_unstable_by(|&a, &b| self.entry(a).text.cmp(self.entry(b).text).then(a.cmp(&b)));
@@ -517,6 +616,9 @@ impl Dictionary {
             + self.pool.capacity()
             + self.shortcuts.capacity() * 4
             + self.text_index.capacity() * 4
+            + self.initials_keys.capacity()
+            + self.initials_groups.capacity() * std::mem::size_of::<InitialGroup>()
+            + self.initials_words.capacity() * 4
             + (self.boundary_words.capacity() * 8 / 7 + 1) * 17
     }
     pub(crate) fn entry(&self, id: u32) -> Candidate<'_> {
@@ -529,6 +631,14 @@ impl Dictionary {
     }
     /// Evidence for learning promotion must attest both text and pronunciation.
     pub(crate) fn attests(&self, text: &str, input: &str, flags: u32) -> bool {
+        if let Some((start, end, _)) = self.initials_range(input) {
+            if self.initials_words[start as usize..end as usize]
+                .iter()
+                .any(|&id| self.entry(id).text == text)
+            {
+                return true;
+            }
+        }
         let start = self
             .text_index
             .partition_point(|&id| self.entry(id).text < text);
@@ -563,6 +673,14 @@ impl Dictionary {
         input: &str,
         flags: u32,
     ) -> Option<&str> {
+        if let Some((start, end, _)) = self.initials_range(input) {
+            if let Some(&id) = self.initials_words[start as usize..end as usize]
+                .iter()
+                .find(|&&id| self.entry(id).text == text)
+            {
+                return Some(self.entry(id).pinyin);
+            }
+        }
         if flags == 0 {
             return None;
         }
@@ -960,6 +1078,9 @@ impl Dictionary {
             text_index: Vec::new(),
             boundary_words: HashSet::new(),
             max_letters: 0,
+            initials_keys: String::new(),
+            initials_groups: Vec::new(),
+            initials_words: Vec::new(),
         };
         let half = |at: usize| u16::from_le_bytes(bytes[at..at + 2].try_into().unwrap());
         let mut at = 36;

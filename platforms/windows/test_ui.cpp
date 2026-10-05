@@ -444,6 +444,41 @@ int wmain(int argc, wchar_t **argv) {
     myswy_session_free(session);
     // One-off wrong learned phrase must not displace the complete technical term.
     dictionary = myswy_dictionary_new_binary(dailyBytes, SizeofResource(myswy::module, dailyResource));
+    require(dictionary != nullptr, "embedded initials fixture dictionary");
+    session = myswy_session_new_with_dictionary(dictionary);
+    myswy_dictionary_free(dictionary);
+    require(session && myswy_session_configure(session, 5, 1) == 0
+        && myswy_session_configure_matching(session, MYSWY_MATCHING_MASK) == 0
+        && myswy_session_configure_incremental(session, 1) == 0, "production initials matching fixture");
+    {
+        myswy::CandidateWindow candidates;
+        myswy::Preferences prefs; prefs.candidatePinyin = true;
+        for (const char *raw : {"ssdd", "zgrm", "zhrm"}) {
+            myswy_session_reset(session);
+            for (const char *c = raw; *c; ++c) myswy_session_process(session, static_cast<uint32_t>(*c), 0);
+            uint8_t text[257]{};
+            const char *expected = std::strcmp(raw, "ssdd") == 0 ? "世世代代"
+                : std::strcmp(raw, "zgrm") == 0 ? "中国人民" : "走火入魔";
+            require(myswy_session_text(session, MYSWY_TEXT_CANDIDATE, 0, text, sizeof(text)) > 0
+                && std::strcmp(reinterpret_cast<const char *>(text), expected) == 0,
+                "four-character initials term precedes shorter corrected words");
+            require(myswy_session_candidate_consumed(session, 0) == 4,
+                "initials choice consumes all four heads");
+            for (int layout = 0; layout < 2; ++layout) {
+                prefs.layout = layout;
+                candidates.show(session, owner, RECT{100,150,101,170}, false, nullptr, nullptr, 400, prefs, true);
+                const auto name = L"candidate-initials-" + std::wstring(raw, raw + std::strlen(raw))
+                    + L"-" + std::to_wstring(layout);
+                capture(candidates.handle(), name.c_str());
+            }
+            myswy_session_process(session, MYSWY_KEY_SELECT_1, 0);
+            require(myswy_session_text(session, MYSWY_TEXT_COMMIT, 0, text, sizeof(text)) > 0
+                && std::strcmp(reinterpret_cast<const char *>(text), expected) == 0,
+                "initials selection commits the complete word through ABI");
+        }
+    }
+    myswy_session_free(session);
+    dictionary = myswy_dictionary_new_binary(dailyBytes, SizeofResource(myswy::module, dailyResource));
     require(dictionary != nullptr, "embedded regex fixture dictionary");
     session = myswy_session_new_with_dictionary(dictionary);
     myswy_dictionary_free(dictionary);
