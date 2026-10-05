@@ -11,6 +11,7 @@
 #include "test_configuration.h"
 #endif
 #include <memory>
+#include <optional>
 #include "ui_element.h"
 #include <inputscope.h>
 #include <textstor.h>
@@ -255,8 +256,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         pendingConfiguration_.reset();
         if (session_)
             myswy_session_free(session_);
-        if (dictionary_)
-            releaseDictionary(dictionary_);
+        freeDictionary();
         if (profile_)
             myswy_profile_free(profile_);
     }
@@ -306,37 +306,51 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             return E_UNEXPECTED;
         if (myswy_ime_abi_version() != MYSWY_ABI_VERSION)
             return E_FAIL;
-        if (flags & TF_TMAE_SECUREMODE)
-            return E_NOTIMPL;
+        secure_ = (flags & TF_TMAE_SECUREMODE) != 0;
         uiOnly_ = (flags & TF_TMAE_UIELEMENTENABLEDONLY) != 0;
         query(manager, IID_ITfUIElementMgr, uiManager_);
         if (uiOnly_ && !uiManager_)
             return E_NOINTERFACE;
-#ifdef MYSWY_FIXED_TEST_VOCABULARY
-        preferences_ = Preferences {};
-        preferences_.pageSize = 9;
-        profile_ = myswy_profile_new(nullptr, 0);
-#else
-        LearningEpoch configurationEpoch(kConfigurationEpoch);
-        const DWORD observedConfiguration = configurationEpoch.current();
-        preferences_ = loadPreferences(userFile(L"preferences.ini"));
-        profile_ = loadProfile(userFile(L"learning.profile"));
-        if (!profile_)
-            profile_ = myswy_profile_new(nullptr, 0);
-        {
-            try {
-                const auto path = userFile(L"learning.profile", true);
-                if (!path.empty())
-                    writer_ = std::make_unique<LearningWriter>(path);
-            } catch (...) {
-                writer_.reset();
-            }
-        }
+#ifndef MYSWY_FIXED_TEST_VOCABULARY
+        DWORD observedConfiguration = 0;
+        std::optional<LearningEpoch> configurationEpoch;
 #endif
+        if (secure_) {
+            // Restricted hosts may not grant access to the user's files. Keep
+            // this activation entirely in memory, with no learning or settings UI.
+            preferences_ = Preferences {};
+            preferences_.learning = false;
+            preferences_.associations = false;
+            profile_ = myswy_profile_new(nullptr, 0);
+        } else {
+#ifdef MYSWY_FIXED_TEST_VOCABULARY
+            preferences_ = Preferences {};
+            preferences_.pageSize = 9;
+            profile_ = myswy_profile_new(nullptr, 0);
+#else
+            configurationEpoch.emplace(kConfigurationEpoch);
+            observedConfiguration = configurationEpoch->current();
+            preferences_ = loadPreferences(userFile(L"preferences.ini"));
+            profile_ = loadProfile(userFile(L"learning.profile"));
+            if (!profile_)
+                profile_ = myswy_profile_new(nullptr, 0);
+            {
+                try {
+                    const auto path = userFile(L"learning.profile", true);
+                    if (!path.empty())
+                        writer_ = std::make_unique<LearningWriter>(path);
+                } catch (...) {
+                    writer_.reset();
+                }
+            }
+#endif
+        }
         english_ = preferences_.defaultEnglish;
-        dictionary_ = acquireDictionary();
-        if (!dictionary_)
+        dictionary_ = secure_ ? embeddedDictionary() : acquireDictionary();
+        if (!dictionary_) {
+            Deactivate();
             return E_OUTOFMEMORY;
+        }
         manager_.attach(manager);
         manager->AddRef();
         client_ = client;
@@ -361,7 +375,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             Deactivate();
         else {
             subscribeMode();
-            if (SUCCEEDED(query(manager_.get(), IID_ITfLangBarItemMgr, languageManager_))) {
+            if (!secure_ && SUCCEEDED(query(manager_.get(), IID_ITfLangBarItemMgr, languageManager_))) {
                 languageItem_.attach(new (std::nothrow) LanguageBarItem([this] {
                     Ptr<Service> keep(this);
                     toggleEnglish();
@@ -373,28 +387,30 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             }
             setInputMode();
 #ifndef MYSWY_FIXED_TEST_VOCABULARY
-            LearningEpoch learningEpoch(profileEpochName(userFile(L"learning.profile")).c_str());
-            learningGeneration_ = learningEpoch.current();
-            try {
-                watcher_ = std::make_unique<ConfigurationWatcher>(observedConfiguration, [] {
-                    auto snapshot = std::make_shared<ConfigurationUpdate>();
-                    snapshot->preferencesValid = tryLoadPreferences(userFile(L"preferences.ini"), snapshot->preferences);
-                    if (!snapshot->preferencesValid && GetFileAttributesW(userFile(L"preferences.ini").c_str())
-                            == INVALID_FILE_ATTRIBUTES && (GetLastError() == ERROR_FILE_NOT_FOUND || GetLastError() == ERROR_PATH_NOT_FOUND))
-                        snapshot->preferencesValid = true;
-                    snapshot->dictionary = acquireDictionary();
-                    snapshot->releaseDictionary = releaseDictionary;
-                    snapshot->profile = loadProfile(userFile(L"learning.profile"));
-                    LearningEpoch epoch(profileEpochName(userFile(L"learning.profile")).c_str());
-                    snapshot->learningGeneration = epoch.current();
-                    return snapshot;
-                }, [this](ConfigurationWatcher::Snapshot snapshot) {
-                    Ptr<Service>
-                    keep(this);
-                    receiveConfiguration(std::move(snapshot));
-                }, kConfigurationEpoch, userFile(L"preferences.ini"));
-            } catch (...) {
-                watcher_.reset();
+            if (!secure_) {
+                LearningEpoch learningEpoch(profileEpochName(userFile(L"learning.profile")).c_str());
+                learningGeneration_ = learningEpoch.current();
+                try {
+                    watcher_ = std::make_unique<ConfigurationWatcher>(observedConfiguration, [] {
+                        auto snapshot = std::make_shared<ConfigurationUpdate>();
+                        snapshot->preferencesValid = tryLoadPreferences(userFile(L"preferences.ini"), snapshot->preferences);
+                        if (!snapshot->preferencesValid && GetFileAttributesW(userFile(L"preferences.ini").c_str())
+                                == INVALID_FILE_ATTRIBUTES && (GetLastError() == ERROR_FILE_NOT_FOUND || GetLastError() == ERROR_PATH_NOT_FOUND))
+                            snapshot->preferencesValid = true;
+                        snapshot->dictionary = acquireDictionary();
+                        snapshot->releaseDictionary = releaseDictionary;
+                        snapshot->profile = loadProfile(userFile(L"learning.profile"));
+                        LearningEpoch epoch(profileEpochName(userFile(L"learning.profile")).c_str());
+                        snapshot->learningGeneration = epoch.current();
+                        return snapshot;
+                    }, [this](ConfigurationWatcher::Snapshot snapshot) {
+                        Ptr<Service>
+                        keep(this);
+                        receiveConfiguration(std::move(snapshot));
+                    }, kConfigurationEpoch, userFile(L"preferences.ini"));
+                } catch (...) {
+                    watcher_.reset();
+                }
             }
 #endif
         }
@@ -402,6 +418,8 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     }
 #ifdef MYSWY_FIXED_TEST_VOCABULARY
     HRESULT STDMETHODCALLTYPE Appearance(UINT fontSize, UINT layout, BOOL pinyin) override {
+        if (secure_)
+            return E_ACCESSDENIED;
         auto snapshot = std::make_shared<ConfigurationUpdate>();
         snapshot->preferences = preferences_;
         snapshot->preferences.fontSize = static_cast<int>(fontSize);
@@ -415,6 +433,8 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     }
     HRESULT STDMETHODCALLTYPE Update(UINT page, BOOL punctuation, BOOL associations, BOOL learning,
                                      const uint8_t *data, size_t size) override {
+        if (secure_)
+            return E_ACCESSDENIED;
         if (page != 5 && page != 7 && page != 9)
             return E_INVALIDARG;
         auto snapshot = std::make_shared<ConfigurationUpdate>();
@@ -477,10 +497,8 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         uiOnly_ = false;
         manager_.reset();
         client_ = TF_CLIENTID_NULL;
-        if (dictionary_) {
-            releaseDictionary(dictionary_);
-            dictionary_ = nullptr;
-        }
+        freeDictionary();
+        secure_ = false;
         for (bool &key : eatenKeys_)
             key = false;
         return S_OK;
@@ -1151,6 +1169,8 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         return true;
     }
     void receiveConfiguration(ConfigurationWatcher::Snapshot snapshot) {
+        if (secure_)
+            return;
         const bool wasLearning = preferences_.learning;
         if (snapshot->preferencesValid) {
             if (preferences_.shiftSwitch != snapshot->preferences.shiftSwitch)
@@ -1183,6 +1203,15 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         }
         replaceProfile_ = false;
     }
+    void freeDictionary() {
+        if (!dictionary_)
+            return;
+        if (secure_)
+            myswy_dictionary_free(dictionary_);
+        else
+            releaseDictionary(dictionary_);
+        dictionary_ = nullptr;
+    }
     ModuleLifetime lifetime_;
     LONG refs_ = 1;
     Ptr<ITfThreadMgr> manager_;
@@ -1190,6 +1219,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     Ptr<CandidateElement> element_;
     DWORD elementId_ = TF_INVALID_COOKIE;
     bool uiOnly_ = false;
+    bool secure_ = false;
     TfClientId client_ = TF_CLIENTID_NULL;
     DWORD threadCookie_ = TF_INVALID_COOKIE;
     DWORD editCookie_ = TF_INVALID_COOKIE;

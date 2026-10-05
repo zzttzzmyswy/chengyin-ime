@@ -466,6 +466,34 @@ int wmain(int argc, wchar_t **argv) {
     {
         myswy::CandidateWindow candidates;
         myswy::Preferences prefs; prefs.candidatePinyin = true;
+        for (const char *raw : {"bao", "shi"}) {
+            myswy_session_reset(session);
+            for (const char *c = raw; *c; ++c) myswy_session_process(session, static_cast<uint32_t>(*c), 0);
+            for (size_t i = 0; i < myswy_session_candidate_count(session); ++i) {
+                uint8_t text[257]{};
+                require(myswy_session_text(session, MYSWY_TEXT_CANDIDATE, i, text, sizeof(text)) > 0,
+                        "single syllable candidate text");
+                wchar_t wide[257]{};
+                require(MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                            reinterpret_cast<const char *>(text), -1, wide, 257) == 2,
+                        "complete syllable first page contains single characters");
+                require(myswy_session_candidate_consumed(session, i) == static_cast<int>(std::strlen(raw)),
+                        "single character consumes complete spelling");
+            }
+            uint8_t chosen[257]{}, committed[257]{};
+            myswy_session_text(session, MYSWY_TEXT_CANDIDATE, 0, chosen, sizeof(chosen));
+            for (int layout = 0; layout < 2; ++layout) {
+                prefs.layout = layout;
+                candidates.show(session, owner, RECT{100,150,101,170}, false, nullptr, nullptr, 410, prefs, true);
+                const auto name = L"candidate-syllable-" + std::wstring(raw, raw + std::strlen(raw))
+                    + L"-" + std::to_wstring(layout);
+                capture(candidates.handle(), name.c_str());
+            }
+            myswy_session_process(session, MYSWY_KEY_SELECT_1, 0);
+            require(myswy_session_text(session, MYSWY_TEXT_COMMIT, 0, committed, sizeof(committed)) > 0
+                    && std::strcmp(reinterpret_cast<const char *>(committed), reinterpret_cast<const char *>(chosen)) == 0,
+                    "single syllable commits the displayed character through ABI");
+        }
         for (const char *raw : {"ssdd", "zgrm", "zhrm"}) {
             myswy_session_reset(session);
             for (const char *c = raw; *c; ++c) myswy_session_process(session, static_cast<uint32_t>(*c), 0);

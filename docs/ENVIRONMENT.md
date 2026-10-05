@@ -1,6 +1,6 @@
 # 开发环境与复现
 
-2026-10-05。最新交付为 Windows x64 preview19（拍照与旧学习质量）；82 项 Rust Release、C ABI、七项原生 CTest（22.08 s）已通过。
+2026-10-05。当前批次为 Windows x64 preview20（单音节与受限激活）；86 项 Rust Release、C ABI、七项原生 CTest（31.00 s）已通过。
 本机为 Windows 11 build 26200 / Ryzen 9 9950X 16C/32T，当前构建环境：
 
 - VS 2022 Build Tools 17.14.41，MSVC 19.44.35229 / 14.44.35207；SDK 10.0.26100.0。
@@ -30,6 +30,7 @@ preview19 Debug 已有 initials 测试 EXE 因 Windows 文件占用无法启动�
 已有安装和个人学习数据不参与回归 fixture。安装生命周期仅在隔离 runner 运行；
 preview17 d07fe57 的新远程 CI 六作业和安装生命周期已通过（Actions 37309334271）。
 preview18 ad84c9d 的远程 CI 六作业和隔离安装生命周期通过（Actions 37314439254）。
+preview19 a55c97c 的远程 CI 六作业和隔离安装生命周期通过（Actions 37318044390）。
 真实应用矩阵、物理混合 DPI 多屏不能用模拟宿主测试代替。
 历史云环境、NSIS 固定来源及历次工具链详见 [环境归档](history/ENVIRONMENT_THROUGH_PREVIEW16.md)。
 清理保留项及本地分支状态见 [结项记录](WINDOWS_PHASE_WRAPUP.md)。

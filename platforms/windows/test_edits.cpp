@@ -1007,7 +1007,6 @@ void runServiceTests(myswy::ProcessorEx *service, ITfKeyEventSink *keys) {
     using namespace myswy::test;
     Ptr<Manager> manager;
     manager.attach(new Manager);
-    require(service->ActivateEx(manager.get(), 7, TF_TMAE_SECUREMODE) == E_NOTIMPL, "secure mode bypass");
     require(service->ActivateEx(manager.get(), 7, TF_TMAE_UIELEMENTENABLEDONLY) == E_NOINTERFACE,
             "UI-element-only requires manager interface");
     require(service->Activate(manager.get(), 7) == S_OK, "service activation");
@@ -1018,8 +1017,42 @@ void runServiceTests(myswy::ProcessorEx *service, ITfKeyEventSink *keys) {
             && !manager->preserved, "all manager sinks detached");
     BYTE previous[256] {}, neutral[256] {};
     require(GetKeyboardState(previous) && SetKeyboardState(neutral), "lifecycle neutral keyboard");
+    // URL/search scopes are ordinary editable text. Restricted activation must
+    // use the embedded dictionary without enabling learning or postcommit UI.
+    for (DWORD flags : {static_cast<DWORD>(TF_TMAE_SECUREMODE),
+            static_cast<DWORD>(TF_TMAE_SECUREMODE | TF_TMAE_UIELEMENTENABLEDONLY)}) {
+        manager->uiEnabled = true;
+        require(service->ActivateEx(manager.get(), 7, flags) == S_OK, "restricted activation");
+        Ptr<ConfigurationTest> configuration;
+        require(SUCCEEDED(query(service, kConfigurationTest, configuration)), "restricted test interface");
+        require(configuration->Update(9, TRUE, TRUE, TRUE, nullptr, 0) == E_ACCESSDENIED,
+                "restricted mode rejects preference/learning reenable");
+        for (InputScope scope : {IS_URL, IS_SEARCH, IS_DEFAULT}) {
+            Ptr<Context> context;
+            context.attach(new Context);
+            context->doc.inputScope = scope;
+            type(keys, context.get(), "nihao");
+            require(static_cast<bool>(manager->ui), "restricted host receives candidates");
+            require(key(keys, context.get(), '1') && context->doc.text == L"你好",
+                    "restricted URL/search commits text");
+            require(!manager->ui, "restricted commit has no learned association");
+            type(keys, context.get(), "ni");
+            require(key(keys, context.get(), VK_SPACE) && context->doc.text == L"你好ni",
+                    "restricted space retains raw spelling");
+            context->doc.inputScope = IS_PASSWORD;
+            require(!key(keys, context.get(), 'N') && context->doc.text == L"你好ni",
+                    "restricted activation still excludes password input");
+            context->doc.inputScope = IS_PRIVATE;
+            require(!key(keys, context.get(), 'N'), "restricted private scope passthrough");
+        }
+        require(service->Deactivate() == S_OK && manager->refs == 1 && !manager->keys
+                && !manager->thread && !manager->ui, "restricted activation releases resources");
+    }
+    manager->uiEnabled = false;
+    // Interleave shared normal and independently owned restricted dictionaries.
     for (int i = 0; i < 100; ++i) {
-        require(service->Activate(manager.get(), 7) == S_OK, "repeated activation");
+        require(service->ActivateEx(manager.get(), 7, (i % 2) ? TF_TMAE_SECUREMODE : 0) == S_OK,
+                "repeated normal/restricted activation");
         Ptr<Context> context;
         context.attach(new Context);
         type(keys, context.get(), "nihao");
@@ -1029,6 +1062,8 @@ void runServiceTests(myswy::ProcessorEx *service, ITfKeyEventSink *keys) {
                 !manager->keys && !manager->thread
                 && !manager->preserved, "repeated activation releases all sinks and contexts");
     }
+    require(manager->begins == manager->ends, "restricted UI elements retired");
+    manager->begins = manager->updates = manager->ends = 0;
     manager->uiEnabled = true;
     require(service->ActivateEx(manager.get(), 7, TF_TMAE_UIELEMENTENABLEDONLY) == S_OK,
             "UI-element-only activation");

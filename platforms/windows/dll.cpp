@@ -66,7 +66,7 @@ HRESULT unregisterService(bool rollback = false, bool profileStarted = true, boo
         if (SUCCEEDED(hr)) hr = categories->UnregisterCategory(kService, GUID_TFCAT_TIP_KEYBOARD, kService);
         if (FAILED(hr)) result = hr;
         if (categories) {
-            for(const GUID* category : {&kUIElementCategory,&kImmersiveCategory,&kComlessCategory,&kInputModeCategory,&kSystrayCategory}) {
+            for(const GUID* category : {&kUIElementCategory,&kImmersiveCategory,&kComlessCategory,&kInputModeCategory,&kSystrayCategory,&GUID_TFCAT_TIPCAP_SECUREMODE}) {
                 const HRESULT removed=categories->UnregisterCategory(kService,*category,kService);
                 if(FAILED(removed) && SUCCEEDED(result))result=removed;
             }
@@ -129,6 +129,7 @@ HRESULT registerService(bool repair = false) {
     if(SUCCEEDED(hr))hr=categories->RegisterCategory(kService,kUIElementCategory,kService);
     if(SUCCEEDED(hr))hr=categories->RegisterCategory(kService,kImmersiveCategory,kService);
     if(SUCCEEDED(hr))hr=categories->RegisterCategory(kService,kComlessCategory,kService);
+    if(SUCCEEDED(hr))hr=categories->RegisterCategory(kService,GUID_TFCAT_TIPCAP_SECUREMODE,kService);
     if(SUCCEEDED(hr))hr=categories->RegisterCategory(kService,kInputModeCategory,kService);
     if(SUCCEEDED(hr))hr=categories->RegisterCategory(kService,kSystrayCategory,kService);
     if (FAILED(hr) && fresh) unregisterService(true, profileStarted, categoryStarted);

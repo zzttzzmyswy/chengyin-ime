@@ -77,6 +77,23 @@ fn main() {
     corrected_samples.sort_unstable();
     let n = corrected_samples.len();
     println!("all matching flags, 6 inputs, per key + all visible annotations: n={n} p50={}ns p95={}ns p99={}ns max={}ns",corrected_samples[n/2],corrected_samples[n*95/100],corrected_samples[n*99/100],corrected_samples[n-1]);
+    let mut syllable_samples = Vec::new();
+    for _ in 0..rounds {
+        for spelling in ["bao", "shi", "hao", "an", "xian"] {
+            real.reset();
+            for c in spelling.chars() {
+                let start = Instant::now();
+                black_box(real.process(Key::Character(c), Modifiers::default()));
+                for i in 0..real.candidate_count() {
+                    black_box(real.candidate_marks(i));
+                }
+                syllable_samples.push(start.elapsed().as_nanos());
+            }
+        }
+    }
+    syllable_samples.sort_unstable();
+    let n = syllable_samples.len();
+    println!("all matching flags, 5 complete syllables, per key + visible annotations: n={n} p50={}ns p95={}ns p99={}ns max={}ns",syllable_samples[n/2],syllable_samples[n*95/100],syllable_samples[n*99/100],syllable_samples[n-1]);
     let mut initials_samples = Vec::new();
     let mut initials_final_samples = Vec::new();
     for _ in 0..rounds {

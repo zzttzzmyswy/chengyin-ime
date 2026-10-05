@@ -134,7 +134,7 @@ bool fetch(const std::wstring &url, std::vector<uint8_t> &out, size_t maximum) {
     std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
     std::wstring path(parts.lpszUrlPath, parts.dwUrlPathLength);
     if (parts.dwExtraInfoLength) path.append(parts.lpszExtraInfo, parts.dwExtraInfoLength);
-    Internet session{WinHttpOpen(L"Chengyin/0.1.0-preview19", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, nullptr, nullptr, 0)};
+    Internet session{WinHttpOpen(L"Chengyin/0.1.0-preview20", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, nullptr, nullptr, 0)};
     if (!session.h) return false;
     WinHttpSetTimeouts(session.h, 5000, 5000, 10000, 10000);
     Internet connection{WinHttpConnect(session.h, host.c_str(), parts.nPort, 0)};

@@ -3,6 +3,18 @@
 preview8–16 阶段已结项；开发与交付定位见 [结项记录](WINDOWS_PHASE_WRAPUP.md)。
 preview8–15 的实现细节见 [历史归档](history/DEVELOPMENT_PREVIEW8_15.md)。
 
+## preview20 单音节意图与受限激活
+
+见 [本批清单](WINDOWS_PREVIEW20_TASKLIST.md)。Session 用 count_spelling 判断完整单音节，
+增加惰性单字先行阶段；后续重置 cursor 并继续词语查询，准确/模糊历史每线最多两项。
+排序按输入意图决定字词先后；显式分隔和选择前缀后的剩余拼音各自重新解析。
+字典、profile、C ABI 所有权及既有 core Space 协议保留，Windows 仍映射空格到原文提交动作。
+
+Service 不再拒绝 TF_TMAE_SECUREMODE，注册/卸载对应类别；受限激活独立使用内嵌只读词库和内存配置，
+不使用个人文件、writer/watcher 或设置入口。独立字典直接释放，普通激活继续走 sharedDictionary 引用计数。
+配置代际映射保留至普通激活订阅完成，避免加载期间丢失通知；受限激活不会创建该映射。
+URL/search 类型输入、host UI-only、敏感字段、正常/受限交替和失败释放由 fixture 验证，真实 WinUI 宿主另验。
+
 ## preview19 旧学习可信度
 
 见 [本批清单](WINDOWS_PREVIEW19_TASKLIST.md)。Profile.has_repeated_evidence 同时检查累计次数 >=3

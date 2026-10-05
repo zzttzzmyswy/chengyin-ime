@@ -1,5 +1,20 @@
 # 项目精简交接 · 2026-10-05
 
+## 当前追加：单音节与 Explorer · preview20
+
+分支 codex/single-syllable-explorer，基于 a55c97c；完整单音节优先单字，保留词语分页、两线历史和前缀协议。
+SECUREMODE 不再 E_NOTIMPL：内嵌字典、内存配置，无个人文件/writer/watcher/设置入口/学习/联想，注册对应能力。
+86 Rust Release、fmt/Clippy、C ABI、零分配/64902 bytes、7 CTest31.00s、最终 COM/TSF 重验9.17s通过。
+横纵 bao/shi 候选截图、负载/COM/三二进制/许可通过，包已复制主目录：preview20，4392201 bytes，
+SHA256 6b68ee3ad027b4e25f8957d194f49529d98c1e48ecb0210329f9a18eac643b41。
+实际 Explorer PID55516 加载 preview7，两 WinUI 输入框输入 n 直接显示英文，没有候选。
+启动经过校验的 preview20 安装器时，Windows 返回“操作已被用户取消”，session10087已结束，安装未完成。
+不要重复弹出 UAC 或自动操作安全弹窗。包已准备好，手动安装后重新加载 Explorer 服务，
+再验证实际双输入框；不能只凭 fixture 宣布修复。
+Computer-use 的 sky 状态在 node_repl，目标 Explorer window591296；窗口变化后重新选择，禁止复用旧索引。
+搜索测试 n 已通过 Escape 取消，没有提交搜索或修改文件。
+preview19 CI37318044390已确认六作业/隔离生命周期成功。后续 review B–E 保持。
+
 ## 最新追加：拍照候选 · preview19
 
 用户报告 paizhao 出现无依据的拼接。隔离 preview12 全规则复现四项前排拼接；

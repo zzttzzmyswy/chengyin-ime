@@ -1,5 +1,29 @@
 # 项目状态
 
+## 最新：preview20 单音节与受限 TSF 激活 · 2026-10-05
+
+见 [本批清单](WINDOWS_PREVIEW20_TASKLIST.md)。完整单音节优先准确/模糊单字历史及单字，
+词语和补全继续保留；分隔、多音节、首拼和前缀上屏后的剩余输入分别解析。
+受限 TSF 激活从原先直接拒绝改为内嵌词库/内存配置路径，注册 SECUREMODE 能力。
+该模式不读写个人设置/词库/学习、不提供设置入口、不产生学习和上屏联想；普通路径保持。
+URL/search/default、密码/private、UI-only 与 100 次交替激活回归通过。
+
+86 Rust Release、fmt/Clippy、零按键分配/64902 bytes、MSVC /W4 /WX C ABI、7/7 CTest（31.00 s）通过；
+最终 Service 修改后 COM/TSF 两项再次通过（9.17 s）。横纵 bao/shi 窗口及选字 ABI、PE/7-Zip、
+完整负载 SHA-256/COM、三生产二进制一致、21 项许可 CRC 通过。
+安装包 preview20，4392201 bytes，SHA-256
+`6b68ee3ad027b4e25f8957d194f49529d98c1e48ecb0210329f9a18eac643b41`，复制至主工作目录。
+五单音节全规则逐键/可见标注 P50/P95/P99 = 15.5/176.0/199.7 µs；长串预算仍未全部达标，见 PERFORMANCE。
+
+已在实际 Explorer 的 WinUI 地址栏/搜索框复现旧 preview7 直接输出英文且无候选。
+该进程尚未加载新 DLL；安装器提权被 Windows 返回“操作已被用户取消”，安装没有完成，
+真实新版本控件验收仍待完成。当前调用进程无管理员权限，不重复触发 UAC。
+明确的受限激活缺口已修复，但不能认定它是这两个实际控件的唯一原因。
+下一步先完成升级后的 Explorer 双输入框验证，再回到普通学习 revision 与有界 writer 重试。
+
+preview19 a55c97c 的 [Actions 37318044390](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37318044390)
+六作业和隔离安装生命周期通过；preview20 的远程 CI 单独追踪。
+
 ## 最新：preview19 拍照候选与旧学习保护 · 2026-10-05
 
 任务见 [preview19 清单](WINDOWS_PREVIEW19_TASKLIST.md)。隔离 preview12、空历史、全部规则复现

@@ -201,6 +201,26 @@ int wmain(int argc, wchar_t **argv) {
             const bool brand = description && std::wcscmp(description, myswy::kName) == 0;
             SysFreeString(description);
             check(brand ? S_OK : E_FAIL, S_OK, "installed Chengyin input method name");
+            myswy::Ptr<ITfCategoryMgr> categories;
+            check(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
+                                   IID_ITfCategoryMgr, reinterpret_cast<void **>(categories.put())),
+                  S_OK, "installed category manager");
+            myswy::Ptr<IEnumGUID> enumeration;
+            check(categories->EnumCategoriesInItem(myswy::kService, enumeration.put()),
+                  S_OK, "enumerate installed TIP capabilities");
+            bool restricted = false, immersive = false, comless = false, hostUI = false;
+            GUID category{};
+            ULONG fetched = 0;
+            HRESULT next = S_OK;
+            while ((next = enumeration->Next(1, &category, &fetched)) == S_OK && fetched == 1) {
+                restricted |= category == GUID_TFCAT_TIPCAP_SECUREMODE;
+                immersive |= category == myswy::kImmersiveCategory;
+                comless |= category == myswy::kComlessCategory;
+                hostUI |= category == myswy::kUIElementCategory;
+            }
+            check(next, S_FALSE, "installed category enumeration complete");
+            check(restricted && immersive && comless && hostUI ? S_OK : E_FAIL,
+                  S_OK, "installed restricted/immersive/comless/host-UI capabilities");
         }
         check(manager->Deactivate(), S_OK, "thread deactivation");
         factory->LockServer(TRUE);

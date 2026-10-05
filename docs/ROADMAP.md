@@ -26,6 +26,10 @@ M0 已有实现；M1 已有插件、自定义词典热切换和 Debian 测试包
 
 ## 最新 M2 / M4 切片
 
+2026-10-05：preview20 改为完整单音节优先单字，并支持受限 TSF 激活。
+86 Rust Release、C ABI、七项原生 CTest 通过；旧 Explorer 双输入框已复现，新包安装后实测仍待完成。
+任务见 WINDOWS_PREVIEW20_TASKLIST，后续审查 B–E 按验收门槛继续。
+
 2026-10-05：preview19 回归保护拍照整词，补齐旧学习无近期证据的提权漏洞；
 同时确认多个运行宿主仍加载 preview12/7。详见 STATUS 和 WINDOWS_PREVIEW19_TASKLIST；
 新算法需升级并重开加载旧 DLL 的应用才能生效，后续 review 批次计划保持。

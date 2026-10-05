@@ -134,6 +134,7 @@ pub struct Session {
     initials_index: u32,
     initials_end: u32,
     initials_count: u8,
+    single_syllable: bool,
 }
 impl Session {
     pub fn new(dictionary: Arc<Dictionary>) -> Self {
@@ -182,6 +183,7 @@ impl Session {
             initials_index: 0,
             initials_end: 0,
             initials_count: 0,
+            single_syllable: false,
         }
     }
     pub fn preedit(&self) -> &str {
@@ -425,6 +427,7 @@ impl Session {
         self.exhausted = true;
         self.budget_limited = false;
         self.initials_count = 0;
+        self.single_syllable = false;
     }
     pub fn reset(&mut self) {
         self.clear_composition();
@@ -435,6 +438,11 @@ impl Session {
         self.decoder.clear_cache();
     }
     fn next_result(&mut self) -> Option<ResultRef> {
+        if self.phase >= 14 {
+            if let Some(character) = self.next_single_character() {
+                return Some(character);
+            }
+        }
         if self.initials_count != 0 {
             let size = (self.raw.len() - self.offset) as u8;
             if self.matching_options != 0 && self.recalled_index < self.exact_count[0] {
@@ -717,6 +725,68 @@ impl Session {
             },
         ))
     }
+    // A complete single syllable expresses character intent. Exhaust that lane
+    // lazily before ambiguous splits, corrected multi-syllable words or completions.
+    fn next_single_character(&mut self) -> Option<ResultRef> {
+        loop {
+            match self.phase {
+                14 => {
+                    if let Some(row) = self.next_history(true, false) {
+                        return Some(row);
+                    }
+                    self.phase = 15;
+                }
+                15 => {
+                    let class = if self.matching_options == 0 {
+                        EXACT_WORD
+                    } else {
+                        MATCHED_CHARACTER
+                    };
+                    if let Some(row) = self.next_whole_word(true, false, class) {
+                        self.character_line = true;
+                        return Some(row);
+                    }
+                    self.phase = 16;
+                    self.recalled_index = 0;
+                }
+                16 => {
+                    if self.matching_options != 0 {
+                        if let Some(row) = self.next_history(true, true) {
+                            return Some(row);
+                        }
+                        self.budget_limited |= self.cursor.reset_tolerant(
+                            &self.dictionary,
+                            &self.raw[self.offset..],
+                            self.matching_options,
+                        );
+                    }
+                    self.phase = 17;
+                }
+                17 => {
+                    if self.matching_options != 0 {
+                        if let Some(row) = self.next_whole_word(true, true, FUZZY_CHARACTER) {
+                            self.character_line = true;
+                            return Some(row);
+                        }
+                    }
+                    self.cursor
+                        .reset(&self.dictionary, &self.raw[self.offset..])
+                        .expect("validated input");
+                    self.recalled_index = 0;
+                    self.phase = if self.matching_options == 0 { 18 } else { 0 };
+                }
+                18 => {
+                    // Preserve word preferences after the character lane, including
+                    // dictionaries with no single-character entries for this key.
+                    if let Some(row) = self.next_history(false, false) {
+                        return Some(row);
+                    }
+                    self.phase = 0;
+                }
+                _ => return None,
+            }
+        }
+    }
     fn completion_in_line(&self, id: u32) -> bool {
         if !self.word_line && !self.character_line {
             return true;
@@ -939,6 +1009,8 @@ impl Session {
         }
     }
     fn refresh(&mut self) {
+        self.single_syllable =
+            crate::syllables::count_spelling(&self.raw[self.offset..]) == Some(1);
         (self.initials_index, self.initials_end, self.initials_count) = self
             .dictionary
             .initials_range(&self.raw[self.offset..])
@@ -991,7 +1063,7 @@ impl Session {
         self.results.clear();
         self.page = 0;
         self.selected = 0;
-        self.phase = 0;
+        self.phase = if self.single_syllable { 14 } else { 0 };
         self.exact_sentence_index = 0;
         self.sentence_index = 0;
         self.segment_index = 0;
@@ -1104,7 +1176,7 @@ impl Session {
                     },
                 );
             }
-            if self.matching_options == 0 {
+            if self.matching_options == 0 && !self.single_syllable {
                 let mut best = [(0usize, 0u32, 0u32); 4];
                 let mut len = 0;
                 for lane in 0..2 {
@@ -1302,7 +1374,7 @@ impl Session {
             let single = if self.incremental && r.consumed() < (self.raw.len() - self.offset) as u8
             {
                 2
-            } else if self.matching_options == 0 {
+            } else if self.matching_options == 0 && !self.single_syllable {
                 0
             } else {
                 let text = if r.id() & LEARNED != 0 {
@@ -1314,7 +1386,12 @@ impl Session {
                 } else {
                     self.dictionary.entry(r.id()).text
                 };
-                u8::from(text.chars().nth(1).is_none())
+                let single = text.chars().nth(1).is_none();
+                u8::from(if self.single_syllable {
+                    !single
+                } else {
+                    single
+                })
             };
             ranked[i] = (r, cost, single);
         }
