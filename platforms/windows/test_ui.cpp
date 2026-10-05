@@ -407,6 +407,41 @@ int wmain(int argc, wchar_t **argv) {
         }
     }
     myswy_session_free(session);
+    // The actual embedded production vocabulary, without reading personal files.
+    const HRSRC dailyResource = FindResourceW(myswy::module, MAKEINTRESOURCEW(101), RT_RCDATA);
+    const HGLOBAL dailyLoaded = dailyResource ? LoadResource(myswy::module, dailyResource) : nullptr;
+    const auto *dailyBytes = dailyLoaded ? static_cast<const uint8_t *>(LockResource(dailyLoaded)) : nullptr;
+    dictionary = dailyBytes ? myswy_dictionary_new_binary(dailyBytes, SizeofResource(myswy::module, dailyResource)) : nullptr;
+    require(dictionary != nullptr, "embedded production dictionary for mapping candidates");
+    session = myswy_session_new_with_dictionary(dictionary);
+    myswy_dictionary_free(dictionary);
+    require(session && myswy_session_configure_matching(session, MYSWY_MATCHING_MASK) == 0,
+            "mapping candidate matching options");
+    {
+        myswy::CandidateWindow candidates;
+        myswy::Preferences prefs; prefs.density = 0; prefs.candidatePinyin = true;
+        for (const char *raw : {"yingshe", "yinshe", "yin'she"}) {
+            myswy_session_reset(session);
+            for (const char *c = raw; *c; ++c) myswy_session_process(session, static_cast<uint32_t>(*c), 0);
+            bool mapping = false;
+            for (int i = 0; i < myswy_session_candidate_count(session); ++i) {
+                uint8_t text[257]{};
+                require(myswy_session_text(session, MYSWY_TEXT_CANDIDATE, i, text, sizeof(text)) > 0,
+                        "mapping candidate text");
+                const auto *word = reinterpret_cast<const char *>(text);
+                mapping |= std::strcmp(word, "映射") == 0;
+                require(std::strcmp(word, "应设") != 0 && std::strcmp(word, "因设") != 0 && std::strcmp(word, "银设") != 0,
+                        "no unattested single character cross product in production vocabulary");
+                require(myswy_session_candidate_consumed(session, i) == static_cast<int>(std::strlen(raw)),
+                        "whole word line does not consume just a prefix character");
+            }
+            require(mapping, "mapping is visible in exact and fuzzy first pages");
+            candidates.show(session, owner, RECT{100, 150, 101, 170}, false, nullptr, nullptr, 200, prefs, true);
+            const auto name = L"candidate-mapping-" + std::wstring(raw, raw + std::strlen(raw));
+            capture(candidates.handle(), name.c_str());
+        }
+    }
+    myswy_session_free(session);
     DestroyWindow(owner);
     inspectTestpad();
     if (richEdit)

@@ -76,6 +76,23 @@ fn main() {
     corrected_samples.sort_unstable();
     let n = corrected_samples.len();
     println!("all matching flags, 6 inputs, per key + all visible annotations: n={n} p50={}ns p95={}ns p99={}ns max={}ns",corrected_samples[n/2],corrected_samples[n*95/100],corrected_samples[n*99/100],corrected_samples[n-1]);
+    let mut mapping_samples = Vec::new();
+    for _ in 0..rounds {
+        for spelling in ["yingshe", "yinshe", "yignshe"] {
+            real.reset();
+            for c in spelling.chars() {
+                let start = Instant::now();
+                black_box(real.process(Key::Character(c), Modifiers::default()));
+                for i in 0..real.candidate_count() {
+                    black_box(real.candidate_marks(i));
+                }
+                mapping_samples.push(start.elapsed().as_nanos());
+            }
+        }
+    }
+    mapping_samples.sort_unstable();
+    let n = mapping_samples.len();
+    println!("all matching flags, yingshe/yinshe/yignshe, per key + all visible annotations: n={n} p50={}ns p95={}ns p99={}ns max={}ns",mapping_samples[n/2],mapping_samples[n*95/100],mapping_samples[n*99/100],mapping_samples[n-1]);
     real.reset();
     real.configure_matching(0);
     let mut key_samples =

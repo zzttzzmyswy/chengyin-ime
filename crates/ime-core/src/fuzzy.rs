@@ -41,17 +41,20 @@ pub(crate) fn neighbors(a: u8, b: u8) -> bool {
 struct Cell {
     cost: u8,
     typo: bool,
+    errors: u8,
     marks: [u64; 4],
 }
 impl Cell {
     const EMPTY: Self = Self {
         cost: u8::MAX,
         typo: false,
+        errors: 0,
         marks: [0; 4],
     };
     fn marked(mut self, start: usize, end: usize, cost: u8) -> Self {
         self.cost = self.cost.saturating_add(cost);
         self.typo |= cost == 2;
+        self.errors += u8::from(cost == 2);
         for at in start..end.min(255) {
             self.marks[at / 64] |= 1 << (at % 64);
         }
@@ -61,6 +64,15 @@ impl Cell {
 /// Per canonical ASCII pinyin byte, including zero marks on apostrophes.
 /// Prefix completion alone is never labelled as an input error.
 pub(crate) fn annotations(input: &str, canonical: &str, flags: u32) -> Option<[u64; 4]> {
+    align(input, canonical, flags, true).map(|cell| cell.marks)
+}
+pub(crate) fn complete_annotations(input: &str, canonical: &str, flags: u32) -> Option<[u64; 4]> {
+    align(input, canonical, flags, false).map(|cell| cell.marks)
+}
+pub(crate) fn penalty(input: &str, canonical: &str, flags: u32) -> Option<u8> {
+    align(input, canonical, flags, false).map(|cell| cell.cost)
+}
+fn align(input: &str, canonical: &str, flags: u32, completion: bool) -> Option<Cell> {
     let raw = input.as_bytes();
     let target = canonical.as_bytes();
     if raw.len() > 63 || target.len() > 255 {
@@ -71,6 +83,7 @@ pub(crate) fn annotations(input: &str, canonical: &str, flags: u32) -> Option<[u
     states[0] = Cell {
         cost: 0,
         typo: false,
+        errors: 0,
         marks: [0; 4],
     };
     let mut result = Cell::EMPTY;
@@ -96,7 +109,7 @@ pub(crate) fn annotations(input: &str, canonical: &str, flags: u32) -> Option<[u
                 continue;
             }
             if start == raw.len() {
-                if base.cost < result.cost {
+                if completion && base.cost < result.cost {
                     result = base;
                 }
                 continue;
@@ -122,8 +135,9 @@ pub(crate) fn annotations(input: &str, canonical: &str, flags: u32) -> Option<[u
                     if i < max && j < word.len() && raw[start + i] == word[j] {
                         put(i + 1, j + 1, cell);
                     }
-                    let typo_enabled =
-                        !cell.typo && raw.iter().filter(|&&c| c != b'\'').count() >= 3;
+                    let typo_enabled = !cell.typo
+                        && cell.errors < 2
+                        && raw.iter().filter(|&&c| c != b'\'').count() >= 3;
                     if typo_enabled
                         && i + 1 < max
                         && j + 1 < word.len()
@@ -134,7 +148,7 @@ pub(crate) fn annotations(input: &str, canonical: &str, flags: u32) -> Option<[u
                     {
                         put(i + 2, j + 2, cell.marked(at + j, at + j + 2, 2));
                     }
-                    if typo_enabled && i < max && j < word.len() && flags & OMIT != 0 {
+                    if typo_enabled && j < word.len() && flags & OMIT != 0 {
                         put(i, j + 1, cell.marked(at + j, at + j + 1, 2));
                     }
                     if typo_enabled
@@ -188,7 +202,7 @@ pub(crate) fn annotations(input: &str, canonical: &str, flags: u32) -> Option<[u
                     next[start + i] = cell;
                 }
             }
-            if start + max == raw.len() {
+            if completion && start + max == raw.len() {
                 if let Some(cell) = dp[max]
                     .iter()
                     .filter(|c| c.cost != u8::MAX)
@@ -206,5 +220,5 @@ pub(crate) fn annotations(input: &str, canonical: &str, flags: u32) -> Option<[u
     if states[raw.len()].cost != u8::MAX {
         result = states[raw.len()];
     }
-    (result.cost != u8::MAX).then_some(result.marks)
+    (result.cost <= 12).then_some(result)
 }

@@ -8,6 +8,7 @@ pub const MAX_PROFILE_BYTES: usize = 2 * 1024 * 1024;
 #[derive(Clone, Debug)]
 pub(crate) struct Preference {
     pub key: Arc<str>,
+    pub pinyin: Arc<str>,
     pub text: Arc<str>,
     pub count: u32,
     pub sequence: u32,
@@ -76,6 +77,7 @@ impl Profile {
                 self.rows.insert(
                     i,
                     Preference {
+                        pinyin: crate::syllables::profile_spelling(&key).into(),
                         key: key.into(),
                         text: text.into(),
                         count: 1,
@@ -86,14 +88,11 @@ impl Profile {
         }
         true
     }
-    pub(crate) fn matching(&self, raw: &str) -> impl Iterator<Item = (usize, &Preference)> {
+    pub(crate) fn matching_range(&self, raw: &str) -> std::ops::Range<usize> {
         let key = raw;
         let start = self.rows.partition_point(|r| r.key.as_ref() < key);
         let end = self.rows[start..].partition_point(|r| r.key.as_ref() == key) + start;
-        self.rows[start..end]
-            .iter()
-            .enumerate()
-            .map(move |(i, r)| (start + i, r))
+        start..end
     }
     pub fn to_binary(&self) -> Vec<u8> {
         let mut out = Vec::new();
@@ -149,6 +148,7 @@ impl Profile {
                 return None;
             }
             result.rows.push(Preference {
+                pinyin: crate::syllables::profile_spelling(key).into(),
                 key: key.into(),
                 text: text.into(),
                 count: frequency,

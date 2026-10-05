@@ -1,4 +1,4 @@
-# 当前本机 Windows 环境 · preview12
+# 当前本机 Windows 环境 · preview13
 
 2026-10-05：Windows 11 build 26200，AMD Ryzen 9 9950X（16 核/32 线程），x64。
 工作目录是 Codex 的中文路径 Git worktree；源码不依赖绝对路径。
@@ -91,6 +91,12 @@ SHA-256 为 `103a3284c1a5356efa0aba90fdfc391c3cde8e7df8726377cef0f98471584047`�
 `build/nsis-compiler-path.txt` 供后续安装回归使用同一编译器；来源/组件哈希包含在安装负载中。
 
 ## preview10 复现补充
+
+preview13 同用下列 Rust/MSVC/C ABI 与七项 CTest 流程，最终日志在 build/*preview13.txt。
+新增 quality.rs 使用实际随包字典，不读取个人历史。windows_ui_test.exe build/ui-preview13
+增加实际嵌入词库的 yingshe/yinshe/yin'she 候选绘制。基准 MYSWY_BENCH_ROUNDS=100
+增加这两项及 yignshe 共 2,000 键，所有匹配开启并读取首屏标记；与原有长句语料分开报告。
+默认 package_windows.py revision=13；包完整负载复验见 build/delivery-preview13.json。
 
 核心：cargo fmt --all -- --check；cargo clippy --workspace --all-targets --locked -- -D warnings；cargo test --workspace --locked。
 C ABI：MSVC /utf-8 /W4 /WX 编译 tests/ffi_smoke.c，链接 release myswy_ime.dll.lib；原生 Windows CTest 七项。

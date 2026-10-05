@@ -7,6 +7,20 @@ use std::sync::Arc;
 
 const MAX_RESULTS: usize = 4096;
 const LEARNED: u32 = 1 << 31;
+const EXACT_WORD: u8 = 0;
+const EXACT_SENTENCE: u8 = 1;
+const RECALLED_WORD: u8 = 2;
+const GENERATED_SENTENCE: u8 = 3;
+const SEGMENT: u8 = 4;
+const COMPLETION: u8 = 5;
+const EXACT_HISTORY: u8 = 0;
+const MATCHED_WORD: u8 = 1;
+const MATCHED_CHARACTER: u8 = 2;
+const RECALLED_HISTORY: u8 = 3;
+const FUZZY_WORD: u8 = 4;
+const FUZZY_CHARACTER: u8 = 5;
+const OTHER_SENTENCE: u8 = 6;
+const OTHER_COMPLETION: u8 = 7;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Modifiers {
     pub control: bool,
@@ -66,9 +80,6 @@ impl ResultRef {
     fn class(self) -> u8 {
         ((self.0 >> 28) & 7) as u8
     }
-    fn with_class(self, class: u8) -> Self {
-        Self((self.0 & !(7 << 28)) | (u32::from(class) << 28))
-    }
 }
 #[derive(Clone, Copy, Default)]
 struct Boundary {
@@ -109,6 +120,13 @@ pub struct Session {
     associations_enabled: bool,
     matching_options: u32,
     exact_sentence_index: usize,
+    exact_history: [u32; 4],
+    exact_count: [usize; 2],
+    recalled_history: [u32; 4],
+    recalled_count: [usize; 2],
+    recalled_index: usize,
+    word_line: bool,
+    character_line: bool,
 }
 impl Session {
     pub fn new(dictionary: Arc<Dictionary>) -> Self {
@@ -143,6 +161,13 @@ impl Session {
             associations_enabled: true,
             matching_options: 0,
             exact_sentence_index: 0,
+            exact_history: [0; 4],
+            exact_count: [0; 2],
+            recalled_history: [0; 4],
+            recalled_count: [0; 2],
+            recalled_index: 0,
+            word_line: false,
+            character_line: false,
         }
     }
     pub fn preedit(&self) -> &str {
@@ -178,7 +203,11 @@ impl Session {
             Candidate {
                 pinyin: self
                     .dictionary
-                    .corrected_pronunciation(&r.text, &r.key, self.matching_options)
+                    .corrected_pronunciation(
+                        &r.text,
+                        &self.raw[self.offset..],
+                        self.matching_options,
+                    )
                     .or_else(|| {
                         if self.matching_options == 0 {
                             return None;
@@ -188,7 +217,11 @@ impl Session {
                             .find(|s| s.corrected && s.text() == r.text.as_ref())
                             .map(|s| s.pinyin())
                     })
-                    .unwrap_or(&r.key),
+                    .unwrap_or(if self.matching_options == 0 {
+                        &r.key
+                    } else {
+                        &r.pinyin
+                    }),
                 text: &r.text,
                 frequency: r.count,
             }
@@ -321,6 +354,9 @@ impl Session {
         self.decoder.clear_cache();
     }
     fn next_result(&mut self) -> Option<ResultRef> {
+        if self.matching_options != 0 {
+            return self.next_matched_result();
+        }
         let size = (self.raw.len() - self.offset) as u8;
         loop {
             match self.phase {
@@ -330,7 +366,13 @@ impl Session {
                             let id = self.exact_sentence_index;
                             self.exact_sentence_index += 1;
                             if self.decoder.sentences[id].exact {
-                                return Some(ResultRef::new(id as u32, size, true, false, 0));
+                                return Some(ResultRef::new(
+                                    id as u32,
+                                    size,
+                                    true,
+                                    false,
+                                    EXACT_SENTENCE,
+                                ));
                             }
                         }
                     }
@@ -346,7 +388,7 @@ impl Session {
                             if word.pinyin.bytes().filter(|&b| b != b'\'').count()
                                 == input.bytes().filter(|&b| b != b'\'').count()
                             {
-                                return Some(ResultRef::new(id, size, false, false, 0));
+                                return Some(ResultRef::new(id, size, false, false, EXACT_WORD));
                             }
                             self.begin_corrections();
                         }
@@ -370,7 +412,7 @@ impl Session {
                             )
                             .is_some_and(|m| m != [0; 4])
                             {
-                                return Some(ResultRef::new(id, size, false, false, 1));
+                                return Some(ResultRef::new(id, size, false, false, RECALLED_WORD));
                             }
                             continue;
                         }
@@ -391,7 +433,9 @@ impl Session {
                         continue;
                     }
                     match self.cursor.next(&self.dictionary) {
-                        Ok(Some(id)) => return Some(ResultRef::new(id, size, false, false, 1)),
+                        Ok(Some(id)) => {
+                            return Some(ResultRef::new(id, size, false, false, RECALLED_WORD))
+                        }
                         Ok(None) => self.phase = 2,
                         Err(_) => {
                             self.budget_limited = true;
@@ -406,7 +450,7 @@ impl Session {
                         if self.matching_options != 0 && self.decoder.sentences[id as usize].exact {
                             continue;
                         }
-                        return Some(ResultRef::new(id, size, true, false, 2));
+                        return Some(ResultRef::new(id, size, true, false, GENERATED_SENTENCE));
                     }
                     self.phase = 3;
                 }
@@ -415,9 +459,9 @@ impl Session {
                     if (self.decoder.count > 0 || !self.lexical_matches)
                         && self.segment_index < self.decoder.segment_count
                     {
-                        let Word { id, consumed } = self.decoder.segments[self.segment_index];
+                        let Word { id, consumed, .. } = self.decoder.segments[self.segment_index];
                         self.segment_index += 1;
-                        return Some(ResultRef::new(id, consumed, false, false, 3));
+                        return Some(ResultRef::new(id, consumed, false, false, SEGMENT));
                     }
                     self.phase = if self.decoder.full_coverage { 4 } else { 5 };
                     if self.decoder.full_coverage {
@@ -428,7 +472,9 @@ impl Session {
                     }
                 }
                 4 => match self.cursor.next(&self.dictionary) {
-                    Ok(Some(id)) => return Some(ResultRef::new(id, size, false, false, 1)),
+                    Ok(Some(id)) => {
+                        return Some(ResultRef::new(id, size, false, false, RECALLED_WORD))
+                    }
                     Ok(None) => self.phase = 5,
                     Err(_) => {
                         self.budget_limited = true;
@@ -454,7 +500,7 @@ impl Session {
                     if self.sentence_index < self.decoder.count {
                         let id = self.sentence_index as u32;
                         self.sentence_index += 1;
-                        return Some(ResultRef::new(id, size, true, false, 2));
+                        return Some(ResultRef::new(id, size, true, false, GENERATED_SENTENCE));
                     }
                     self.phase = 6;
                     self.cursor
@@ -462,7 +508,262 @@ impl Session {
                         .expect("validated input");
                 }
                 6 => match self.cursor.next(&self.dictionary) {
-                    Ok(Some(id)) => return Some(ResultRef::new(id, size, false, false, 4)),
+                    Ok(Some(id)) => {
+                        return Some(ResultRef::new(id, size, false, false, COMPLETION))
+                    }
+                    Err(_) => {
+                        self.budget_limited = true;
+                        return None;
+                    }
+                    Ok(None) => return None,
+                },
+                _ => return None,
+            }
+        }
+    }
+    fn next_whole_word(&mut self, single: bool, recalled: bool, class: u8) -> Option<ResultRef> {
+        let input = &self.raw[self.offset..];
+        loop {
+            match self.cursor.next(&self.dictionary) {
+                Ok(Some(id)) => {
+                    let word = self.dictionary.entry(id);
+                    if !recalled
+                        && word.pinyin.bytes().filter(|&b| b != b'\'').count()
+                            != input.bytes().filter(|&b| b != b'\'').count()
+                    {
+                        return None;
+                    }
+                    if word.text.chars().nth(1).is_none() != single {
+                        continue;
+                    }
+                    let matches = if recalled {
+                        crate::fuzzy::complete_annotations(
+                            input,
+                            word.pinyin,
+                            self.matching_options,
+                        )
+                        .is_some_and(|marks| marks != [0; 4])
+                    } else {
+                        word.pinyin.bytes().filter(|&b| b != b'\'').count()
+                            == input.bytes().filter(|&b| b != b'\'').count()
+                    };
+                    if matches {
+                        return Some(ResultRef::new(id, input.len() as u8, false, false, class));
+                    }
+                }
+                Err(_) => {
+                    self.budget_limited = true;
+                    return None;
+                }
+                Ok(None) => return None,
+            }
+        }
+    }
+    fn next_history(&mut self, single: bool, recalled: bool) -> Option<ResultRef> {
+        let lane = usize::from(single);
+        let count = if recalled {
+            self.recalled_count[lane]
+        } else {
+            self.exact_count[lane]
+        };
+        if self.recalled_index >= count {
+            return None;
+        }
+        let at = lane * 2 + self.recalled_index;
+        self.recalled_index += 1;
+        let id = if recalled {
+            self.recalled_history[at]
+        } else {
+            self.exact_history[at]
+        };
+        if single {
+            self.character_line = true;
+        } else {
+            self.word_line = true;
+        }
+        Some(ResultRef::new(
+            LEARNED | id,
+            (self.raw.len() - self.offset) as u8,
+            false,
+            false,
+            if recalled {
+                RECALLED_HISTORY
+            } else {
+                EXACT_HISTORY
+            },
+        ))
+    }
+    fn completion_in_line(&self, id: u32) -> bool {
+        if !self.word_line && !self.character_line {
+            return true;
+        }
+        if self.dictionary.entry(id).text.chars().nth(1).is_none() {
+            self.character_line
+        } else {
+            self.word_line
+        }
+    }
+    // Independent whole-word and whole-character pipelines. Prefix characters
+    // never enter word recall; each pipeline has its own two history slots.
+    fn next_matched_result(&mut self) -> Option<ResultRef> {
+        let size = (self.raw.len() - self.offset) as u8;
+        loop {
+            match self.phase {
+                0 => {
+                    if let Some(r) = self.next_history(false, false) {
+                        return Some(r);
+                    }
+                    self.phase = 1;
+                }
+                1 => {
+                    if let Some(r) = self.next_whole_word(false, false, MATCHED_WORD) {
+                        self.word_line = true;
+                        return Some(r);
+                    }
+                    self.phase = 2;
+                }
+                2 => {
+                    while self.exact_sentence_index < self.decoder.count {
+                        let id = self.exact_sentence_index;
+                        self.exact_sentence_index += 1;
+                        if self.decoder.sentences[id].exact {
+                            self.word_line = true;
+                            return Some(ResultRef::new(
+                                id as u32,
+                                size,
+                                true,
+                                false,
+                                MATCHED_WORD,
+                            ));
+                        }
+                    }
+                    self.phase = 3;
+                    self.recalled_index = 0;
+                }
+                3 => {
+                    if let Some(r) = self.next_history(false, true) {
+                        return Some(r);
+                    }
+                    self.budget_limited |= self.cursor.reset_tolerant(
+                        &self.dictionary,
+                        &self.raw[self.offset..],
+                        self.matching_options,
+                    );
+                    self.phase = 4;
+                }
+                4 => {
+                    if let Some(r) = self.next_whole_word(false, true, FUZZY_WORD) {
+                        self.word_line = true;
+                        return Some(r);
+                    }
+                    self.phase = 5;
+                    self.sentence_index = 0;
+                }
+                5 => {
+                    while self.sentence_index < self.decoder.count {
+                        let id = self.sentence_index;
+                        self.sentence_index += 1;
+                        if self.decoder.sentences[id].corrected {
+                            self.word_line = true;
+                            return Some(ResultRef::new(id as u32, size, true, false, FUZZY_WORD));
+                        }
+                    }
+                    self.phase = 6;
+                    self.recalled_index = 0;
+                    self.cursor
+                        .reset(&self.dictionary, &self.raw[self.offset..])
+                        .expect("validated input");
+                }
+                6 => {
+                    if let Some(r) = self.next_history(true, false) {
+                        return Some(r);
+                    }
+                    self.phase = 7;
+                }
+                7 => {
+                    if let Some(r) = self.next_whole_word(true, false, MATCHED_CHARACTER) {
+                        self.character_line = true;
+                        return Some(r);
+                    }
+                    self.phase = 8;
+                    self.recalled_index = 0;
+                }
+                8 => {
+                    if let Some(r) = self.next_history(true, true) {
+                        return Some(r);
+                    }
+                    self.budget_limited |= self.cursor.reset_tolerant(
+                        &self.dictionary,
+                        &self.raw[self.offset..],
+                        self.matching_options,
+                    );
+                    self.phase = 9;
+                }
+                9 => {
+                    if let Some(r) = self.next_whole_word(true, true, FUZZY_CHARACTER) {
+                        self.character_line = true;
+                        return Some(r);
+                    }
+                    self.budget_limited |= self
+                        .cursor
+                        .reset_fast(&self.dictionary, &self.raw[self.offset..])
+                        .unwrap_or(true);
+                    self.phase = 10;
+                }
+                10 => match self.cursor.next(&self.dictionary) {
+                    Ok(Some(id)) if self.completion_in_line(id) => {
+                        return Some(ResultRef::new(id, size, false, false, OTHER_COMPLETION))
+                    }
+                    Ok(Some(_)) => (),
+                    Err(_) => {
+                        self.budget_limited = true;
+                        self.phase = 11;
+                    }
+                    Ok(None) => {
+                        self.phase = 11;
+                    }
+                },
+                11 => {
+                    if !self.decoder.fast_ready {
+                        self.budget_limited |= self
+                            .decoder
+                            .decode_alternates(
+                                &self.dictionary,
+                                &self.raw[self.offset..],
+                                if self.completed.is_empty() {
+                                    &self.context
+                                } else {
+                                    &self.completed
+                                },
+                                self.matching_options,
+                            )
+                            .unwrap_or(true);
+                        self.sentence_index = 0;
+                    }
+                    while self.sentence_index < self.decoder.count {
+                        let id = self.sentence_index;
+                        self.sentence_index += 1;
+                        let sentence = self.decoder.sentences[id];
+                        if !sentence.exact && !sentence.corrected && !self.character_line {
+                            return Some(ResultRef::new(
+                                id as u32,
+                                size,
+                                true,
+                                false,
+                                OTHER_SENTENCE,
+                            ));
+                        }
+                    }
+                    self.cursor
+                        .reset(&self.dictionary, &self.raw[self.offset..])
+                        .expect("validated input");
+                    self.phase = 12;
+                }
+                12 => match self.cursor.next(&self.dictionary) {
+                    Ok(Some(id)) if self.completion_in_line(id) => {
+                        return Some(ResultRef::new(id, size, false, false, OTHER_COMPLETION))
+                    }
+                    Ok(Some(_)) => (),
                     Err(_) => {
                         self.budget_limited = true;
                         return None;
@@ -534,39 +835,94 @@ impl Session {
         self.exact_sentence_index = 0;
         self.sentence_index = 0;
         self.segment_index = 0;
+        self.exact_count = [0; 2];
+        self.recalled_count = [0; 2];
+        self.word_line = false;
+        self.character_line = false;
+        self.recalled_index = 0;
 
         self.exhausted = self.raw.len() == self.offset;
         if self.learning_enabled {
-            let mut preferred = [(0usize, 0u32, 0u32); 64];
-            let mut count = 0;
-            for (id, r) in self.profile.matching(&self.raw[self.offset..]) {
+            let mut exact = [[(0usize, 0u32, 0u32); 2]; 2];
+            let mut recalled = exact;
+            let mut previous = "";
+            let mut matches = false;
+            let range = if self.matching_options == 0 {
+                self.profile.matching_range(&self.raw[self.offset..])
+            } else {
+                0..self.profile.rows.len()
+            };
+            for id in range {
+                let row = &self.profile.rows[id];
+                let accurate = row.key.as_ref() == &self.raw[self.offset..];
+                if row.key.as_ref() != previous {
+                    previous = &row.key;
+                    matches = !accurate
+                        && self.matching_options != 0
+                        && crate::fuzzy::complete_annotations(
+                            &self.raw[self.offset..],
+                            &row.pinyin,
+                            self.matching_options,
+                        )
+                        .is_some_and(|marks| marks != [0; 4]);
+                }
+                if (!accurate && !matches) || self.completed.len() + row.text.len() > MAX_TEXT_BYTES
+                {
+                    continue;
+                }
+                let lane = usize::from(row.text.chars().nth(1).is_none());
+                let (list, count) = if accurate {
+                    (&mut exact[lane], &mut self.exact_count[lane])
+                } else {
+                    (&mut recalled[lane], &mut self.recalled_count[lane])
+                };
+                if let Some(at) = list[..*count]
+                    .iter()
+                    .position(|&(i, _, _)| self.profile.rows[i].text == row.text)
+                {
+                    if (row.count, row.sequence) > (list[at].1, list[at].2) {
+                        list[at] = (id, row.count, row.sequence);
+                        list[..*count].sort_unstable_by_key(|a| std::cmp::Reverse((a.1, a.2)));
+                    }
+                    continue;
+                }
                 let at =
-                    preferred[..count].partition_point(|v| (v.1, v.2) >= (r.count, r.sequence));
-                if at < 64 {
-                    preferred.copy_within(at..count.min(63), at + 1);
-                    preferred[at] = (id, r.count, r.sequence);
-                    count = (count + 1).min(64);
+                    list[..*count].partition_point(|v| (v.1, v.2) >= (row.count, row.sequence));
+                if at < 2 {
+                    list.copy_within(at..(*count).min(1), at + 1);
+                    list[at] = (id, row.count, row.sequence);
+                    *count = (*count + 1).min(2);
                 }
             }
-            for &(id, _, _) in &preferred[..count] {
-                if self.completed.len() + self.profile.rows[id].text.len() <= MAX_TEXT_BYTES {
-                    let mut item = ResultRef::new(
+            for lane in 0..2 {
+                for (at, &(id, _, _)) in exact[lane][..self.exact_count[lane]].iter().enumerate() {
+                    self.exact_history[lane * 2 + at] = id as u32;
+                }
+                for (at, &(id, _, _)) in recalled[lane][..self.recalled_count[lane]]
+                    .iter()
+                    .enumerate()
+                {
+                    self.recalled_history[lane * 2 + at] = id as u32;
+                }
+            }
+            if self.matching_options == 0 {
+                let mut best = [(0usize, 0u32, 0u32); 4];
+                let mut len = 0;
+                for lane in 0..2 {
+                    for &entry in &exact[lane][..self.exact_count[lane]] {
+                        best[len] = entry;
+                        len += 1;
+                    }
+                }
+                best[..len].sort_unstable_by_key(|a| std::cmp::Reverse((a.1, a.2)));
+                for &(id, _, _) in best[..len.min(2)].iter() {
+                    self.results.push(ResultRef::new(
                         LEARNED | id as u32,
                         (self.raw.len() - self.offset) as u8,
                         false,
                         false,
-                        0,
-                    );
-                    if crate::fuzzy::annotations(
-                        &self.raw[self.offset..],
-                        self.result_candidate(item).pinyin,
-                        self.matching_options,
-                    )
-                    .is_some_and(|marks| marks != [0; 4])
-                    {
-                        item = item.with_class(1);
-                    }
-                    self.results.push(item);
+                        EXACT_HISTORY,
+                    ));
                 }
             }
         }
@@ -684,7 +1040,7 @@ impl Session {
         } else {
             &self.completed
         };
-        let mut ranked = [(ResultRef::default(), 0.0f32); 64];
+        let mut ranked = [(ResultRef::default(), 0.0f32, 0u8); 64];
         let size = self.results.len();
         debug_assert!(size <= 64);
         for (i, &r) in self.results.iter().enumerate() {
@@ -694,7 +1050,16 @@ impl Session {
                 -1_000_000.0 + i as f32
             } else if r.sentence() {
                 r.id() as f32
-            } else if r.class() == 3 {
+                    + if self.matching_options != 0 {
+                        1_000_000.0
+                    } else {
+                        0.0
+                    }
+            } else if self.matching_options != 0
+                && r.consumed() < (self.raw.len() - self.offset) as u8
+            {
+                2_000_000.0 - (r.consumed() as f32) * 10000.0 + r.id() as f32 * 0.001
+            } else if self.matching_options == 0 && r.class() == SEGMENT {
                 -(r.consumed() as f32) * 10000.0 + r.id() as f32 * 0.001
             } else {
                 let word = self.dictionary.entry(r.id());
@@ -703,18 +1068,46 @@ impl Session {
                     .position(|&id| id == r.id())
                     .map_or(0.0, |i| 3.0 / (1.0 + i as f32 * 0.2));
                 self.dictionary.word_cost(r.id())
+                    + if self.matching_options != 0
+                        && matches!(r.class(), FUZZY_WORD | FUZZY_CHARACTER)
+                    {
+                        f32::from(
+                            crate::fuzzy::penalty(
+                                &self.raw[self.offset..],
+                                word.pinyin,
+                                self.matching_options,
+                            )
+                            .unwrap_or(12),
+                        ) * 1000.0
+                    } else {
+                        0.0
+                    }
                     - self.dictionary.context_bonus(context, word.text)
                     - recent
             };
-            ranked[i] = (r, cost);
+            let single = if self.matching_options == 0 {
+                0
+            } else {
+                let text = if r.id() & LEARNED != 0 {
+                    self.profile.rows[(r.id() & !LEARNED) as usize]
+                        .text
+                        .as_ref()
+                } else if r.sentence() {
+                    self.decoder.sentences[r.id() as usize].text()
+                } else {
+                    self.dictionary.entry(r.id()).text
+                };
+                u8::from(text.chars().nth(1).is_none())
+            };
+            ranked[i] = (r, cost, single);
         }
         ranked[..size].sort_unstable_by(|a, b| {
-            a.0.class()
-                .cmp(&b.0.class())
+            a.2.cmp(&b.2)
+                .then(a.0.class().cmp(&b.0.class()))
                 .then(a.1.total_cmp(&b.1))
                 .then(a.0.id().cmp(&b.0.id()))
         });
-        for (target, &(item, _)) in self.results.iter_mut().zip(&ranked[..size]) {
+        for (target, &(item, _, _)) in self.results.iter_mut().zip(&ranked[..size]) {
             *target = item;
         }
     }

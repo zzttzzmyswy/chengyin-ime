@@ -38,11 +38,22 @@ fn initialized_key_path_does_not_allocate() {
     assert!(profile.record("shi", "士"));
     assert!(profile.record("wxhzw", "我喜欢中文"));
     assert!(profile.record("zhnag", "张"));
+    assert!(profile.record("yingshe", "映射"));
+    assert!(profile.record("yinshe", "银色"));
     assert!(real.set_profile(std::sync::Arc::new(profile)));
     let mut display = [0u8; 319];
     COUNTING.store(true, Ordering::SeqCst);
     assert!(real.configure_matching(myswy_core::fuzzy::OPTIONS_MASK));
-    for raw in ["zhnag", "zhng", "zhsng", "zhaang", "nizhnaghao"] {
+    for raw in [
+        "zhnag",
+        "zhng",
+        "zhsng",
+        "zhaang",
+        "nizhnaghao",
+        "yingshe",
+        "yinshe",
+        "yin'she",
+    ] {
         for c in raw.chars() {
             real.process(Key::Character(c), Modifiers::default());
         }

@@ -65,6 +65,7 @@ struct Pair {
     left: u32,
     right: u32,
     bonus: f32,
+    allowed: bool,
 }
 impl Default for Pair {
     fn default() -> Self {
@@ -72,6 +73,7 @@ impl Default for Pair {
             left: u32::MAX,
             right: u32::MAX,
             bonus: 0.0,
+            allowed: true,
         }
     }
 }
@@ -105,15 +107,34 @@ impl Decoder {
     pub fn clear_cache(&mut self) {
         self.pairs.fill(Pair::default());
     }
-    fn pair_bonus(&mut self, d: &Dictionary, left: u32, right: u32) -> f32 {
+    fn transition(&mut self, d: &Dictionary, left: u32, right: u32) -> Pair {
         let at = ((left.wrapping_mul(2654435761) ^ right.wrapping_mul(2246822519)) & 31) as usize;
         let old = self.pairs[at];
         if old.left == left && old.right == right {
-            return old.bonus;
+            return old;
         }
-        let bonus = crate::language::bonus(d.entry(left).text, d.entry(right).text);
-        self.pairs[at] = Pair { left, right, bonus };
-        bonus
+        let a = d.entry(left).text;
+        let b = d.entry(right).text;
+        let bonus = crate::language::bonus(a, b);
+        // Isolated characters are not evidence of a word. Require an attested
+        // pair or an authored transition before multiplying their homophones.
+        // Phrase-sized edges still support ordinary continuous sentences.
+        let allowed = if a.chars().nth(1).is_none() && b.chars().nth(1).is_none() && bonus == 0.0 {
+            let mut text = [0u8; 8]; // two Unicode scalar values, no key-path allocation
+            text[..a.len()].copy_from_slice(a.as_bytes());
+            text[a.len()..a.len() + b.len()].copy_from_slice(b.as_bytes());
+            d.contains_text(std::str::from_utf8(&text[..a.len() + b.len()]).expect("copied UTF-8"))
+        } else {
+            true
+        };
+        let pair = Pair {
+            left,
+            right,
+            bonus,
+            allowed,
+        };
+        self.pairs[at] = pair;
+        pair
     }
     fn insert(&mut self, start: usize, item: Path) {
         let len = self.lengths[start] as usize;
@@ -164,14 +185,17 @@ impl Decoder {
             d.matches(input, start, BEAM, |id, end| {
                 let cost = d.word_cost(id);
                 for rank in 0..self.lengths[end] as usize {
-                    let pair_bonus = if end < size {
-                        self.pair_bonus(d, id, self.paths[end][rank].id)
+                    let pair = if end < size {
+                        self.transition(d, id, self.paths[end][rank].id)
                     } else {
-                        0.0
+                        Pair::default()
                     };
+                    if !pair.allowed {
+                        continue;
+                    }
                     let item = Path {
                         cost: cost + self.paths[end][rank].cost
-                            - pair_bonus
+                            - pair.bonus
                             - if start == 0 {
                                 crate::language::bonus(context, d.entry(id).text)
                             } else {
@@ -189,18 +213,21 @@ impl Decoder {
             })?;
             limited |= d.matches_tolerant(input, start, options, BEAM, |id, end, penalty| {
                 for rank in 0..self.lengths[end] as usize {
-                    let bonus = if end < size {
-                        self.pair_bonus(d, id, self.paths[end][rank].id)
+                    let pair = if end < size {
+                        self.transition(d, id, self.paths[end][rank].id)
                     } else {
-                        0.0
+                        Pair::default()
                     };
+                    if !pair.allowed {
+                        continue;
+                    }
                     self.insert(
                         start,
                         Path {
                             cost: d.word_cost(id)
                                 + f32::from(penalty) * 4.0
                                 + self.paths[end][rank].cost
-                                - bonus,
+                                - pair.bonus,
                             id,
                             next: end as u8,
                             rank: rank as u8,
@@ -223,16 +250,19 @@ impl Decoder {
                     // same word graph with an explicit ambiguity penalty per word.
                     let cost = d.word_cost(id) + 6.0;
                     for rank in 0..self.lengths[end] as usize {
-                        let pair_bonus = if end < size {
-                            self.pair_bonus(d, id, self.paths[end][rank].id)
+                        let pair = if end < size {
+                            self.transition(d, id, self.paths[end][rank].id)
                         } else {
-                            0.0
+                            Pair::default()
                         };
+                        if !pair.allowed {
+                            continue;
+                        }
                         self.insert(
                             start,
                             Path {
                                 cost: cost + self.paths[end][rank].cost
-                                    - pair_bonus
+                                    - pair.bonus
                                     - if start == 0 {
                                         crate::language::bonus(context, d.entry(id).text)
                                     } else {
@@ -315,6 +345,11 @@ impl Decoder {
                 limited = true;
                 continue;
             }
+            // A one/two-syllable word query must not expand into a generated
+            // phrase through arbitrary initials or corrected character edges.
+            if !sentence.exact && crate::syllables::count_spelling(input).is_some_and(|n| n <= 2) {
+                continue;
+            }
             if pos == size
                 && words > 1
                 && !self.sentences[..self.count]
@@ -347,6 +382,9 @@ impl Decoder {
             self.fast_ready = true;
         }
         limited |= self.render(d, input, 0);
+        if options != 0 {
+            return Ok(limited);
+        }
         let size = input.len();
         // Offer explicit prefix words after complete sentence/word choices.
         // Descending consumed length gives useful phrase-sized corrections first.
@@ -373,7 +411,6 @@ impl Decoder {
         } else {
             d.matches(input, 0, BEAM, &mut offer)?;
         }
-        limited |= d.matches_tolerant(input, 0, options, BEAM, |id, end, _| offer(id, end));
         Ok(limited)
     }
     pub fn decode_alternates(

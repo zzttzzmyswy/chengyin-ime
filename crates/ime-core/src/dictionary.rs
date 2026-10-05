@@ -507,6 +507,14 @@ impl Dictionary {
             frequency: e.frequency,
         }
     }
+    pub(crate) fn contains_text(&self, text: &str) -> bool {
+        let at = self
+            .text_index
+            .partition_point(|&id| self.entry(id).text < text);
+        self.text_index
+            .get(at)
+            .is_some_and(|&id| self.entry(id).text == text)
+    }
     pub(crate) fn word_cost(&self, id: u32) -> f32 {
         self.entries[id as usize].cost
     }
@@ -577,9 +585,6 @@ impl Dictionary {
             if pos > start {
                 emit(s.node, pos, s.cost);
             }
-            if pos == raw.len() {
-                continue;
-            }
             let mut put = |value: State| {
                 if tail == queue.len() {
                     limited = true;
@@ -602,6 +607,28 @@ impl Dictionary {
                 queue[tail] = value;
                 tail += 1;
             };
+            // A missing final letter may be immediately before a separator or
+            // the end of input. Do not require another typed letter to recall it.
+            let typing = s.typo == 0
+                && s.total < 2
+                && raw[start..].iter().filter(|&&c| c != b'\'').count() >= 3;
+            if typing && flags & OMIT != 0 && s.depth < 6 {
+                for edge in self.edges_for(node) {
+                    if edge.label.is_ascii_lowercase() {
+                        put(State {
+                            node: edge.target,
+                            depth: s.depth + 1,
+                            typo: 1,
+                            total: s.total + 1,
+                            cost: s.cost + 2,
+                            ..s
+                        });
+                    }
+                }
+            }
+            if pos == raw.len() {
+                continue;
+            }
             if let Some(next) = self.child(s.node, b'\'') {
                 if s.depth > 0 {
                     put(State {
@@ -625,9 +652,6 @@ impl Dictionary {
                 });
             }
             // Never interpret a one/two-letter initial as a keyboard mistake.
-            let typing = s.typo == 0
-                && s.total < 2
-                && raw[start..].iter().filter(|&&c| c != b'\'').count() >= 3;
             if typing {
                 if flags & SWAP != 0 && pos + 1 < raw.len() && raw[pos] != raw[pos + 1] {
                     if let Some(next) = self
@@ -647,16 +671,6 @@ impl Dictionary {
                 for edge in self.edges_for(node) {
                     if !edge.label.is_ascii_lowercase() || s.depth >= 6 {
                         continue;
-                    }
-                    if flags & OMIT != 0 {
-                        put(State {
-                            node: edge.target,
-                            depth: s.depth + 1,
-                            typo: 1,
-                            total: s.total + 1,
-                            cost: s.cost + 2,
-                            ..s
-                        });
                     }
                     if flags & NEIGHBOR != 0 && neighbors(raw[pos], edge.label) {
                         put(State {
@@ -1210,10 +1224,20 @@ impl CandidateCursor {
     pub(crate) fn reset_tolerant(&mut self, d: &Dictionary, input: &str, flags: u32) -> bool {
         self.len = 0;
         self.root_len = 0;
-        self.completions = false;
+        // Correction tiers recall complete dictionary terminals, never their
+        // unchecked suffix completions. Ordinary completion is a later tier.
+        self.completions = true;
         let mut limited = false;
+        let mut penalties = [u8::MAX; MAX_ACTIVE_STATES];
         let traversal = d.tolerant(input, 0, flags, |node, end, cost| {
-            if end != input.len() || cost == 0 || self.roots[..self.root_len].contains(&node) {
+            if end != input.len() || cost == 0 {
+                return;
+            }
+            if let Some(at) = self.roots[..self.root_len]
+                .iter()
+                .position(|&old| old == node)
+            {
+                penalties[at] = penalties[at].min(cost);
                 return;
             }
             if self.root_len == MAX_ACTIVE_STATES {
@@ -1221,14 +1245,15 @@ impl CandidateCursor {
                 return;
             }
             self.roots[self.root_len] = node;
+            penalties[self.root_len] = cost;
             self.root_len += 1;
         });
-        for i in 0..self.root_len {
+        for (i, &penalty) in penalties.iter().enumerate().take(self.root_len) {
             let n = d.nodes[self.roots[i] as usize];
             if n.term_len > 0 {
                 limited |= self
                     .push(HeapItem {
-                        rank: d.terminals[n.term_start as usize],
+                        rank: d.terminals[n.term_start as usize] | (u32::from(penalty) << 18),
                         source: TERMINAL | n.term_start,
                     })
                     .is_err();
@@ -1256,11 +1281,11 @@ impl CandidateCursor {
                 let rank = d.terminals[next as usize];
                 if rank != NONE {
                     self.push(HeapItem {
-                        rank,
+                        rank: rank | (item.rank & !0x3ffff),
                         source: TERMINAL | next,
                     })?;
                 }
-                return Ok(Some(item.rank));
+                return Ok(Some(item.rank & 0x3ffff));
             }
             let n = d.nodes[item.source as usize];
             if n.term_len > 0 {

@@ -12,6 +12,10 @@ static void type_ascii(MyswySession *s, const char *text) {
 static void expect_text(MyswySession *s, uint32_t field, size_t index, const char *text) {
     uint8_t buffer[MYSWY_MAX_TEXT_BYTES + 1];
     int32_t length = myswy_session_text(s, field, index, NULL, 0);
+    if (length != (int32_t)strlen(text) + 1) {
+        fprintf(stderr, "text length mismatch: field=%u index=%zu expected=%s required=%d\n",
+                field, index, text, length);
+    }
     assert(length == (int32_t)strlen(text) + 1);
     memset(buffer, 0x55, sizeof(buffer));
     assert(myswy_session_text(s, field, index, buffer, (size_t)length - 1) == length);

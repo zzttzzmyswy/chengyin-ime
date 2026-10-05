@@ -211,6 +211,7 @@ fn sentence_order_matches_independent_exhaustive_unigram_oracle() {
         total: f64,
         remaining: &str,
         prefix: String,
+        previous: Option<&str>,
         cost: f64,
         output: &mut Vec<(f64, String)>,
     ) {
@@ -221,11 +222,22 @@ fn sentence_order_matches_independent_exhaustive_unigram_oracle() {
         for &(key, text, freq) in entries {
             let plain = key.replace('\'', "");
             if let Some(rest) = remaining.strip_prefix(&plain) {
+                if let Some(left) = previous {
+                    // Independently enumerate only attested single-character
+                    // joins; this corpus has no authored transition links.
+                    if left.chars().count() == 1
+                        && text.chars().count() == 1
+                        && !entries.iter().any(|e| e.1 == format!("{left}{text}"))
+                    {
+                        continue;
+                    }
+                }
                 enumerate(
                     entries,
                     total,
                     rest,
                     format!("{prefix}{text}"),
+                    Some(text),
                     cost + total.ln() - freq.ln() + 1.0,
                     output,
                 );
@@ -233,7 +245,15 @@ fn sentence_order_matches_independent_exhaustive_unigram_oracle() {
         }
     }
     let mut expected = Vec::new();
-    enumerate(&entries, total, "abc", String::new(), 0.0, &mut expected);
+    enumerate(
+        &entries,
+        total,
+        "abc",
+        String::new(),
+        None,
+        0.0,
+        &mut expected,
+    );
     expected.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
     let mut seen = std::collections::BTreeSet::new();
     expected.retain(|e| seen.insert(e.1.clone()));

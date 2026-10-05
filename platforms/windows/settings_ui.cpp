@@ -238,7 +238,7 @@ void Settings::buildPage() {
     switch (page_) {
     case 7: {
         begin(L"模糊音（双向匹配）");
-        paragraph(L"按需要勾选容易混淆的声母和韵母。正确拼写候选优先。开启候选页的“显示候选框拼音”后，匹配位置按字母加粗显示。各项默认关闭。");
+        paragraph(L"整词和单字分别匹配、排序。各自优先显示准确历史（最多两项）、准确候选，再显示模糊历史（最多两项）、模糊候选。整词不混入前缀单字。各项默认关闭。");
         const wchar_t *pairs[]{L"zh ↔ z",L"ch ↔ c",L"sh ↔ s",L"n ↔ l",L"f ↔ h",L"l ↔ r",L"an ↔ ang",L"en ↔ eng",L"in ↔ ing",L"ian ↔ iang",L"uan ↔ uang"};
         for (int i=0;i<11;++i) checkbox(801+i,pairs[i],(draft_.matchingOptions&(1u<<i))!=0);
         end();
@@ -246,7 +246,7 @@ void Settings::buildPage() {
         paragraph(L"以下是四类通用纠错规则，适用于词库中的拼音，不限于所列示例。");
         const wchar_t *errors[]{L"相邻字母按反（示例：zhnag → zhang）",L"漏按一个字母（示例：png → ping）",L"QWERTY 相邻键误按（示例：hso → hao）",L"重复按键（示例：shii → shi）"};
         for (int i=0;i<4;++i) checkbox(820+i,errors[i],(draft_.matchingOptions&(1u<<(16+i)))!=0);
-        paragraph(L"键盘纠错用于至少三个输入字母；每音节最多一次，每个词最多两次。交换只限相邻字母，不作任意乱排。开启候选拼音时显示标准读音并加粗修正位置；关闭显示仍会匹配。原始拼音仍可编辑，空格提交原始输入。应用后从下一段输入生效。");
+        paragraph(L"键盘纠错用于至少三个输入字母；每音节最多一次，每个词最多两次。交换只限相邻字母；改动较少的真实词优先。开启候选拼音时，标准读音按字母加粗修正位置。空格提交原始输入。应用后从下一段输入生效。");
         end();
         break;
     }
@@ -361,7 +361,7 @@ void Settings::buildPage() {
         begin(L"选词学习");
         checkbox(501, L"根据选词习惯排序", draft_.learning);
         paragraph(
-            L"成功提交中文后记录拼写、选词、频次与顺序。常用候选会优先出现，数据只保存在本机。\n密码和私密输入不参与学习；关闭此项会停止记录和个性化排序。");
+            L"成功提交中文后记录拼写、选词、频次与顺序。整词、单字独立排序，准确和模糊历史各最多两项，数据只保存在本机。\n密码和私密输入不参与学习；关闭此项会停止记录和个性化排序。");
         end();
         begin(L"学习数据");
         auto *profile = loadProfile(userFile(L"learning.profile"));
@@ -385,7 +385,7 @@ void Settings::buildPage() {
     case 6:
         begin(L"澄音输入法");
         paragraph(
-            L"版本：0.1.0-preview12 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
+            L"版本：0.1.0-preview13 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
         paragraph(
             L"代码开源协议：MIT License · Copyright 2026 Myswy IM contributors\n允许使用、修改和分发，须保留版权和许可声明；软件按现状提供。词库及运行库有各自许可，随安装包提供。");
         buttons(605, L"开源协议", 606, L"仓库链接", 607, L"发行说明");
@@ -644,7 +644,7 @@ std::wstring Settings::diagnostics() {
     LSTATUS status = RegGetValueW(HKEY_LOCAL_MACHINE,
                                   L"Software\\Classes\\CLSID\\{65C32A54-219A-4F0A-B44C-B963D7BA532F}\\InprocServer32", nullptr, RRF_RT_REG_SZ,
                                   nullptr, registered, &size);
-    text << L"澄音 0.1.0-preview12\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
+    text << L"澄音 0.1.0-preview13\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
          (status == ERROR_SUCCESS ? registered : L"not registered") << L"\r\nDPI: " << dpi_ << L"\r\nFont: " <<
          draft_.font << L" / " << draft_.fontSize << L"\r\nPage size: " << draft_.pageSize << L"\r\nLearning: " <<
          draft_.learning << L"\r\nAssociation: " << draft_.associations << L"\r\nCaret fallback: " <<
@@ -774,7 +774,10 @@ void Settings::command(int id, int event) {
         ShellExecuteW(window_, L"open", kRepository, nullptr, nullptr, SW_SHOWNORMAL); return;
     }
     if (id == 607) {
-        MessageBoxW(window_, L"0.1.0-preview12 · 2026-10-05\n\n"
+        MessageBoxW(window_, L"0.1.0-preview13 · 2026-10-05\n\n"
+                    L"• 修复模糊音与纠错时无依据的单字拼接，短词优先查询完整词库词。\n"
+                    L"• 整词、单字独立排序；准确历史和模糊历史分别最多两项。\n"
+                    L"• 模糊候选按改动距离排序，较远的高频词不挤占较近匹配。\n"
                     L"• 修复已打开应用的候选外观同步，后台文件检测补足共享通知。\n"
                     L"• 候选拼音开关默认关闭，包括模糊音和纠错拼音；开启后保留字母标记。\n"
                     L"• 键盘纠错明确标注示例，并用不同拼音展示通用规则。\n"
