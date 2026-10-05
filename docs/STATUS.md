@@ -18,7 +18,9 @@ SHA-256 **57604fadbb04978675cd651008b1e03e43430ee7319f5721e5d9f400ccb428a4**。
 证据 `build/tests-preview18.txt`、`clippy-preview18.txt`、`abi-test-preview18.txt`、
 `native-test-preview18.txt`、`ui-test-preview18.txt`、`package-preview18.txt`、`delivery-preview18.json`。
 截图 `build/ui-preview18/`；没有替换个人安装或使用个人历史作为 fixture。
-性能与推送后的新远程 CI 分开记录，不能用基线 CI 代替新源码验证。
+源码 `ad84c9d` 的 [Actions 37314439254](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37314439254) **六作业全部通过**，
+包括 Linux/Windows Rust 与 ABI、MSRV、portable core、Fcitx、原生 TSF 和隔离安装/升级/回滚/卸载。
+本地交付与远程 runner 交付各有自己的构建环境及摘要，不能混用哈希。
 
 100 轮、87540 条词库，Win11 build26200 / Ryzen9950X / Rust1.99 MSVC bench：
 全规则六缩写逐键 P50/P95/P99 **2.5/348.2/3147.2 µs**，最终键 **1.2/3.5/6.4 µs**；

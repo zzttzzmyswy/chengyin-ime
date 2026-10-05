@@ -28,6 +28,7 @@ windows_desktop_test 是可选的开发者桌面驱动，仅显式指定该 targ
 
 已有安装和个人学习数据不参与回归 fixture。安装生命周期仅在隔离 runner 运行；
 preview17 d07fe57 的新远程 CI 六作业和安装生命周期已通过（Actions 37309334271）。
-preview18 的远程 CI 在推送后另验；真实应用矩阵、物理混合 DPI 多屏不能用模拟宿主测试代替。
+preview18 ad84c9d 的远程 CI 六作业和隔离安装生命周期通过（Actions 37314439254）。
+真实应用矩阵、物理混合 DPI 多屏不能用模拟宿主测试代替。
 历史云环境、NSIS 固定来源及历次工具链详见 [环境归档](history/ENVIRONMENT_THROUGH_PREVIEW16.md)。
 清理保留项及本地分支状态见 [结项记录](WINDOWS_PHASE_WRAPUP.md)。

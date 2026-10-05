@@ -4,7 +4,8 @@
 
 用户要求：推送已完成改动，压缩上下文，对整个项目详细 review，并自行排期修复问题。
 第一步已完成：12 个未发布提交快进合入 main，推送并验证远端为 d07fe57。
-review 和首批修复在 codex/review-hardening 完成；详见 CODE_REVIEW_2026-10-05 和 REVIEW_REPAIR_PLAN。
+review 和首批修复在 codex/review-hardening 完成，代码 ad84c9d 已合入并推送 main。
+详见 CODE_REVIEW_2026-10-05 和 REVIEW_REPAIR_PLAN。
 当前工具没有手动触发会话压缩接口，本文件是可恢复的精简交接记录，不宣称会话已压缩。
 无需等待用户逐项批准常规修复；按严重程度、依赖和验证门槛安排工作。
 
@@ -30,7 +31,8 @@ SHA-256 57604fadbb04978675cd651008b1e03e43430ee7319f5721e5d9f400ccb428a4。
 生产词库 87540 条；Session inline+预留 64902 bytes，初始化后按键/候选路径零分配。
 包、完整负载/COM、三二进制一致和 21 项许可 CRC 验证通过。详见 STATUS 和 preview18 清单。
 未把个人设置/学习用于测试，测试通知已隔离；本机未重新安装 preview18。
-preview17 d07fe57 CI 六作业与隔离安装生命周期通过（37309334271）；preview18 推送后另验。
+preview17 d07fe57 CI 六作业/安装生命周期通过（37309334271）；
+preview18 ad84c9d 的六作业和隔离安装/升级/回滚/卸载通过（37314439254）。
 实装宿主矩阵、物理混合 DPI 和独立语义评测仍有缺口。
 
 ## 复现与开发

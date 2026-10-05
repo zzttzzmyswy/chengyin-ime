@@ -39,6 +39,8 @@ Windows, Linux X11, Linux Wayland, and Android.
 - Current review slice: preview18 fixes separated digraphs, word-cardinality
   parsing, trailing terminal separators, per-profile destructive generations,
   strict release asset/version binding and isolated fixture notifications.
+  77 Rust tests, C ABI and seven native CTests pass. Source ad84c9d is on main;
+  Actions 37314439254 passed all six jobs and the isolated installer lifecycle.
   Read docs/CODE_REVIEW_2026-10-05.md, docs/REVIEW_REPAIR_PLAN.md and
   docs/CONTEXT_HANDOFF.md. Normal profile synchronization and bounded writer
   retries are the next batch; do not confuse destructive generation with revision.

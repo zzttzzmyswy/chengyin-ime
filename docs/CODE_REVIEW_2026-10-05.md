@@ -112,7 +112,7 @@ image 版本错配，并保留正确 Unicode note、旧版拒绝、外部地址�
 修复：接受 a/e/o 首字母，如 `aqdy`；完整可解析全拼继续使用原流程，`nihao` 不改读成更多字的缩写。
 验证：稀有规范词条、全规则/关闭规则和全拼保留；零分配用例补充 `aqdy/zh'r'm/nihao'`。
 
-## 下一批需要修复的调用链问题
+## 其他调用链问题与测试隔离
 
 ### R07 · P1 · 普通学习更新未同步其他已激活服务的 profile
 
@@ -146,7 +146,7 @@ preferences 文件；`service.cpp::receiveConfiguration` 仅在清空/导入学�
 
 ### R10 · P2 · fixture 的配置通知没有完全隔离（本批追加修复）
 
-学习清空代际已隔离，但临时 preferences 保存和学习清空仍可能发布生产配置通知。
+审查时发现，即使学习清空代际已经隔离，临时 preferences 保存和学习清空仍会发布生产配置通知。
 它不改个人文件，仍可能导致打开应用重新读快照或退出闲置联想，造成测试干扰。
 修复：所有包含配置写入/消费代码的测试 target 都定义隔离通知宏，以 PID 建立测试配置通道；
 默认 watcher 和 publisher 共用解析函数，显式传入的跨进程测试通道及文件检测仍保留。
@@ -191,3 +191,8 @@ Linux 桌面、Android、ARM64/x86 和双拼沿用路线图的未完成状态。
 重新测核心延迟并打包验证完整负载、许可和最终三二进制一致。
 最终结果和安装包摘要记在 [STATUS](STATUS.md)、[preview18 清单](WINDOWS_PREVIEW18_TASKLIST.md)。
 基线 CI 通过不自动代表本批 CI；新提交推送后另记结果。
+
+最终结果：preview18 77 Rust、fmt/Clippy、零分配/64 KiB、C ABI、原生 7/7 CTest（28.50 s）、
+UI fixture/截图、完整负载/许可/COM/三二进制校验通过。核心百分位和同期间基线见 PERFORMANCE。
+源码 ad84c9d 已推送 main；[Actions 37314439254](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37314439254) 六作业及隔离安装生命周期通过。
+这覆盖本批代码，不代表 R07–R09/R11–R14 已实现或实装矩阵已完成。

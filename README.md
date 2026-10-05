@@ -42,7 +42,8 @@ Windows preview8–16 阶段已结项；preview17 修复声母缩写优先级，
 交付、源码整理及后续验收范围见 [结项记录](docs/WINDOWS_PHASE_WRAPUP.md)和[最新状态](docs/STATUS.md)。
 最终安装包位于 `build/packages/`，旧交付与测试记录保存在本地 `build/archive/`。
 preview17 的[已通过构建](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37309334271)
-包含六项作业及隔离安装生命周期；preview18 推送后的结果另验。
+包含六项作业及隔离安装生命周期；preview18 源码 ad84c9d 的
+[CI](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37314439254) 六作业及安装/升级/回滚/卸载也已通过。
 详细[代码审查](docs/CODE_REVIEW_2026-10-05.md)与[修复计划](docs/REVIEW_REPAIR_PLAN.md)记录了已修复和待修复项。
 新版本安装后应用矩阵、物理混合 DPI 多屏仍待验收。
 
