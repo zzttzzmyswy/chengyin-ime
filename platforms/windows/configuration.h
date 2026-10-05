@@ -29,7 +29,7 @@ class ConfigurationWatcher {
   public:
     using Snapshot = std::shared_ptr<ConfigurationUpdate>;
     ConfigurationWatcher(DWORD observed, std::function<Snapshot()> load,
-                         std::function<void(Snapshot)> apply, const wchar_t *name = kConfigurationEpoch,
+                         std::function<void(Snapshot)> apply, const wchar_t *name = nullptr,
                          std::wstring preferencesPath = {});
     ~ConfigurationWatcher();
     bool valid() const {

@@ -1,6 +1,36 @@
 # 项目状态
 
-## 最新：preview17 完整声母缩写优先 · 2026-10-05
+## 最新：preview18 代码审查修复 · 2026-10-05
+
+原 preview8–17 的 12 个未推送提交已快进合入并推送 main `d07fe57`。
+[Actions 37309334271](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37309334271)
+六作业全部通过，包括隔离安装/升级/回滚/卸载；补足下述 preview17 的远程验证记录。
+审查与修复在 `codex/review-hardening`；详细结论见 [代码审查](CODE_REVIEW_2026-10-05.md)，
+[修复排期](REVIEW_REPAIR_PLAN.md)、[本批清单](WINDOWS_PREVIEW18_TASKLIST.md)和[精简交接](CONTEXT_HANDOFF.md)。
+
+本批修复显式组合声母误读、词库音节数与字数解析遗漏、尾部分隔的整词候选/学习、
+学习文件代际未隔离、更新版本/包名/下载 URL 未绑定、测试配置通知干扰；补齐 a/e/o 首字母索引。
+77 项 Rust、fmt、Clippy、零按键分配/64 KiB、MSVC /W4 /WX C ABI 已通过。
+最终 MSVC 原生 **7/7 CTest（28.50 s）**、隔离 UI 与截图检查通过；生产三个二进制无测试通知通道。
+安装包 `build/packages/chengyin-windows-x64-0.1.0-preview18-msvc.exe`，**4388187 bytes**，
+SHA-256 **57604fadbb04978675cd651008b1e03e43430ee7319f5721e5d9f400ccb428a4**。
+7-Zip、完整 SHA-256/COM、三生产二进制一致与 21 项许可 CRC 通过，并复制到主工作目录同路径。
+证据 `build/tests-preview18.txt`、`clippy-preview18.txt`、`abi-test-preview18.txt`、
+`native-test-preview18.txt`、`ui-test-preview18.txt`、`package-preview18.txt`、`delivery-preview18.json`。
+截图 `build/ui-preview18/`；没有替换个人安装或使用个人历史作为 fixture。
+性能与推送后的新远程 CI 分开记录，不能用基线 CI 代替新源码验证。
+
+100 轮、87540 条词库，Win11 build26200 / Ryzen9950X / Rust1.99 MSVC bench：
+全规则六缩写逐键 P50/P95/P99 **2.5/348.2/3147.2 µs**，最终键 **1.2/3.5/6.4 µs**；
+六纠错/长串逐键 **1122.7/12380.6/15105.1 µs**。同期间旧版长串 P99 14491.7 µs，
+单次差值不能证明因果或未退化，性能预算仍未满足；详见 [性能口径](PERFORMANCE.md)。
+会话仍 **64902 bytes**，共享词库堆估算 **13209127 bytes**，单次加载 80.944 ms。
+
+下一批优先解决普通学习跨应用快照同步和后台存储失败的有界重试；再处理词库失败重载、
+峰值/导入规范化、版本统一、独立质量与性能基准、实装宿主/物理混合 DPI。
+排期以测试门槛推进，不能用核心或模拟 TSF 检查宣布全部实机兼容。
+
+## preview17 完整声母缩写优先 · 2026-10-05
 
 任务见 [preview17 清单](WINDOWS_PREVIEW17_TASKLIST.md)，新分支 `codex/initials-word-priority`。
 修复开启全部模糊音/纠错后 `ssdd` 首页被“舍得、杀得”等较少字候选占据的问题。

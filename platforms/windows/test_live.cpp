@@ -142,7 +142,11 @@ int wmain(int argc, wchar_t **argv) {
     auto name = L"Local\\Chengyin.Live.Test." + std::to_wstring(GetCurrentProcessId());
     const DWORD mainThread = GetCurrentThreadId();
     {
-        myswy::LearningEpoch published(myswy::kConfigurationEpoch);
+        const auto isolatedPublication = myswy::configurationEpochName();
+        require(isolatedPublication != myswy::kConfigurationEpoch
+            && isolatedPublication.find(std::to_wstring(GetCurrentProcessId())) != std::wstring::npos,
+            "fixture publication never uses the production configuration channel");
+        myswy::LearningEpoch published(isolatedPublication.c_str());
         myswy::LearningEpoch epoch(name.c_str());
         std::atomic<unsigned> loads{0};
         unsigned received[2] {};

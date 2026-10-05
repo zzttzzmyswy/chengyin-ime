@@ -212,6 +212,31 @@ int main() {
         return reinterpret_cast<const uint8_t *>(t);
     };
     {
+        const auto otherPath = folder + L"\\other.profile";
+        auto alias = otherPath;
+        std::replace(alias.begin(), alias.end(), L'\\', L'/');
+        require(myswy::profileEpochName(alias) == myswy::profileEpochName(otherPath), "path separator aliases share epoch");
+        CharUpperBuffW(alias.data(), static_cast<DWORD>(alias.size()));
+        require(myswy::profileEpochName(alias) == myswy::profileEpochName(otherPath), "case aliases share epoch");
+        require(!myswy::profileEpochName(source).empty()
+            && myswy::profileEpochName(source) != myswy::profileEpochName(otherPath), "different profiles have independent epochs");
+        HANDLE gate = CreateMutexW(nullptr, FALSE, L"Local\\MyswyIME.UserPreferences");
+        require(gate && WaitForSingleObject(gate, 5000) == WAIT_OBJECT_0, "hold isolated-profile writer gate");
+        {
+            myswy::LearningWriter clearedWriter(source), preservedWriter(otherPath);
+            require(clearedWriter.enqueue(bytes("nihao"), 5, bytes("你好"), 6), "queue profile to clear");
+            require(preservedWriter.enqueue(bytes("nihao"), 5, bytes("拟好"), 6), "queue independent profile");
+            require(myswy::clearProfile(source), "clear first profile only");
+            ReleaseMutex(gate);
+        }
+        CloseHandle(gate);
+        auto *first = myswy::loadProfile(source), *second = myswy::loadProfile(otherPath);
+        require(first && myswy_profile_count(first) == 0 && second && myswy_profile_count(second) == 1,
+            "clear invalidates only the selected profile's pending events");
+        myswy_profile_free(first); myswy_profile_free(second);
+        DeleteFileW(otherPath.c_str());
+    }
+    {
         // Independent workers must merge disk state, and drain before unloading.
         myswy::LearningWriter first(profilePath), second(profilePath);
         for (int i = 0; i < 20; ++i) {

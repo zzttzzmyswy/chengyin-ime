@@ -373,7 +373,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             }
             setInputMode();
 #ifndef MYSWY_FIXED_TEST_VOCABULARY
-            LearningEpoch learningEpoch;
+            LearningEpoch learningEpoch(profileEpochName(userFile(L"learning.profile")).c_str());
             learningGeneration_ = learningEpoch.current();
             try {
                 watcher_ = std::make_unique<ConfigurationWatcher>(observedConfiguration, [] {
@@ -385,7 +385,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
                     snapshot->dictionary = acquireDictionary();
                     snapshot->releaseDictionary = releaseDictionary;
                     snapshot->profile = loadProfile(userFile(L"learning.profile"));
-                    LearningEpoch epoch;
+                    LearningEpoch epoch(profileEpochName(userFile(L"learning.profile")).c_str());
                     snapshot->learningGeneration = epoch.current();
                     return snapshot;
                 }, [this](ConfigurationWatcher::Snapshot snapshot) {

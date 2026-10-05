@@ -2,7 +2,7 @@
 
 澄音是一款正在开发的开源中文输入法，长期目标是高性能、低延迟和跨平台兼容。
 共享 Rust 核心面向 Windows、Linux X11、Linux Wayland 与 Android；全拼优先，随后双拼。
-当前优先交付 Windows x64，版本 **0.1.0-preview17**。
+当前优先交付 Windows x64，版本 **0.1.0-preview18**。
 完整声母缩写优先匹配同字数词语，如 `ssdd` →“世世代代”；无完整词时再回退。
 整词/整句匹配之外可从开头选词组或单字，所选部分立即上屏，剩余拼音继续匹配。
 
@@ -22,7 +22,7 @@
 
 | 平台 | 目前实现 | 验证边界 |
 | --- | --- | --- |
-| Windows 10 2004+/11 x64 | TSF、候选、设置、学习、单 EXE 安装器 | preview17 本机 Win11/MSVC 七项 CTest 通过；preview8/10 已有桌面记录、preview7 安装生命周期曾通过；新包多屏/宿主矩阵仍待验收 |
+| Windows 10 2004+/11 x64 | TSF、候选、设置、学习、单 EXE 安装器 | preview18 本机 Win11/MSVC 七项 CTest 通过；preview8/10 已有桌面记录、preview7 安装生命周期曾通过；新包多屏/宿主矩阵仍待验收 |
 | Linux X11 / Wayland | Fcitx 5 插件、自定义词库后台切换、Debian 测试包 | 无头事件测试与包生命周期；真实桌面应用矩阵待验收 |
 | Android | 共享核心 ARM64 编译检查 | 输入服务与软键盘尚未实现 |
 | 双拼、Windows ARM64/x86 | 已规划 | 尚未实现 |
@@ -32,17 +32,19 @@
 
 ## 安装和体验
 
-Windows 原生构建文件为 `chengyin-windows-x64-0.1.0-preview17-msvc.exe`；开发者的 MinGW
+Windows 原生构建文件为 `chengyin-windows-x64-0.1.0-preview18-msvc.exe`；开发者的 MinGW
 交叉构建以 `-gnu.exe` 结尾。安装包自包含，不需要用户安装 Rust、Python 或额外运行库。
 安装后注销并重新登录，Win+Space 选择澄音；开始菜单打开设置。
 使用、升级、卸载和集中实测步骤见 [Windows 指南](platforms/windows/README.md)。
 构建产物不提交到源码库；[GitHub Actions](https://github.com/zzttzzmyswy/myswyIm/actions/workflows/ci.yml)
 通过 Windows 构建及安装回归后保存安装 EXE，可在对应运行的 Artifacts 中下载。
-Windows preview8–16 阶段已结项；后续 preview17 修复声母缩写优先级，73 项 Rust 与七项原生 Windows 测试通过。
+Windows preview8–16 阶段已结项；preview17 修复声母缩写优先级，preview18 修复代码审查发现的边界与数据隔离问题，77 项 Rust 与七项原生 Windows 测试通过。
 交付、源码整理及后续验收范围见 [结项记录](docs/WINDOWS_PHASE_WRAPUP.md)和[最新状态](docs/STATUS.md)。
 最终安装包位于 `build/packages/`，旧交付与测试记录保存在本地 `build/archive/`。
-本轮未运行新远程 CI；preview7 的[已通过构建](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37212769471)
-包含隔离安装生命周期。新版本安装后应用矩阵、物理混合 DPI 多屏仍待验收。
+preview17 的[已通过构建](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37309334271)
+包含六项作业及隔离安装生命周期；preview18 推送后的结果另验。
+详细[代码审查](docs/CODE_REVIEW_2026-10-05.md)与[修复计划](docs/REVIEW_REPAIR_PLAN.md)记录了已修复和待修复项。
+新版本安装后应用矩阵、物理混合 DPI 多屏仍待验收。
 
 Linux 安装与构建见 [Fcitx 5 指南](platforms/fcitx5/README.md)。
 

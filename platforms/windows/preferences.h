@@ -36,7 +36,7 @@ bool clearProfile(const std::wstring &);
 // Shared only while writers/settings are alive; no key-thread file/registry I/O.
 class LearningEpoch {
   public:
-    explicit LearningEpoch(const wchar_t *name = L"Local\\MyswyIME.LearningGeneration");
+    explicit LearningEpoch(const wchar_t *name);
     ~LearningEpoch();
     LearningEpoch(const LearningEpoch &) = delete;
     LearningEpoch &operator=(const LearningEpoch &) = delete;
@@ -49,6 +49,9 @@ class LearningEpoch {
     HANDLE mapping_ = nullptr;
     volatile LONG *value_ = nullptr;
 };
+// Normalize path spelling and isolate destructive invalidation to one profile.
+std::wstring profileEpochName(const std::wstring &path);
+std::wstring configurationEpochName();
 void notifyConfiguration();
 bool updateProfile(const std::wstring &, const uint8_t *, size_t, const uint8_t *, size_t,
                    const DWORD *expectedEpoch = nullptr, uint32_t matchingFlags = 0);

@@ -1359,7 +1359,7 @@ impl Session {
     fn after_commit(&mut self, chosen: Option<u32>) {
         if self.learning_enabled && crate::profile::chinese(&self.commit) && !self.raw.is_empty() {
             self.learning_key.clear();
-            self.learning_key.push_str(&self.raw);
+            self.learning_key.push_str(self.raw.trim_end_matches('\''));
         }
         self.clear_composition();
         if !self.remember_commit(chosen) {

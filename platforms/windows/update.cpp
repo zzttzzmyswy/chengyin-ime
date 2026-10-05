@@ -134,7 +134,7 @@ bool fetch(const std::wstring &url, std::vector<uint8_t> &out, size_t maximum) {
     std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
     std::wstring path(parts.lpszUrlPath, parts.dwUrlPathLength);
     if (parts.dwExtraInfoLength) path.append(parts.lpszExtraInfo, parts.dwExtraInfoLength);
-    Internet session{WinHttpOpen(L"Chengyin/0.1.0-preview17", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, nullptr, nullptr, 0)};
+    Internet session{WinHttpOpen(L"Chengyin/0.1.0-preview18", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, nullptr, nullptr, 0)};
     if (!session.h) return false;
     WinHttpSetTimeouts(session.h, 5000, 5000, 10000, 10000);
     Internet connection{WinHttpConnect(session.h, host.c_str(), parts.nPort, 0)};
@@ -159,7 +159,12 @@ bool fetch(const std::wstring &url, std::vector<uint8_t> &out, size_t maximum) {
 }
 bool validAsset(const ReleaseUpdate &release) {
     const std::wstring prefix = L"https://github.com/zzttzzmyswy/myswyIm/releases/download/";
-    if (release.url.compare(0, prefix.size(), prefix) || release.url.find_first_of(L"\r\n\" ?#") != std::wstring::npos) return false;
+    Version parsed{};
+    if (!version(release.version, parsed)) return false;
+    const auto tag = !release.version.empty() && release.version[0] == L'v'
+        ? release.version.substr(1) : release.version;
+    const auto filename = L"chengyin-windows-x64-" + tag + L"-msvc.exe";
+    if (release.url != prefix + release.version + L"/" + filename) return false;
     if (release.digest.size() != 71 || release.digest.substr(0, 7) != L"sha256:") return false;
     return std::all_of(release.digest.begin() + 7, release.digest.end(), [](wchar_t c) { return (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f'); });
 }
@@ -176,10 +181,16 @@ bool parseReleases(const std::vector<uint8_t> &bytes, ReleaseUpdate &out) {
     Version current{}, newest{}; version(kVersion, current); newest = current;
     for (const auto &release : root.array) {
         Version next{};
-        if (release.kind != L'{' || release.get(L"draft").text != L"false" || !version(release.get(L"tag_name").text, next) || next <= newest) continue;
+        if (release.kind != L'{' || release.get(L"draft").kind != L'f'
+            || release.get(L"draft").text != L"false" || release.get(L"tag_name").kind != L'"'
+            || release.get(L"assets").kind != L'[' || !version(release.get(L"tag_name").text, next) || next <= newest) continue;
         for (const auto &asset : release.get(L"assets").array) {
             const auto &name = asset.get(L"name").text;
-            if (name.compare(0, 21, L"chengyin-windows-x64-") != 0 || name.size() < 9 || name.substr(name.size() - 9) != L"-msvc.exe") continue;
+            const auto &releaseTag = release.get(L"tag_name").text;
+            const auto tag = releaseTag[0] == L'v' ? releaseTag.substr(1) : releaseTag;
+            if (asset.kind != L'{' || asset.get(L"name").kind != L'"'
+                || asset.get(L"browser_download_url").kind != L'"' || asset.get(L"digest").kind != L'"'
+                || name != L"chengyin-windows-x64-" + tag + L"-msvc.exe") continue;
             ReleaseUpdate candidate;
             candidate.available = true;
             candidate.version = release.get(L"tag_name").text;

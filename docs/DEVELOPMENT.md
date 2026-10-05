@@ -3,6 +3,19 @@
 preview8–16 阶段已结项；开发与交付定位见 [结项记录](WINDOWS_PHASE_WRAPUP.md)。
 preview8–15 的实现细节见 [历史归档](history/DEVELOPMENT_PREVIEW8_15.md)。
 
+## preview18 审查修复与后续批次
+
+详细问题、复现和边界见 [审查报告](CODE_REVIEW_2026-10-05.md)，顺序见 [修复计划](REVIEW_REPAIR_PLAN.md)。
+声母索引尊重显式分段，只把逐字单头交给同字数优先；a/e/o 零声母头允许进入索引，
+已可完整解析的含元音全拼保留既有流程。未分隔的规范读音初始化时按字数约束 DP，
+多个同字数合法解析仍无法仅凭拼音确定实际读音，需后续来源证据/规范化。
+
+末尾分隔只有已完成 terminal 且没有真实下一音节边时才能被 cursor 吸收；学习键去尾部分隔。
+学习破坏性 generation 由规范路径 SHA-256 隔离，不能与将来的普通 profile revision 合并。
+配置 fixture 通过编译定义切换到 PID 隔离通道，生产 DLL/设置仍使用原通道。
+更新器以 release 标签构造唯一文件名和完整 URL，解析和下载后 image 验证共用绑定检查。
+文件/平台操作保留在 Windows 适配层，C ABI 和词库/profile 格式保持兼容。
+
 ## preview17 完整声母缩写优先
 
 2026-10-05，任务见 [WINDOWS_PREVIEW17_TASKLIST](WINDOWS_PREVIEW17_TASKLIST.md)。

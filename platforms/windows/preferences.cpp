@@ -5,6 +5,8 @@
 #include <cwchar>
 #include <sstream>
 #include <map>
+#include <array>
+#include <bcrypt.h>
 namespace myswy {
 namespace {
 struct Lock {
@@ -195,7 +197,39 @@ bool saveProfile(const std::wstring &path, const MyswyProfile *p) {
     std::vector<uint8_t> bytes(static_cast<size_t>(size));
     return myswy_profile_binary(p, bytes.data(), bytes.size()) == size && atomicWrite(path, bytes);
 }
+std::wstring profileEpochName(const std::wstring &path) {
+    if (path.empty()) return {};
+    const DWORD needed = GetFullPathNameW(path.c_str(), 0, nullptr, nullptr);
+    if (!needed || needed > 32768) return {};
+    std::wstring normalized(needed, L'\0');
+    const DWORD length = GetFullPathNameW(path.c_str(), needed, normalized.data(), nullptr);
+    if (!length || length >= needed) return {};
+    normalized.resize(length);
+    std::replace(normalized.begin(), normalized.end(), L'/', L'\\');
+    const int foldedSize = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_LOWERCASE, normalized.data(),
+        static_cast<int>(normalized.size()), nullptr, 0, nullptr, nullptr, 0);
+    if (foldedSize <= 0) return {};
+    std::wstring folded(static_cast<size_t>(foldedSize), L'\0');
+    if (LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_LOWERCASE, normalized.data(),
+            static_cast<int>(normalized.size()), folded.data(), foldedSize, nullptr, nullptr, 0) != foldedSize) return {};
+    BCRYPT_ALG_HANDLE algorithm = nullptr;
+    BCRYPT_HASH_HANDLE hash = nullptr;
+    if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) < 0) return {};
+    std::array<UCHAR, 32> digest{};
+    const bool ok = BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0) >= 0
+        && BCryptHashData(hash, reinterpret_cast<PUCHAR>(folded.data()),
+            static_cast<ULONG>(folded.size() * sizeof(wchar_t)), 0) >= 0
+        && BCryptFinishHash(hash, digest.data(), static_cast<ULONG>(digest.size()), 0) >= 0;
+    if (hash) BCryptDestroyHash(hash);
+    BCryptCloseAlgorithmProvider(algorithm, 0);
+    if (!ok) return {};
+    std::wstring name = L"Local\\MyswyIME.LearningGeneration.";
+    constexpr wchar_t hex[] = L"0123456789abcdef";
+    for (const auto byte : digest) { name.push_back(hex[byte >> 4]); name.push_back(hex[byte & 15]); }
+    return name;
+}
 LearningEpoch::LearningEpoch(const wchar_t *name) {
+    if (!name || !*name) return;
     mapping_ = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(LONG),
                                   name);
     if (mapping_)
@@ -214,8 +248,15 @@ void LearningEpoch::advance() {
     if (value_)
         InterlockedIncrement(value_);
 }
+std::wstring configurationEpochName() {
+#ifdef MYSWY_ISOLATED_CONFIG_NOTIFICATIONS
+    return L"Local\\MyswyIME.TestConfigurationGeneration." + std::to_wstring(GetCurrentProcessId());
+#else
+    return L"Local\\MyswyIME.ConfigurationGeneration";
+#endif
+}
 void notifyConfiguration() {
-    LearningEpoch epoch(L"Local\\MyswyIME.ConfigurationGeneration");
+    LearningEpoch epoch(configurationEpochName().c_str());
     epoch.advance();
 }
 bool updateProfile(const std::wstring &path, const uint8_t *key, size_t keySize, const uint8_t *text,
@@ -223,7 +264,7 @@ bool updateProfile(const std::wstring &path, const uint8_t *key, size_t keySize,
     Lock lock;
     if (!lock.held)
         return false;
-    LearningEpoch epoch;
+    LearningEpoch epoch(profileEpochName(path).c_str());
     if (expectedEpoch && !epoch.valid())
         return false;
     if (expectedEpoch && epoch.current() != *expectedEpoch)
@@ -243,7 +284,7 @@ bool importProfile(const std::wstring &source, const std::wstring &target) {
     if (!profile)
         return false;
     Lock lock;
-    LearningEpoch epoch;
+    LearningEpoch epoch(profileEpochName(target).c_str());
     bool ok = lock.held && epoch.valid() && saveProfile(target, profile);
     if (ok) {
         epoch.advance();
@@ -256,7 +297,7 @@ bool clearProfile(const std::wstring &path) {
     Lock lock;
     if (!lock.held)
         return false;
-    LearningEpoch epoch;
+    LearningEpoch epoch(profileEpochName(path).c_str());
     if (!epoch.valid())
         return false;
     bool ok = DeleteFileW(path.c_str()) || GetLastError() == ERROR_FILE_NOT_FOUND;

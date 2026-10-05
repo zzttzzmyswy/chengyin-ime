@@ -1,6 +1,6 @@
 # 开发环境与复现
 
-2026-10-05。最新交付为 Windows x64 preview17（完整声母缩写优先）；73 项 Rust 测试、C ABI 和七项原生 CTest 已通过。
+2026-10-05。最新交付为 Windows x64 preview18（审查修复）；77 项 Rust、C ABI、七项原生 CTest（28.50 s）已通过。
 本机为 Windows 11 build 26200 / Ryzen 9 9950X 16C/32T，当前构建环境：
 
 - VS 2022 Build Tools 17.14.41，MSVC 19.44.35229 / 14.44.35207；SDK 10.0.26100.0。
@@ -27,6 +27,7 @@ windows_desktop_test 是可选的开发者桌面驱动，仅显式指定该 targ
 核心复查：cargo fmt --all -- --check；cargo clippy --workspace --all-targets --locked -- -D warnings；cargo test --workspace --locked。
 
 已有安装和个人学习数据不参与回归 fixture。安装生命周期仅在隔离 runner 运行；
-真实应用矩阵、物理混合 DPI 多屏和本批远程 CI 未完成，不能用模拟宿主测试代替。
+preview17 d07fe57 的新远程 CI 六作业和安装生命周期已通过（Actions 37309334271）。
+preview18 的远程 CI 在推送后另验；真实应用矩阵、物理混合 DPI 多屏不能用模拟宿主测试代替。
 历史云环境、NSIS 固定来源及历次工具链详见 [环境归档](history/ENVIRONMENT_THROUGH_PREVIEW16.md)。
 清理保留项及本地分支状态见 [结项记录](WINDOWS_PHASE_WRAPUP.md)。

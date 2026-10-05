@@ -114,6 +114,50 @@ pub struct Dictionary {
     initials_words: Vec<u32>,
 }
 impl Dictionary {
+    fn word_initials(spelling: &str, count: usize) -> Option<String> {
+        let mut key = String::with_capacity(count);
+        for part in spelling.split('\'') {
+            if !crate::syllables::contains(part) {
+                break;
+            }
+            key.push(char::from(part.as_bytes()[0]));
+        }
+        if key.len() == count && spelling.split('\'').count() == count {
+            return Some(key);
+        }
+        // Ambiguous unseparated spelling must fit the number of characters.
+        // This table is dictionary-initialization only, independently bounded by
+        // the 255-byte canonical spelling limit rather than the 63-byte input limit.
+        let stride = spelling.len() + 1;
+        let mut suffix = vec![0u8; (count + 1) * stride];
+        suffix[spelling.len()] = 1;
+        for remaining in 1..=count {
+            for at in (0..spelling.len()).rev() {
+                if spelling.as_bytes()[at] == b'\'' {
+                    continue;
+                }
+                for end in (at + 1..=(at + 6).min(spelling.len())).rev() {
+                    let next = end + usize::from(spelling.as_bytes().get(end) == Some(&b'\''));
+                    if suffix[(remaining - 1) * stride + next] != 0
+                        && crate::syllables::contains(&spelling[at..end])
+                    {
+                        suffix[remaining * stride + at] = (next - at) as u8;
+                        break;
+                    }
+                }
+            }
+        }
+        if suffix[count * stride] == 0 {
+            return None;
+        }
+        key.clear();
+        let mut at = 0;
+        for remaining in (1..=count).rev() {
+            key.push(char::from(spelling.as_bytes()[at]));
+            at += suffix[remaining * stride + at] as usize;
+        }
+        Some(key)
+    }
     // Immutable, complete terminal groups for one-letter-per-character queries.
     // Unlike the bounded ambiguous trie search, this cannot discard rare words
     // before the session sees them. The serialized dictionary remains unchanged.
@@ -125,33 +169,7 @@ impl Dictionary {
             if !(2..=MAX_INPUT_BYTES).contains(&count) {
                 continue;
             }
-            let mut key = String::with_capacity(count);
-            for part in word.pinyin.split('\'') {
-                // Canonical dictionary spelling may exceed the input's 63-byte
-                // limit. Keep its initialization-only parser independently bounded.
-                let mut ends = [0usize; MAX_PINYIN_BYTES + 1];
-                ends[part.len()] = part.len();
-                for at in (0..part.len()).rev() {
-                    for end in (at + 1..=(at + 6).min(part.len())).rev() {
-                        if (end == part.len() || ends[end] != 0)
-                            && crate::syllables::contains(&part[at..end])
-                        {
-                            ends[at] = end;
-                            break;
-                        }
-                    }
-                }
-                if part.is_empty() || ends[0] == 0 {
-                    key.clear();
-                    break;
-                }
-                let mut at = 0;
-                while at < part.len() {
-                    key.push(char::from(part.as_bytes()[at]));
-                    at = ends[at];
-                }
-            }
-            if key.len() == count {
+            if let Some(key) = Self::word_initials(word.pinyin, count) {
                 groups.entry(key).or_default().push(id);
             }
         }
@@ -172,10 +190,20 @@ impl Dictionary {
         }
     }
     pub(crate) fn initials_range(&self, input: &str) -> Option<(u32, u32, u8)> {
+        // Explicit separators preserve a digraph syllable such as zh'r'm.
+        // Only separated single heads (s's'd'd) qualify for this strict lane.
+        let separated = input.trim_end_matches('\'');
+        if separated.contains('\'') && separated.split('\'').any(|p| p.len() != 1) {
+            return None;
+        }
+        let syllables = crate::syllables::count_spelling(input);
         if !input
             .bytes()
-            .all(|b| b == b'\'' || b"bcdfghjklmnpqrstwxyz".contains(&b))
-            || crate::syllables::count_spelling(input) == Some(1)
+            .all(|b| b == b'\'' || b"abcdefghjklmnopqrstwxyz".contains(&b))
+            || syllables == Some(1)
+            // Preserve complete full pinyin; a/e/o are otherwise valid heads
+            // for zero-onset syllables (for example ai'qing'dian'ying -> aqdy).
+            || (input.bytes().any(|b| b"aeo".contains(&b)) && syllables.is_some())
         {
             return None;
         }
@@ -928,6 +956,24 @@ impl Dictionary {
         }
         Ok(len)
     }
+    fn trailing_boundary(&self, active: &[u32], next: &mut [u32; MAX_ACTIVE_STATES]) -> usize {
+        let mut len = 0;
+        for &state in active {
+            let node = state & !ABBREVIATED;
+            // A real next-syllable edge still means continuation (ni' -> ni'hao).
+            // Only a completed terminal without that edge may absorb a trailing
+            // separator. Never reinterpret an incomplete syllable as a word.
+            if let Some(child) = self.child(node, b'\'') {
+                next[len] = child;
+            } else if self.nodes[node as usize].term_len != 0 {
+                next[len] = state;
+            } else {
+                continue;
+            }
+            len += 1;
+        }
+        len
+    }
     /// Exact whole-word full/initial mixtures, ranked by dictionary frequency.
     /// The boolean reports pruning; unlike lookup this does not complete tails.
     pub fn lookup_fast(&self, input: &str) -> Result<(Candidates, bool), LookupError> {
@@ -1322,8 +1368,12 @@ impl CandidateCursor {
         let mut active = [0; MAX_ACTIVE_STATES];
         let mut next = [0; MAX_ACTIVE_STATES];
         let mut len = usize::from(!input.is_empty());
-        for label in input.bytes().map(|b| b.to_ascii_lowercase()) {
-            len = d.advance(&active[..len], label, &mut next)?;
+        for (at, label) in input.bytes().map(|b| b.to_ascii_lowercase()).enumerate() {
+            len = if label == b'\'' && at + 1 == input.len() {
+                d.trailing_boundary(&active[..len], &mut next)
+            } else {
+                d.advance(&active[..len], label, &mut next)?
+            };
             std::mem::swap(&mut active, &mut next);
         }
         self.len = 0;
@@ -1355,8 +1405,12 @@ impl CandidateCursor {
         if !valid_input(input) {
             return Err(LookupError::InvalidInput);
         }
-        for label in input.bytes().map(|b| b.to_ascii_lowercase()) {
-            let (n, l) = d.advance_fast(&active[..len], label, &mut next, MAX_ACTIVE_STATES);
+        for (at, label) in input.bytes().map(|b| b.to_ascii_lowercase()).enumerate() {
+            let (n, l) = if label == b'\'' && at + 1 == input.len() {
+                (d.trailing_boundary(&active[..len], &mut next), false)
+            } else {
+                d.advance_fast(&active[..len], label, &mut next, MAX_ACTIVE_STATES)
+            };
             len = n;
             limited |= l;
             std::mem::swap(&mut active, &mut next);

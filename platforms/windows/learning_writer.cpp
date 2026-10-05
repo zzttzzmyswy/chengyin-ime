@@ -2,7 +2,8 @@
 #include "preferences.h"
 #include <algorithm>
 namespace myswy {
-LearningWriter::LearningWriter(std::wstring path) : path_(std::move(path)), thread_([this] {
+LearningWriter::LearningWriter(std::wstring path) : path_(std::move(path)),
+    epoch_(profileEpochName(path_).c_str()), thread_([this] {
     run();
 }) {}
 LearningWriter::~LearningWriter() {

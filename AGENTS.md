@@ -27,7 +27,7 @@ Windows, Linux X11, Linux Wayland, and Android.
   docs/WINDOWS_TASKLIST.md and docs/DEVELOPMENT.md for historical preview7: classic native
   tabs, embedded input tests, configuration notifications, language-bar mode and
   Chinese punctuation. Keep the standalone test app removed. The settings
-  executable is myswy_settings.exe; package scripts use preview17; read docs/WINDOWS_PREVIEW17_TASKLIST.md. Environment
+  executable is myswy_settings.exe; package scripts use preview18; read docs/WINDOWS_PREVIEW18_TASKLIST.md. Environment
   reproduction is in docs/ENVIRONMENT.md.
 - Previous delivery: preview7 MSVC installer from commit b14116e, GitHub Actions run
   37212769471. All six jobs passed, including six native Windows CTests and the
@@ -36,7 +36,13 @@ Windows, Linux X11, Linux Wayland, and Android.
 - This Windows preview8–16 phase is closed as of 2026-10-05. Read
   docs/WINDOWS_PHASE_WRAPUP.md for final delivery, local integration and retained
   validation gaps; start a new codex/ branch for new feature work.
-- New slice: preview17 gives complete one-letter-per-character abbreviations
+- Current review slice: preview18 fixes separated digraphs, word-cardinality
+  parsing, trailing terminal separators, per-profile destructive generations,
+  strict release asset/version binding and isolated fixture notifications.
+  Read docs/CODE_REVIEW_2026-10-05.md, docs/REVIEW_REPAIR_PLAN.md and
+  docs/CONTEXT_HANDOFF.md. Normal profile synchronization and bounded writer
+  retries are the next batch; do not confuse destructive generation with revision.
+- Previous slice: preview17 gives complete one-letter-per-character abbreviations
   priority over shorter fuzzy/typo interpretations, with complete word pagination.
   73 Rust tests and seven native Windows CTests pass; read the preview17 tasklist.
 - Closed-phase final slice: preview16 adds accurate lexical prefix phrase/character choices

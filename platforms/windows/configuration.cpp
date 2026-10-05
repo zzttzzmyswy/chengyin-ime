@@ -19,7 +19,8 @@ FileStamp stamp(const std::wstring &path) {
 }
 }
 ConfigurationWatcher::ConfigurationWatcher(DWORD observed, std::function<Snapshot()> load,
-        std::function<void(Snapshot)> apply, const wchar_t *name, std::wstring preferencesPath): epoch_(name), apply_(std::move(apply)) {
+        std::function<void(Snapshot)> apply, const wchar_t *name, std::wstring preferencesPath):
+        epoch_(name ? name : configurationEpochName().c_str()), apply_(std::move(apply)) {
     stop_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     window_ = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, module, nullptr);
     if (!window_ || !stop_ || (!epoch_.valid() && preferencesPath.empty()))
