@@ -43,6 +43,7 @@ class CandidateWindow {
     int selected_ = -1;
     int rowHeight_ = 28;
     int padding_ = 10;
+    int rail_ = 0;
     UINT fontDpi_ = 0;
     Preferences preferences_{};
     int fontSize_ = 0;

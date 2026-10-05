@@ -3,11 +3,15 @@
 #include <string>
 #include <vector>
 #include "myswy_ime.h"
+#include "skin.h"
 namespace myswy {
 struct Preferences {
     std::wstring font = L"Microsoft YaHei UI";
     int fontSize = 18;
     int theme = 0; // system/white/black
+    std::wstring skinFile; // managed immutable .cyskin basename; no external paths
+    std::shared_ptr<const Skin> skin;
+    bool skinDecorations = true;
     int layout = 0; // vertical/horizontal
     int density = 1; // compact/comfortable
     int pageSize = 5;
@@ -59,6 +63,7 @@ struct Palette {
     COLORREF background, surface, text, muted, border, accent, selected, selectedText;
 };
 Palette palette(int theme);
+Palette palette(const Preferences &);
 Palette themePalette(int theme, bool systemDark, COLORREF highlight, COLORREF highlightText);
 bool systemDarkTheme();
 HFONT createUIFont(int size, UINT dpi = 96, const std::wstring &face = L"Microsoft YaHei UI",

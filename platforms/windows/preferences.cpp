@@ -73,7 +73,9 @@ bool atomicWrite(const std::wstring &path, const std::vector<uint8_t> &bytes) {
 }
 bool validPreferences(const Preferences &p) {
     if (p.matchingOptions & ~MYSWY_MATCHING_MASK) return false;
-    return p.fontSize >= 12 && p.fontSize <= 32 && p.theme >= 0 && p.theme <= 2 && p.layout >= 0 && p.layout <= 1
+    if (!p.skinFile.empty() && (p.skinFile.size()>100 || p.skinFile.find_first_not_of(L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")!=std::wstring::npos
+        || p.skinFile.find(L"..")!=std::wstring::npos)) return false;
+    return p.fontSize >= 12 && p.fontSize <= 32 && ((p.theme >= 0 && p.theme <= 2) || (p.theme>=10 && p.theme<=13)) && p.layout >= 0 && p.layout <= 1
            && p.density >= 0 && p.density <= 1 && (p.pageSize == 5 || p.pageSize == 7 || p.pageSize == 9)
            && p.shiftSwitch >= 0 && p.shiftSwitch <= 2 && !p.font.empty() && p.font.size() < LF_FACESIZE
            && p.font.find_first_of(L"\r\n\t=\0", 0, 5) == std::wstring::npos
@@ -116,6 +118,7 @@ bool tryLoadPreferences(const std::wstring &path, Preferences &result) {
     p.theme = integer(L"Theme", p.theme);
     // preview8/9 removed character themes: preserve all other preferences.
     if (p.theme >= 3 && p.theme <= 5) p.theme = 0;
+    if(values.count(L"SkinFile")) p.skinFile=values[L"SkinFile"];
     p.layout = integer(L"Layout", p.layout);
     p.density = integer(L"Density", p.density);
     p.pageSize = integer(L"PageSize", p.pageSize);
@@ -140,12 +143,20 @@ bool tryLoadPreferences(const std::wstring &path, Preferences &result) {
     bool legacyPinyin = false;
     bool ok = flag(L"Separators", p.separators) && flag(L"CandidatePinyin", legacyPinyin)
               && flag(L"ShowCandidatePinyin", p.candidatePinyin)
+              && flag(L"SkinDecorations", p.skinDecorations)
               && flag(L"Learning", p.learning)
               && flag(L"Associations", p.associations) && flag(L"DefaultEnglish", p.defaultEnglish)
               && flag(L"CaretFallback", p.caretFallback) && flag(L"ChinesePunctuation", p.chinesePunctuation)
               && flag(L"AutoUpdate", p.autoUpdate);
     if (!ok || !validPreferences(p))
         return false;
+    if(p.theme>=10 && p.theme<=12) p.skin=builtinSkin(p.theme);
+    if(p.theme==13) {
+        // Same directory as preferences; fixture paths never touch the real user's theme files.
+        const auto slash=path.find_last_of(L"\\/");
+        if(!p.skinFile.empty() && slash!=std::wstring::npos) p.skin=loadSkin(path.substr(0,slash+1)+p.skinFile);
+        if(!p.skin) { p.theme=0; p.skinFile.clear(); }
+    }
     result = std::move(p);
     return true;
 }
@@ -159,6 +170,8 @@ bool savePreferences(const std::wstring &path, const Preferences &p) {
         return false;
     std::wostringstream s;
     s << L"Version=1\nFont=" << p.font << L"\nFontSize=" << p.fontSize << L"\nTheme=" << p.theme
+      << L"\nSkinFile=" << p.skinFile
+      << L"\nSkinDecorations=" << p.skinDecorations
       << L"\nLayout=" << p.layout << L"\nDensity=" << p.density << L"\nPageSize=" << p.pageSize << L"\nShiftSwitch="
       << p.shiftSwitch
       << L"\nMatchingOptions=" << p.matchingOptions
@@ -377,5 +390,12 @@ Palette palette(int theme) {
                 GetSysColor(COLOR_WINDOWTEXT), GetSysColor(COLOR_HIGHLIGHT), GetSysColor(COLOR_HIGHLIGHT), GetSysColor(COLOR_HIGHLIGHTTEXT)};
     }
     return themePalette(theme, systemDarkTheme(), GetSysColor(COLOR_HIGHLIGHT), GetSysColor(COLOR_HIGHLIGHTTEXT));
+}
+Palette palette(const Preferences &p) {
+    HIGHCONTRASTW contrast{sizeof(contrast),0,nullptr};
+    if(SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(contrast),&contrast,0) && (contrast.dwFlags&HCF_HIGHCONTRASTON)) return palette(0);
+    auto skin=p.theme==13 ? p.skin : builtinSkin(p.theme);
+    if(!skin) return palette(p.theme);
+    return {skin->background,skin->surface,skin->text,skin->muted,skin->border,skin->accent,skin->selected,skin->selectedText};
 }
 }

@@ -3,6 +3,18 @@
 preview8–16 阶段已结项；开发与交付定位见 [结项记录](WINDOWS_PHASE_WRAPUP.md)。
 preview8–15 的实现细节见 [历史归档](history/DEVELOPMENT_PREVIEW8_15.md)。
 
+## preview21 皮肤系统
+
+`skin.cpp` 实现有界 UTF-8 自包含 .cyskin、PNG 预检/解码、对比度与不可变配置快照。
+PNG 以 Base64 嵌入文件；配置只存同目录 ASCII basename；坏皮肤回退系统，不清空其余设置。
+内置图片由 CMake 从 PNG 生成 byte array；按键和绘制不访问图片文件。
+每个图片对象保留至多 4 个最长边 512 的缩放缓存，锁内绘制，避免每帧高质量重采样。
+候选项先按原有字体和行宽布局，再为装饰分配单独侧栏，空间不足时放弃侧栏。
+编辑只更新 draft，应用时另存自定义文件并沿用配置通知；导入收藏文件与用户源文件分离。
+旧主题 3–5 仍迁移为系统，新预置用 10–12，自定义用 13，不混淆历史行为。
+测试 `windows_skin_test` 无个人文件依赖；其余 UI/key 回归覆盖六皮肤和可见自定义切换。
+操作与格式见 [SKINS.md](SKINS.md)，素材来源见 assets/skins/README.md。
+
 ## preview20 单音节意图与受限激活
 
 见 [本批清单](WINDOWS_PREVIEW20_TASKLIST.md)。Session 用 count_spelling 判断完整单音节，

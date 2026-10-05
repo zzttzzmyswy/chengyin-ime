@@ -2,7 +2,7 @@
 
 澄音是一款正在开发的开源中文输入法，长期目标是高性能、低延迟和跨平台兼容。
 共享 Rust 核心面向 Windows、Linux X11、Linux Wayland 与 Android；全拼优先，随后双拼。
-当前优先交付 Windows x64，版本 **0.1.0-preview20**。
+当前优先交付 Windows x64，版本 **0.1.0-preview21**。
 完整声母缩写优先匹配同字数词语，如 `ssdd` →“世世代代”；无完整词时再回退。
 整词/整句匹配之外可从开头选词组或单字，所选部分立即上屏，剩余拼音继续匹配。
 
@@ -12,7 +12,7 @@
 - 整句与前缀选词、候选翻页、中间编辑、手工音节分隔（例如 `xi'an`）。
 - Windows 本地选词学习：最多 8192 项，动态查询缓存、近期命中率遗忘；支持备份、导入和清除。
 - 导入常见搜狗 SCEL、UTF-8 / UTF-16 / GBK 文本、TSV 和二进制词库。
-- 八页原生 Windows 设置；紧凑候选、系统/白/黑主题、系统亮暗跟随、自动更新与发行说明。
+- 八页原生 Windows 设置；系统/白/黑、青瓷、夜航、Q 版鲸鱼娘皮肤，支持自定义 PNG、配色、圆角和留白；自动更新与发行说明。
 - 可配置 11 组模糊音及相邻交换、漏字母、QWERTY 相邻键、重复按键；按拼音字母加粗修正位置。
 - 自定义词库列表管理；Shift 符号和大写透传；空格提交拼音原文，数字/鼠标选中文。
 - 配置自动同步到已激活的应用；中文标点跟随模式；TSF 中/英状态按钮与澄音标识。
@@ -22,7 +22,7 @@
 
 | 平台 | 目前实现 | 验证边界 |
 | --- | --- | --- |
-| Windows 10 2004+/11 x64 | TSF、候选、设置、学习、单 EXE 安装器 | preview20 本机 Win11/MSVC 七项 CTest 通过；preview8/10 已有桌面记录、preview7 安装生命周期曾通过；新包多屏/宿主矩阵仍待验收 |
+| Windows 10 2004+/11 x64 | TSF、候选、设置、学习、单 EXE 安装器 | preview21 本机 Win11/MSVC 八项 CTest；preview8/10 已有桌面记录；新包安装/物理多屏/宿主矩阵另行验收 |
 | Linux X11 / Wayland | Fcitx 5 插件、自定义词库后台切换、Debian 测试包 | 无头事件测试与包生命周期；真实桌面应用矩阵待验收 |
 | Android | 共享核心 ARM64 编译检查 | 输入服务与软键盘尚未实现 |
 | 双拼、Windows ARM64/x86 | 已规划 | 尚未实现 |
@@ -32,13 +32,13 @@
 
 ## 安装和体验
 
-Windows 原生构建文件为 `chengyin-windows-x64-0.1.0-preview20-msvc.exe`；开发者的 MinGW
+Windows 原生构建文件为 `chengyin-windows-x64-0.1.0-preview21-msvc.exe`；开发者的 MinGW
 交叉构建以 `-gnu.exe` 结尾。安装包自包含，不需要用户安装 Rust、Python 或额外运行库。
 安装后注销并重新登录，Win+Space 选择澄音；开始菜单打开设置。
 使用、升级、卸载和集中实测步骤见 [Windows 指南](platforms/windows/README.md)。
 构建产物不提交到源码库；[GitHub Actions](https://github.com/zzttzzmyswy/myswyIm/actions/workflows/ci.yml)
 通过 Windows 构建及安装回归后保存安装 EXE，可在对应运行的 Artifacts 中下载。
-preview20 增加完整单音节优先单字和受限 TSF 激活支持；86 项 Rust Release、C ABI 和七项原生 Windows 测试通过。
+preview21 增加候选皮肤、自定义收藏与 Q 版鲸鱼娘，操作与文件格式见 [皮肤指南](docs/SKINS.md)。
 安装后须重开加载旧 DLL 的应用；新版资源管理器地址栏/搜索框的实装验收仍待完成。
 Windows preview8–16 阶段已结项；preview17 修复声母缩写优先级，preview18 修复代码审查发现的边界与数据隔离问题，77 项 Rust 与七项原生 Windows 测试通过。
 交付、源码整理及后续验收范围见 [结项记录](docs/WINDOWS_PHASE_WRAPUP.md)和[最新状态](docs/STATUS.md)。

@@ -66,6 +66,10 @@ class Settings {
     void copyDiagnostics();
     void testFields(int &);
     void checkUpdate(bool download = false);
+    void saveDraftSkin(const Skin &);
+    void stageSkin(const Skin &);
+    Skin editableSkin() const;
+    std::vector<std::wstring> skinFiles_;
     HINSTANCE instance_;
     Preferences draft_;
     HFONT body_ = nullptr, sample_ = nullptr;
@@ -311,18 +315,64 @@ void Settings::buildPage() {
         end();
         break;
     }
-    case 2:
+    case 2: {
         begin(L"候选主题");
         label(L"主题：", 20, y + 4, 100, 24);
-        combo(303, 130, y, 300, {L"Windows 系统（自动亮 / 暗）", L"白", L"黑"}, draft_.theme);
+        std::vector<std::wstring> names{L"Windows 系统（自动亮 / 暗）",L"白",L"黑",L"青瓷 · 雨后",L"夜航 · 星图",L"深蓝来信 · 鲸鱼娘"};
+        skinFiles_.clear();
+        int selected=draft_.theme<3 ? draft_.theme : draft_.theme<=12 ? draft_.theme-7 : 0;
+        WIN32_FIND_DATAW data{};
+        const auto root=userFile(L"",false);
+        HANDLE search=root.empty()?INVALID_HANDLE_VALUE:FindFirstFileW((root+L"skin-*.cyskin").c_str(),&data);
+        if(search!=INVALID_HANDLE_VALUE) {
+            do {
+                if(data.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) continue;
+                if(skinFiles_.size()>=64) break;
+                const auto name=skinName(root+data.cFileName); if(name.empty()) continue;
+                if(draft_.theme==13 && draft_.skinFile==data.cFileName) selected=static_cast<int>(names.size());
+                names.push_back(L"自定义 · "+name);skinFiles_.emplace_back(data.cFileName);
+            } while(FindNextFileW(search,&data));
+            FindClose(search);
+        }
+        if(draft_.theme==13 && draft_.skinFile.empty() && draft_.skin) {
+            selected=static_cast<int>(names.size());names.push_back(L"未保存 · "+draft_.skin->name);skinFiles_.push_back(L"");
+        }
+        combo(303, 130, y, 380, names, selected);
         y += 40;
-        paragraph(L"候选框可选择 Windows 系统、白或黑主题。系统主题自动跟随 Windows 亮暗切换；高对比度优先采用系统可读颜色。更多主题后续再开发。");
+        paragraph(L"青瓷的枝叶、夜航的星图、深蓝来信的鲸鱼娘，均有独立装饰和选中样式。装饰避让文字；系统高对比度优先。鲸鱼娘参考 TreapGoGo 社区设定，非官方形象。");
+        control(L"BUTTON",L"导入皮肤…",WS_TABSTOP,310,20,y,115,30);
+        control(L"BUTTON",L"导出皮肤…",WS_TABSTOP,311,145,y,115,30);
+        control(L"BUTTON",L"移除自定义",WS_TABSTOP,312,270,y,115,30);
+        y+=40;
+        check(316,L"显示皮肤装饰（关闭可进一步缩小候选框）",y,draft_.skinDecorations);y+=32;
+        paragraph(L"支持单文件 .cyskin：配色、圆角、间距、装饰及 PNG 插画。导入后点击“应用”；可多次导入收藏皮肤。导出文件可用文本编辑器调整，再导入预览。");
         end();
         begin(L"主题预览");
         control(L"STATIC", L"", SS_OWNERDRAW, 309, 20, y, paneWidth_ - 48, std::max(130, (draft_.fontSize + 18) * 3 + 12));
         y += std::max(130, (draft_.fontSize + 18) * 3 + 12) + 10;
         end();
+        begin(L"自定义配色");
+        paragraph(L"以当前皮肤为基础另存新皮肤。文字对比度不足时会拒绝保存，避免候选难以阅读。");
+        control(L"BUTTON",L"面板底色…",WS_TABSTOP,313,20,y,115,30);
+        control(L"BUTTON",L"候选文字…",WS_TABSTOP,314,145,y,115,30);
+        control(L"BUTTON",L"选中底色…",WS_TABSTOP,315,270,y,115,30);
+        control(L"BUTTON",L"更换插画…",WS_TABSTOP,317,395,y,115,30);
+        y+=40;
+        const auto edited=draft_.skin ? draft_.skin : builtinSkin(draft_.theme);
+        label(L"圆角 / 留白：",20,y+4,110,24);
+        const int radii[]{0,4,8,12,16,24},padding[]{3,4,6,8,10,12};
+        auto metric=[&](int id,int x,int width,const int *values,int current,std::vector<std::wstring> labels) {
+            int index=0;while(index<6 && values[index]!=current) ++index;
+            if(index==6) labels.push_back(L"自定义 "+std::to_wstring(current));
+            combo(id,x,y,width,labels,index);
+        };
+        metric(318,140,150,radii,edited?edited->radius:12,{L"直角",L"小圆角 4",L"圆角 8",L"圆角 12",L"圆角 16",L"圆角 24"});
+        metric(319,305,130,padding,edited?edited->padding:6,{L"紧凑 3",L"留白 4",L"留白 6",L"留白 8",L"留白 10",L"留白 12"});
+        y+=36;label(L"装饰纹样：",20,y+4,110,24);
+        combo(320,140,y,295,{L"无纹样",L"青瓷枝叶",L"夜航星图",L"海浪"},edited?edited->ornament:0);
+        y+=40;end();
         break;
+    }
     case 3: {
         begin(L"当前词库");
         paragraph(L"内置 87,540 条开源字词，来源为 Rime 与 jieba。");
@@ -386,7 +436,7 @@ void Settings::buildPage() {
     case 6:
         begin(L"澄音输入法");
         paragraph(
-            L"版本：0.1.0-preview20 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
+            L"版本：0.1.0-preview21 · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
         paragraph(
             L"代码开源协议：MIT License · Copyright 2026 Myswy IM contributors\n允许使用、修改和分发，须保留版权和许可声明；软件按现状提供。词库及运行库有各自许可，随安装包提供。");
         buttons(605, L"开源协议", 606, L"仓库链接", 607, L"发行说明");
@@ -495,7 +545,7 @@ bool Settings::chooseFile(std::wstring &path, bool save, const wchar_t *filter) 
     dialog.nMaxFile = static_cast<DWORD>(std::size(file));
     dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST | (save ? OFN_OVERWRITEPROMPT :
                    OFN_FILEMUSTEXIST);
-    dialog.lpstrDefExt = save ? L"chengyinuser" : nullptr;
+    dialog.lpstrDefExt = save ? (std::wcsstr(filter,L"皮肤") ? L"cyskin" : L"chengyinuser") : nullptr;
     if (!(save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog)))
         return false;
     path = file;
@@ -533,7 +583,17 @@ void Settings::collect(int id) {
         draft_.fontSize = choice(id) + 12;
         break;
     case 303:
-        draft_.theme = choice(id);
+        if(choice(id)<6) {
+            const int index=choice(id);draft_.theme=index<3?index:index+7;
+            draft_.skin=builtinSkin(draft_.theme);draft_.skinFile.clear();
+        } else {
+            const size_t index=static_cast<size_t>(choice(id)-6);
+            if(index>=skinFiles_.size()) return;
+            if(skinFiles_[index].empty()) return;
+            auto skin=loadSkin(userFile(skinFiles_[index].c_str()));
+            if(!skin) {notify(L"皮肤无法加载，原设置保留。",true);return;}
+            draft_.theme=13;draft_.skin=skin;draft_.skinFile=skinFiles_[index];
+        }
         break;
     case 304:
         draft_.layout = choice(id);
@@ -645,7 +705,7 @@ std::wstring Settings::diagnostics() {
     LSTATUS status = RegGetValueW(HKEY_LOCAL_MACHINE,
                                   L"Software\\Classes\\CLSID\\{65C32A54-219A-4F0A-B44C-B963D7BA532F}\\InprocServer32", nullptr, RRF_RT_REG_SZ,
                                   nullptr, registered, &size);
-    text << L"澄音 0.1.0-preview20\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
+    text << L"澄音 0.1.0-preview21\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
          (status == ERROR_SUCCESS ? registered : L"not registered") << L"\r\nDPI: " << dpi_ << L"\r\nFont: " <<
          draft_.font << L" / " << draft_.fontSize << L"\r\nPage size: " << draft_.pageSize << L"\r\nLearning: " <<
          draft_.learning << L"\r\nAssociation: " << draft_.associations << L"\r\nCaret fallback: " <<
@@ -678,7 +738,44 @@ void Settings::copyDiagnostics() {
     CloseClipboard();
     notify(ok ? L"诊断信息已复制，不含输入正文。" : L"无法复制诊断信息。");
 }
+void Settings::saveDraftSkin(const Skin &skin) {
+    if(std::count_if(skinFiles_.begin(),skinFiles_.end(),[](const auto &name){return !name.empty();})>=64) {notify(L"最多收藏 64 个自定义皮肤，请先移除不再使用的皮肤。",true);return;}
+    GUID guid{};
+    if(FAILED(CoCreateGuid(&guid))) {notify(L"无法创建皮肤标识。",true);return;}
+    wchar_t id[40]{};StringFromGUID2(guid,id,40);
+    std::wstring name=L"skin-";
+    for(wchar_t c:std::wstring(id)) if(c!=L'{' && c!=L'}') name+=c;
+    name+=L".cyskin";
+    auto bytes=encodeSkin(skin);
+    const auto path=userFile(name.c_str(),true);
+    if(bytes.empty() || !atomicWrite(path,bytes)) {notify(L"无法保存皮肤，原设置保留。",true);return;}
+    auto loaded=loadSkin(path);
+    if(!loaded) {DeleteFileW(path.c_str());notify(L"皮肤校验失败，原设置保留。",true);return;}
+    draft_.theme=13;draft_.skinFile=name;draft_.skin=loaded;dirty_=true;buildPage();
+    notify(L"皮肤已加入收藏并预览；点击“应用”同步到候选窗口。");
+}
+void Settings::stageSkin(const Skin &skin) {
+    draft_.theme=13;draft_.skin=std::make_shared<Skin>(skin);draft_.skinFile.clear();dirty_=true;buildPage();
+    notify(L"自定义皮肤预览已更新；点击“应用”另存并同步。");
+}
+Skin Settings::editableSkin() const {
+    auto current=draft_.skin ? draft_.skin : builtinSkin(draft_.theme);
+    if(current) return *current;
+    auto p=palette(draft_);Skin s;s.name=L"我的皮肤";s.ornament=0;
+    s.background=p.background;s.surface=p.surface;s.text=p.text;s.muted=p.muted;s.border=p.border;
+    s.accent=p.accent;s.selected=p.selected;s.selectedText=p.selectedText;return s;
+}
 void Settings::command(int id, int event) {
+    if(event==CBN_SELCHANGE && id>=318 && id<=320) {
+        Skin skin=editableSkin();
+        const int selected=static_cast<int>(SendMessageW(GetDlgItem(pane_,id),CB_GETCURSEL,0,0));
+        if(selected<0 || selected>5) return;
+        const int radii[]{0,4,8,12,16,24},padding[]{3,4,6,8,10,12};
+        if(id==318) skin.radius=radii[selected];
+        if(id==319) skin.padding=padding[selected];
+        if(id==320) skin.ornament=std::min(3,selected);
+        stageSkin(skin);return;
+    }
     if (id >= 11 && id < 18) {
         page_ = id - 10;
         scroll_ = 0;
@@ -694,6 +791,54 @@ void Settings::command(int id, int event) {
     }
     if (event != BN_CLICKED)
         return;
+    if(id==316) {draft_.skinDecorations=SendMessageW(GetDlgItem(pane_,id),BM_GETCHECK,0,0)==BST_CHECKED;dirty_=true;buildPage();return;}
+    if(id==317) {
+        std::wstring path;if(!chooseFile(path,false,L"PNG 插画\0*.png\0\0")) return;
+        Skin skin=editableSkin();
+        if(!readSmallFile(path,skin.png,2*1024*1024)) {notify(L"图片读取失败或超过 2 MiB。",true);return;}
+        Skin decoded;
+        if(!parseSkin(encodeSkin(skin),decoded)) {notify(L"请选择有效的 PNG 图片，宽高均不超过 1024 像素。",true);return;}
+        stageSkin(decoded);return;
+    }
+    if(id==310) {
+        if(std::count_if(skinFiles_.begin(),skinFiles_.end(),[](const auto &name){return !name.empty();})>=64) {notify(L"最多收藏 64 个自定义皮肤，请先移除不再使用的皮肤。",true);return;}
+        std::wstring path;
+        if(!chooseFile(path,false,L"澄音皮肤\0*.cyskin\0\0")) return;
+        auto skin=loadSkin(path);
+        if(!skin) {notify(L"皮肤无效：请检查格式、颜色对比度和 PNG 尺寸（最大 1024 × 1024）。原设置保留。",true);return;}
+        saveDraftSkin(*skin);return;
+    }
+    if(id==311) {
+        auto skin=draft_.skin ? draft_.skin : builtinSkin(draft_.theme);
+        Skin exported;
+        if(skin) exported=*skin;
+        else { auto p=palette(draft_);exported.background=p.background;exported.surface=p.surface;exported.text=p.text;
+            exported.muted=p.muted;exported.border=p.border;exported.accent=p.accent;exported.selected=p.selected;exported.selectedText=p.selectedText;exported.ornament=0; }
+        std::wstring path;if(!chooseFile(path,true,L"澄音皮肤\0*.cyskin\0\0")) return;
+        if(path.size()<7 || path.substr(path.size()-7)!=L".cyskin") path+=L".cyskin";
+        auto bytes=encodeSkin(exported);
+        notify(!bytes.empty() && atomicWrite(path,bytes) ? L"皮肤已导出，插画包含在文件中。" : L"导出失败：请检查颜色对比度或目标文件。",false);return;
+    }
+    if(id==312) {
+        if(draft_.theme!=13 || draft_.skinFile.empty()) {notify(L"内置主题无需移除。请选择一个自定义皮肤。");return;}
+        const auto path=userFile(draft_.skinFile.c_str());
+        if(!DeleteFileW(path.c_str())) {notify(L"皮肤文件暂时无法移除。",true);return;}
+        draft_.theme=0;draft_.skin.reset();draft_.skinFile.clear();dirty_=true;buildPage();
+        notify(L"已从收藏中移除；点击“应用”切换为系统主题。");return;
+    }
+    if(id>=313 && id<=315) {
+        Skin skin=editableSkin();
+        static COLORREF custom[16]{};CHOOSECOLORW picker{sizeof(picker)};
+        picker.hwndOwner=window_;picker.lpCustColors=custom;picker.Flags=CC_FULLOPEN|CC_RGBINIT;
+        picker.rgbResult=id==313?skin.surface:id==314?skin.text:skin.selected;
+        if(!ChooseColorW(&picker)) return;
+        if(id==313) skin.surface=skin.background=picker.rgbResult;
+        if(id==314) skin.text=picker.rgbResult;
+        if(id==315) skin.selected=picker.rgbResult;
+        if(!validSkin(skin)) {notify(L"此配色的文字对比度不足 4.5:1，请选择更清晰的颜色。",true);return;}
+        if(skin.name.size()<43) skin.name+=L" · 改";
+        stageSkin(skin);return;
+    }
     if (id == IDCANCEL) {
         SendMessageW(window_, WM_CLOSE, 0, 0);
         return;
@@ -701,6 +846,10 @@ void Settings::command(int id, int event) {
     if (id == IDOK)
         id = kSave;
     if (id == kSave) {
+        if(draft_.theme==13 && draft_.skinFile.empty() && draft_.skin) {
+            saveDraftSkin(*draft_.skin);
+            if(draft_.skinFile.empty()) return;
+        }
         if (savePreferences(userFile(L"preferences.ini", true), draft_)) {
             dirty_ = false;
             notify(L"设置已应用；候选外观立即同步，词库与纠错从下一段输入生效。");
@@ -775,7 +924,9 @@ void Settings::command(int id, int event) {
         ShellExecuteW(window_, L"open", kRepository, nullptr, nullptr, SW_SHOWNORMAL); return;
     }
     if (id == 607) {
-        MessageBoxW(window_, L"0.1.0-preview20 · 2026-10-05\n\n"
+        MessageBoxW(window_, L"0.1.0-preview21 · 2026-10-06\n\n"
+                    L"• 新增青瓷、夜航、Q 版鲸鱼娘候选皮肤；装饰自动避让文字。\n"
+                    L"• 自定义皮肤收藏、导入导出、PNG 插画、配色、圆角与留白编辑。\n"
                     L"• 完整单音节优先准确单字，之后单字召回，再保留词语补全。\n"
                     L"• 增加受限 TSF 激活能力；该模式使用内置词库，不读取或保存个人学习。\n"
                     L"• 拍照等完整词条优先，拒绝无依据的同音字拼接。\n"
@@ -945,11 +1096,12 @@ LRESULT Settings::message(HWND hwnd, UINT message, WPARAM w, LPARAM l, bool pane
     case WM_DRAWITEM:
         if (pane && w == 309) {
             auto *item = reinterpret_cast<DRAWITEMSTRUCT *>(l);
-            const auto colors = palette(draft_.theme);
-            const int style=visualTheme(draft_.theme);
-            drawThemeSurface(item->hDC,item->rcItem,colors,style,dpi_);
+            const auto colors = palette(draft_);
+            const int style=skinSelectionStyle(draft_);
+            const int rail=skinRail(draft_,dpi_);
+            drawSkinSurface(item->hDC,item->rcItem,colors,draft_,dpi_,rail);
             RECT selected = item->rcItem;
-            selected.left += scaled(6); selected.right -= scaled(6);
+            selected.left += scaled(6); selected.right -= scaled(6)+rail;
             auto old = SelectObject(item->hDC, sample_);
             TEXTMETRICW metrics{}; GetTextMetricsW(item->hDC, &metrics);
             const int rowHeight = metrics.tmHeight + scaled(6);
@@ -965,7 +1117,7 @@ LRESULT Settings::message(HWND hwnd, UINT message, WPARAM w, LPARAM l, bool pane
                 DrawTextW(item->hDC,digit,1,&number,DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
                 row.left+=scaled(30); SelectObject(item->hDC,sample_);
                 SetTextColor(item->hDC,i==0 ? colors.selectedText : colors.text);
-                DrawTextW(item->hDC,i==0 ? L"你好" : i==1 ? L"拟好" : L"你号",-1,&row,DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
+                DrawTextW(item->hDC,i==0 ? L"清风" : i==1 ? L"轻风" : L"青峰",-1,&row,DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
             }
             SelectObject(item->hDC, old);
             return TRUE;

@@ -1,5 +1,26 @@
 # 项目状态
 
+## preview21 候选皮肤系统 · 2026-10-06
+
+按用户新需求重新开启主题开发，分支 `codex/theme-skins`；见 [任务清单](WINDOWS_PREVIEW21_TASKLIST.md)、[皮肤指南](SKINS.md)。
+系统/白/黑之外，新增青瓷枝叶、夜航星图、深蓝来信 Q 版鲸鱼娘。主题控制面板、圆角、选中样式、装饰侧栏；
+文字按原字号排版，空间不足时隐藏装饰，可手动关闭。高对比度优先系统配色。
+支持最多 64 个自定义 .cyskin 收藏、导入/导出、PNG 插画、配色、圆角/留白/纹样编辑，预览后应用。
+包体/图片有界，主要/次要/纠错文字对比度校验；图片与布局配置作为快照加载，不在按键或绘制时读文件。
+缩放图片使用最多四项有界缓存；同一自定义 ID 更换图片或关闭装饰时，活动候选几何同步刷新。
+旧 3–5 主题继续迁移系统，新标识 10–13 不复用已删除角色主题。
+
+最终直接采用用户指定 https://treapgogo.github.io/deepseek-whale-girl/ 网站的透明 Q 版头像，字节保持；来源说明随源码和 THIRD_PARTY 保留。
+最终素材下 86 Rust Release、MSVC /W4 /WX C ABI、8/8 原生 CTest（24.89 s）及六主题横纵截图/五档 DPI 模拟通过。
+候选窗口 300 次暖重绘，鲸鱼娘 P50/P95/P99=524.2/696.9/983.2 µs；GDI 对象稳定，详见 PERFORMANCE。
+交付 `chengyin-windows-x64-0.1.0-preview21-msvc.exe`，4628751 bytes，SHA-256
+`1a701b8f1f342effc87636062637c9d510fd8dd291baaf5d6e25cac500fd07c5`，已复制至主工作目录。
+PE、7-Zip、全负载 SHA-256、COM、三二进制逐字节一致、测试通知隔离与 21 项运行时许可 CRC 校验通过。
+证据 `build/native-test-preview21.txt`、`tests-release-preview21.txt`、`abi-test-preview21.txt`、
+`ui-preview21/`、`skin-paint-bench-preview21.txt`、`package-verify-preview21.txt`、`delivery-preview21.json`。
+远程 CI/隔离安装生命周期单独追踪，未把本机离线打包校验算作安装完成。
+没有修改个人安装/学习记录。旧 Explorer 升级验证、物理混合 DPI、review B–E 保持待办。
+
 ## 最新：preview20 单音节与受限 TSF 激活 · 2026-10-05
 
 见 [本批清单](WINDOWS_PREVIEW20_TASKLIST.md)。完整单音节优先准确/模糊单字历史及单字，

@@ -187,10 +187,10 @@ void CALLBACK inspect(HWND, UINT, UINT_PTR timer, DWORD) {
         const wchar_t *names[] {L"settings-input", L"settings-candidates", L"settings-themes", L"settings-dictionary", L"settings-learning", L"settings-input-test", L"settings-about", L"settings-fuzzy"};
         capture(window, names[stage]);
         if (stage == 2) {
-            require(SendMessageW(GetDlgItem(pane,303),CB_GETCOUNT,0,0) == 3,
-                    "theme page exposes exactly system, white and black");
+            require(SendMessageW(GetDlgItem(pane,303),CB_GETCOUNT,0,0) >= 6,
+                    "theme page exposes system, white, black and three designed skins");
             const auto original = SendMessageW(GetDlgItem(pane,303),CB_GETCURSEL,0,0);
-            for (int theme = 0; theme < 3; ++theme) {
+            for (int theme = 0; theme < 6; ++theme) {
                 HWND combo = GetDlgItem(pane,303);
                 SendMessageW(combo,CB_SETCURSEL,theme,0);
                 SendMessageW(pane,WM_COMMAND,MAKEWPARAM(303,CBN_SELCHANGE),reinterpret_cast<LPARAM>(combo));
@@ -198,6 +198,14 @@ void CALLBACK inspect(HWND, UINT, UINT_PTR timer, DWORD) {
                 const auto name = L"settings-theme-" + std::to_wstring(theme);
                 capture(window,name.c_str());
             }
+            for(int id:{318,319,320}) {
+                HWND option=GetDlgItem(pane,id);
+                SendMessageW(option,CB_SETCURSEL,id==318?5:id==319?0:2,0);
+                SendMessageW(pane,WM_COMMAND,MAKEWPARAM(id,CBN_SELCHANGE),reinterpret_cast<LPARAM>(option));
+                require(SendMessageW(GetDlgItem(pane,303),CB_GETCURSEL,0,0)>=6,"skin editing creates an unsaved draft rather than changing the built-in preset");
+                checkFonts(window);checkLayout(pane);
+            }
+            capture(window,L"settings-custom-skin-draft");
             HWND combo = GetDlgItem(pane,303); SendMessageW(combo,CB_SETCURSEL,original,0);
             SendMessageW(pane,WM_COMMAND,MAKEWPARAM(303,CBN_SELCHANGE),reinterpret_cast<LPARAM>(combo));
         }
@@ -298,14 +306,15 @@ int wmain(int argc, wchar_t **argv) {
     }
     require(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)), "UI COM initialization");
     // Vector-art DPI simulation is separate from physical monitor validation.
-    for (UINT dpi : {96u,120u,144u,192u,288u}) for (int theme = 0; theme < 3; ++theme) {
+    for (UINT dpi : {96u,120u,144u,192u,288u}) for (int theme : {0,1,2,10,11,12}) {
         auto scale = [dpi](int value) { return MulDiv(value,static_cast<int>(dpi),96); };
         HDC screen = GetDC(nullptr), dc = CreateCompatibleDC(screen);
         HBITMAP bitmap = CreateCompatibleBitmap(screen,scale(260),scale(180)); auto previous = SelectObject(dc,bitmap);
-        const auto colors = myswy::palette(theme);
+        myswy::Preferences preferences;preferences.theme=theme;preferences.skin=myswy::builtinSkin(theme);
+        const auto colors = myswy::palette(preferences);
         const int style = myswy::visualTheme(theme);
         RECT surface{0,0,scale(260),scale(180)}, row{scale(3),scale(60),scale(257),scale(87)}, badge{scale(6),scale(60),scale(20),scale(87)};
-        myswy::drawThemeSurface(dc,surface,colors,style,dpi);
+        myswy::drawSkinSurface(dc,surface,colors,preferences,dpi,myswy::skinRail(preferences,dpi));
         myswy::drawThemeSelection(dc,row,colors,style,dpi,true,false);
         myswy::drawThemeBadge(dc,badge,colors,style,dpi,true);
         GdiFlush();
@@ -352,7 +361,7 @@ int wmain(int argc, wchar_t **argv) {
         require(compact.bottom - compact.top < comfortable.bottom - comfortable.top
                 && compact.right - compact.left < comfortable.right - comfortable.left,
                 "compact reduces both dimensions without changing text size");
-        for (int theme = 0; theme < 3; ++theme) {
+        for (int theme : {0,1,2,10,11,12}) {
             prefs.theme = theme;
             prefs.density = 0;
             candidates.show(session,owner,RECT{100,150,101,170},false,nullptr,nullptr,6+theme,prefs,false);
@@ -576,6 +585,6 @@ int wmain(int argc, wchar_t **argv) {
         FreeLibrary(richEdit);
     CoUninitialize();
     require(myswy::objects == 0, "UI lifetimes released");
-    std::puts("PASS: eight tabs, live fonts after hover/theme recreation, 96/120/144/192/288 DPI, narrow viewport/scroll, three candidate themes, letter correction marks, compact geometry and embedded test lifetime; no user settings written.");
+    std::puts("PASS: eight tabs, live fonts after hover/theme recreation, 96/120/144/192/288 DPI, narrow viewport/scroll, six candidate themes, letter correction marks, compact geometry and embedded test lifetime; no user settings written.");
     return 0;
 }

@@ -26,6 +26,9 @@ M0 已有实现；M1 已有插件、自定义词典热切换和 Debian 测试包
 
 ## 最新 M2 / M4 切片
 
+2026-10-06：按用户明确新需求重新开启 M4 皮肤开发，增加可导入/导出/编辑的自包含皮肤与青瓷、夜航、Q 版鲸鱼娘。
+不改变解码/学习优先级规则，review B–E 与 Explorer 新版实机验证继续保留，见 WINDOWS_PREVIEW21_TASKLIST。
+
 2026-10-05：preview20 改为完整单音节优先单字，并支持受限 TSF 激活。
 86 Rust Release、C ABI、七项原生 CTest 通过；旧 Explorer 双输入框已复现，新包安装后实测仍待完成。
 任务见 WINDOWS_PREVIEW20_TASKLIST，后续审查 B–E 按验收门槛继续。

@@ -80,9 +80,9 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
     preferences_ = preferences;
     inlineEditable_ = inlineEditable;
     showPinyin_ = preferences.candidatePinyin && !inlineEditable;
-    if (theme_ != preferences.theme) {
+    {
         theme_ = preferences.theme;
-        colors_ = palette(theme_);
+        colors_ = palette(preferences);
     }
     if (!hwnd_) {
         WNDCLASSEXW cls{};
@@ -115,6 +115,8 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         return MulDiv(n, static_cast<int>(dpi), 96);
     };
     padding_ = scale(preferences.density ? 7 : 3);
+    const Skin *skin=activeSkin(preferences);
+    if(skin && preferences.density) padding_=scale(skin->padding);
     if (fontDpi_ != dpi || fontSize_ != preferences.fontSize || fontFace_ != preferences.font) {
         HFONT font = createUIFont(preferences.fontSize, dpi, preferences.font);
         HFONT nextSmallFont = createUIFont(std::max(16, preferences.fontSize - 2), dpi, preferences.font);
@@ -251,11 +253,18 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         height = y + (count_ ? rowHeight_ : 0) + padding_ + footerHeight_;
     }
     const int naturalHeight = height;
+    rail_=skinRail(preferences,dpi);
+    // Decoration yields to actual text on narrow displays; never reduce font size.
+    if(width+rail_>available) rail_=0;
+    width+=rail_;
+    if(rail_ && skin && skin->image) height=std::max(height,scale(preferences.layout ? 64 : 90));
     width = std::min(width, available);
     height = std::min(height, static_cast<int>(work.bottom - work.top));
-    scrollMaximum_ = naturalHeight - height;
+    if(height>naturalHeight && !headerHeight_)
+        for(int i=0;i<count_;++i) OffsetRect(&items_[i],0,(height-naturalHeight)/2);
+    scrollMaximum_ = std::max(0,naturalHeight - height);
     scrollOffset_ = std::clamp(scrollOffset_, 0, scrollMaximum_);
-    contentRect_ = {padding_, padding_ + headerHeight_, width - padding_, height - padding_ - footerHeight_};
+    contentRect_ = {padding_, padding_ + headerHeight_, width - padding_ - rail_, height - padding_ - footerHeight_};
     // Keep the keyboard selection visible when work-area height is restricted.
     if (selected_ >= 0 && selected_ < count_) {
         if (items_[selected_].bottom - scrollOffset_ > contentRect_.bottom)
@@ -277,7 +286,7 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
             pinyinRects_[i].top = textRects_[i].bottom;
         }
     }
-    footerRect_ = {padding_, height - padding_ - footerHeight_, width - padding_, height - padding_};
+    footerRect_ = {padding_, height - padding_ - footerHeight_, width - padding_ - rail_, height - padding_};
     const int x = std::clamp(static_cast<int>(caret.left), static_cast<int>(work.left),
                              static_cast<int>(work.right) - width);
     int y = static_cast<int>(caret.bottom) + scale(4);
@@ -294,7 +303,7 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
     if (!visible)
         flags |= SWP_SHOWWINDOW;
     SetWindowPos(hwnd_, HWND_TOPMOST, x, y, width, height, flags);
-    const int radius = themeRadius(visualTheme(preferences.theme), dpi);
+    const int radius = skin ? scale(skin->radius) : themeRadius(visualTheme(preferences.theme), dpi);
     if (shapeWidth_ != width || shapeHeight_ != height || shapeRadius_ != radius) {
         HRGN shape = radius ? CreateRoundRectRgn(0, 0, width + 1, height + 1, radius * 2, radius * 2) : nullptr;
         if (!SetWindowRgn(hwnd_, shape, FALSE) && shape) DeleteObject(shape);
@@ -336,7 +345,7 @@ LRESULT CALLBACK CandidateWindow::procedure(HWND hwnd, UINT msg, WPARAM w, LPARA
     if (msg == WM_ERASEBKGND)
         return 1;
     if ((msg == WM_THEMECHANGED || msg == WM_SETTINGCHANGE || msg == WM_SYSCOLORCHANGE) && self) {
-        self->colors_ = palette(self->preferences_.theme);
+        self->colors_ = palette(self->preferences_);
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
@@ -412,13 +421,13 @@ void CandidateWindow::paint() {
     }
     HDC dc = buffer_ && bitmap_ && bufferWidth_ == width && bufferHeight_ == height ? buffer_ : screen;
     const auto colors = colors_;
-    const int style = visualTheme(preferences_.theme);
-    drawThemeSurface(dc, client, colors, style, fontDpi_);
+    const int style = skinSelectionStyle(preferences_);
+    drawSkinSurface(dc, client, colors, preferences_, fontDpi_, rail_);
     SetBkMode(dc, TRANSPARENT);
     HGDIOBJ oldFont = SelectObject(dc, smallFont_ ? smallFont_ : GetStockObject(DEFAULT_GUI_FONT));
     SetTextColor(dc, colors.muted);
     SetTextColor(dc, colors.muted);
-    RECT header{padding_ + 4, padding_, width - padding_, padding_ + headerHeight_};
+    RECT header{padding_ + 4, padding_, width - padding_ - rail_, padding_ + headerHeight_};
     if (headerHeight_)
         DrawTextW(dc, rows_[0].data, rows_[0].length, &header,
                   DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);

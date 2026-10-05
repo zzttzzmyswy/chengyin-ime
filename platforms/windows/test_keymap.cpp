@@ -181,7 +181,7 @@ int main() {
         candidates.hide();
         SendMessageW(popup, WM_LBUTTONUP, 0, firstRow);
         require(clicks.count == 1 && GetCapture() != popup, "hidden candidate releases capture and cannot commit");
-        for (int theme = 0; theme < 3; ++theme) {
+        for (int theme : {0,1,2,10,11,12}) {
             Preferences prefs; prefs.theme = theme; prefs.density = 0;
             for (int layout : {0, 1}) for (int size : {18, 36}) {
                 prefs.layout = layout; prefs.fontSize = size;
@@ -191,12 +191,19 @@ int main() {
                 HFONT font = createUIFont(size, dpi, prefs.font);
                 HDC dc = GetDC(popup); auto old = SelectObject(dc,font); TEXTMETRICW metric{};
                 GetTextMetricsW(dc,&metric); SelectObject(dc,old); DeleteObject(font); ReleaseDC(popup,dc);
-                const int y = MulDiv(3,static_cast<int>(dpi),96) + metric.tmHeight/2;
+                int y = MulDiv(3,static_cast<int>(dpi),96) + metric.tmHeight/2;
+                if(theme==12 && layout==1) { RECT client{};GetClientRect(popup,&client);y=client.bottom/2; }
                 const int before = clicks.count;
                 SendMessageW(popup, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(20,y));
                 SendMessageW(popup, WM_LBUTTONUP, 0, MAKELPARAM(20,y));
                 require(clicks.count == before + 1 && clicks.index == 0 && GetFocus() == focus,
                         "themed inline first candidate hit area follows actual font height");
+                if(theme>=10) {
+                    RECT rect{};GetClientRect(popup,&rect);
+                    SendMessageW(popup,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(rect.right-10,y));
+                    SendMessageW(popup,WM_LBUTTONUP,0,MAKELPARAM(rect.right-10,y));
+                    require(clicks.count==before+1,"ornament rail never selects a candidate");
+                }
                 HRGN region = CreateRectRgn(0,0,0,0);
                 const int kind = GetWindowRgn(popup,region); DeleteObject(region);
                 require(visualTheme(theme) ? kind != ERROR : kind == ERROR,
@@ -218,6 +225,16 @@ int main() {
             std::printf("Theme %d paint: count=%d, %ldx%ld, dpi=%u, n=300, P50/P95/P99 %.1f/%.1f/%.1f us, GDI %lu -> %lu (RedrawWindow+GdiFlush; no TSF/core/compositor)\n",
                 theme,myswy_session_candidate_count(session),geometry.right-geometry.left,geometry.bottom-geometry.top,windowDpi(popup),
                 timings[149],timings[284],timings[296],before,afterPaint);
+        }
+        {
+            Preferences custom;custom.theme=13;custom.skin=builtinSkin(10);custom.density=0;
+            candidates.show(session,owner,RECT{100,100,101,120},false,nullptr,nullptr,4,custom,true);
+            RECT before{};GetWindowRect(popup,&before);
+            custom.skin=builtinSkin(12);candidates.refreshPreferences(session,custom);
+            RECT refreshed{};GetWindowRect(popup,&refreshed);
+            require(refreshed.right-refreshed.left>before.right-before.left,"same custom ID updates active artwork and geometry");
+            custom.skinDecorations=false;candidates.refreshPreferences(session,custom);GetWindowRect(popup,&refreshed);
+            require(refreshed.right-refreshed.left<before.right-before.left,"decoration toggle removes rail without font shrink");
         }
         DestroyWindow(owner); // Windows automatically destroys its owned popup.
         require(!IsWindow(popup), "owned popup retired with owner");

@@ -1,4 +1,17 @@
-# 项目精简交接 · 2026-10-05
+# 项目精简交接 · 2026-10-06
+
+## 当前追加：候选皮肤 · preview21
+
+分支 codex/theme-skins，基于 e42516a。用户重新要求完整皮肤、自定义与鲸鱼娘，最终指定 TreapGoGo 网站形象。
+最终使用该网站 `assets/whale-girl-logo-dynamic.png` 透明头像，原字节保留于 assets/skins/whale-girl*.png；
+此前 image_gen 草案与抠图尝试未进入交付。上游图片不能套用其网站代码 MIT 许可，来源说明在资产 README 和 THIRD_PARTY。
+皮肤标识 10–12/13，不复用旧 3–5；.cyskin 为有界 UTF-8 字段+内嵌 PNG Base64，导入/导出/收藏最多64份。
+设置内可编辑配色、圆角、留白、纹样、PNG；draft 应用时另存，文件名使用 GUID，正常配置通知热同步。
+不改核心/C ABI/学习。按键和绘制不读文件；共享图像的四槽缩放缓存锁保护，最大边512。
+最终 86 Rust Release、C ABI /W4 /WX、8/8 CTest24.89s、截图五档模拟DPI、完整包/COM/二进制/许可检查通过。
+包 preview21，4628751 bytes，SHA256 1a701b8f1f342effc87636062637c9d510fd8dd291baaf5d6e25cac500fd07c5，已复制主目录。
+看 docs/WINDOWS_PREVIEW21_TASKLIST.md、docs/SKINS.md 和 build/delivery-preview21.json。
+个人安装/设置/历史未修改，没有再触发 UAC。新宿主实机、物理混合DPI、review B–E 继续待办。
 
 ## 当前追加：单音节与 Explorer · preview20
 
