@@ -185,12 +185,12 @@ MyswyProfile *loadProfile(const std::wstring &path) {
                || error == ERROR_PATH_NOT_FOUND ? myswy_profile_new(nullptr, 0) : nullptr;
     }
     std::vector<uint8_t> bytes;
-    return readSmallFile(path, bytes, 2 * 1024 * 1024)
+    return readSmallFile(path, bytes, 4 * 1024 * 1024)
            && !bytes.empty() ? myswy_profile_new(bytes.data(), bytes.size()) : nullptr;
 }
 bool saveProfile(const std::wstring &path, const MyswyProfile *p) {
     int size = myswy_profile_binary(p, nullptr, 0);
-    if (size <= 0 || size > 2 * 1024 * 1024)
+    if (size <= 0 || size > 4 * 1024 * 1024)
         return false;
     std::vector<uint8_t> bytes(static_cast<size_t>(size));
     return myswy_profile_binary(p, bytes.data(), bytes.size()) == size && atomicWrite(path, bytes);
@@ -219,7 +219,7 @@ void notifyConfiguration() {
     epoch.advance();
 }
 bool updateProfile(const std::wstring &path, const uint8_t *key, size_t keySize, const uint8_t *text,
-                   size_t textSize, const DWORD *expectedEpoch) {
+                   size_t textSize, const DWORD *expectedEpoch, uint32_t matchingFlags) {
     Lock lock;
     if (!lock.held)
         return false;
@@ -231,13 +231,13 @@ bool updateProfile(const std::wstring &path, const uint8_t *key, size_t keySize,
     auto *profile = loadProfile(path);
     if (!profile)
         return false;
-    bool ok = myswy_profile_record(profile, key, keySize, text, textSize) == 0 && saveProfile(path, profile);
+    bool ok = myswy_profile_record_selection(profile, key, keySize, text, textSize, matchingFlags) == 0 && saveProfile(path, profile);
     myswy_profile_free(profile);
     return ok;
 }
 bool importProfile(const std::wstring &source, const std::wstring &target) {
     std::vector<uint8_t> bytes;
-    if (!readSmallFile(source, bytes, 2 * 1024 * 1024) || bytes.empty())
+    if (!readSmallFile(source, bytes, 4 * 1024 * 1024) || bytes.empty())
         return false;
     auto *profile = myswy_profile_new(bytes.data(), bytes.size());
     if (!profile)

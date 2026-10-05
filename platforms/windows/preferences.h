@@ -51,7 +51,7 @@ class LearningEpoch {
 };
 void notifyConfiguration();
 bool updateProfile(const std::wstring &, const uint8_t *, size_t, const uint8_t *, size_t,
-                   const DWORD *expectedEpoch = nullptr);
+                   const DWORD *expectedEpoch = nullptr, uint32_t matchingFlags = 0);
 struct Palette {
     COLORREF background, surface, text, muted, border, accent, selected, selectedText;
 };

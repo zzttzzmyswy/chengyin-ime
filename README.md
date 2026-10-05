@@ -2,13 +2,13 @@
 
 澄音是一款正在开发的开源中文输入法，长期目标是高性能、低延迟和跨平台兼容。
 共享 Rust 核心面向 Windows、Linux X11、Linux Wayland 与 Android；全拼优先，随后双拼。
-当前优先交付 Windows x64，版本 **0.1.0-preview13**。
+当前优先交付 Windows x64，版本 **0.1.0-preview14**。
 
 ## 当前功能
 
 - 预载 87,540 条开源常用字词；全拼、首拼、声母混输、连续组词组句和离线上屏联想。
 - 整句与前缀选词、候选翻页、中间编辑、手工音节分隔（例如 `xi'an`）。
-- Windows 本地选词学习：按频次与近期选择排序；支持备份、导入和清除。
+- Windows 本地选词学习：最多 8192 项，动态查询缓存、近期命中率遗忘；支持备份、导入和清除。
 - 导入常见搜狗 SCEL、UTF-8 / UTF-16 / GBK 文本、TSV 和二进制词库。
 - 八页原生 Windows 设置；紧凑候选、系统/白/黑主题、系统亮暗跟随、自动更新与发行说明。
 - 可配置 11 组模糊音及相邻交换、漏字母、QWERTY 相邻键、重复按键；按拼音字母加粗修正位置。
@@ -30,7 +30,7 @@
 
 ## 安装和体验
 
-Windows 原生构建文件为 `chengyin-windows-x64-0.1.0-preview13-msvc.exe`；开发者的 MinGW
+Windows 原生构建文件为 `chengyin-windows-x64-0.1.0-preview14-msvc.exe`；开发者的 MinGW
 交叉构建以 `-gnu.exe` 结尾。安装包自包含，不需要用户安装 Rust、Python 或额外运行库。
 安装后注销并重新登录，Win+Space 选择澄音；开始菜单打开设置。
 使用、升级、卸载和集中实测步骤见 [Windows 指南](platforms/windows/README.md)。

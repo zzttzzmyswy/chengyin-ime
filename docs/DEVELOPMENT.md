@@ -1,3 +1,21 @@
+# preview14 学习扩容、缓存与遗忘
+
+2026-10-05：见 [WINDOWS_PREVIEW14_TASKLIST](WINDOWS_PREVIEW14_TASKLIST.md)。Profile 上限 8192 / 4 MiB。
+MSWYUSR2 记录每词 u16 hits/trials 和 u32 epoch，CRC/排序/范围均验证；可读旧 MSWYUSR1，旧计数/顺序保留，
+缺失观测统计用 0/0 中性先验。C ABI v1 增加 record_selection，不改变旧函数签名或句柄所有权。
+每次宿主成功接受中文选择后，一次统计完整输入匹配到的历史；同组拼音只对齐一次，包含已启用模糊/纠错规则。
+统计机会不依赖首屏展示，不以每个按键作分母。原文、取消、敏感字段及失败写入不记录。
+每 256 次接受的选择将旧 hits/trials 右移衰减，至少 16 次机会且 hits/trials≤0.1 的未选中记录自动删除。
+满容量时比较 (recent_hits+1)/(recent_trials+2)，以交叉乘法比较，不让最近一次使用取代命中率。
+序号重基时迁移衰减周期，统计不因溢出复活。旧频次仍用于提权，不把未知曝光当失败。
+
+HistoryCache 是每个 Session 独立的 16 项固定预分配区，活动容量 4–16；每 32 查询按复用率扩/缩，
+8 项 ghost hash 检测刚淘汰查询的复访，触发扩容。hash 仅参与容量调节，实际结果比较完整键/规则/剩余字节。
+查询频次衰减，优先淘汰低复用记录。缓存不共享可变会话，不在按键期间分配；Profile 替换或 learn_commit 后失效。
+缓存保存两条线的准确/模糊历史各两项 ID，完整规范拼音仍取不可变 Profile 快照；字典或上下文评分不进入缓存。
+Windows writer 事件附带接受时的 MatchingOptions，在原有命名锁内加载最新 Profile、观测和原子保存，
+避免另一个应用的反馈被旧快照覆盖。后台磁盘协议、clear/import epoch 与成功上屏后训练契约不变。
+
 # preview13 候选质量与独立查询线
 
 2026-10-05：见 [WINDOWS_PREVIEW13_TASKLIST](WINDOWS_PREVIEW13_TASKLIST.md)。用户明确整词与单字互不干扰。

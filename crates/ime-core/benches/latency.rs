@@ -172,7 +172,7 @@ fn main() {
     println!("continuous per-key with context (4 compositions): n={n} p50={}ns p95={}ns p99={}ns max={}ns",context_samples[n/2],context_samples[n*95/100],context_samples[n*99/100],context_samples[n-1]);
     // Worst bounded profile: many homophones, immutable snapshot shared with host.
     let mut preferences = Profile::default();
-    for i in 0..4094 {
+    for i in 0..8190 {
         let text = format!("词{}", char::from_u32(0x4e00 + i).unwrap());
         assert!(preferences.record("shi", &text));
     }
@@ -187,7 +187,7 @@ fn main() {
     real.reset();
     assert!(real.set_profile(Arc::clone(&preferences)));
     measure(
-        "4096-record profile: shi + space (4 events, no persistence)",
+        "8192-record profile: shi + space (4 events, no persistence)",
         rounds * 3,
         || {
             real.reset();
@@ -197,6 +197,26 @@ fn main() {
             black_box(real.process(Key::Space, Modifiers::default()));
         },
     );
+    real.reset();
+    real.configure_matching(myswy_core::fuzzy::OPTIONS_MASK);
+    let before = real.history_cache_stats();
+    measure(
+        "8192-record profile: repeated nihao with all matching flags (no acknowledgment/disk)",
+        rounds * 3,
+        || {
+            real.reset();
+            for c in "nihao".chars() {
+                black_box(real.process(Key::Character(c), Modifiers::default()));
+            }
+        },
+    );
+    let after = real.history_cache_stats();
+    let hits = after.hits - before.hits;
+    let misses = after.misses - before.misses;
+    println!("adaptive history cache on repeated nihao: hits={hits} misses={misses} hit_rate={:.2}% capacity={} entries={}",
+        100.0 * hits as f64 / (hits + misses) as f64, after.capacity, after.entries);
+    real.reset();
+    real.configure_matching(0);
     let mut acknowledgments = Vec::with_capacity(rounds);
     for _ in 0..rounds {
         real.reset();
@@ -212,7 +232,7 @@ fn main() {
     }
     acknowledgments.sort_unstable();
     let n = acknowledgments.len();
-    println!("4096-record profile: host acknowledgment + immutable snapshot (allocates, no disk): n={n} p50={}ns p95={}ns p99={}ns max={}ns", acknowledgments[n/2], acknowledgments[n*95/100], acknowledgments[n*99/100], acknowledgments[n-1]);
+    println!("8192-record profile: host acknowledgment + immutable snapshot (allocates, no disk): n={n} p50={}ns p95={}ns p99={}ns max={}ns", acknowledgments[n/2], acknowledgments[n*95/100], acknowledgments[n*99/100], acknowledgments[n-1]);
     real.reset();
     for c in corpus[4].chars() {
         real.process(Key::Character(c), Modifiers::default());

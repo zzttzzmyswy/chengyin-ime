@@ -1,4 +1,11 @@
-# 当前本机 Windows 环境 · preview13
+# 当前本机 Windows 环境 · preview14
+
+本批重用以下工具链及生产/七项测试 target。Rust 全工作区 53 项测试；
+8192 历史和大于旧 2 MiB 的备份由内存/临时目录 fixture 生成，不读取个人历史。
+MSVC C ABI 冒烟新增 record_selection 的无效参数检查，静态 release 使用 +crt-static。
+MYSWY_BENCH_ROUNDS=100 的日志 build/bench-preview14.txt：合成 8192 shi 同音历史及重复 nihao，
+含缓存命中/容量统计；不代表多样化真实历史、屏幕点击率或 UI 延迟。
+Windows 大备份保存/导入/重载、七 CTest、settings-learning.bmp 和包全负载检查通过。
 
 2026-10-05：Windows 11 build 26200，AMD Ryzen 9 9950X（16 核/32 线程），x64。
 工作目录是 Codex 的中文路径 Git worktree；源码不依赖绝对路径。
@@ -92,11 +99,11 @@ SHA-256 为 `103a3284c1a5356efa0aba90fdfc391c3cde8e7df8726377cef0f98471584047`�
 
 ## preview10 复现补充
 
-preview13 同用下列 Rust/MSVC/C ABI 与七项 CTest 流程，最终日志在 build/*preview13.txt。
-新增 quality.rs 使用实际随包字典，不读取个人历史。windows_ui_test.exe build/ui-preview13
+preview14 同用下列 Rust/MSVC/C ABI 与七项 CTest 流程，最终日志在 build/*preview14.txt。
+新增 quality.rs 使用实际随包字典，不读取个人历史。windows_ui_test.exe build/ui-preview14
 增加实际嵌入词库的 yingshe/yinshe/yin'she 候选绘制。基准 MYSWY_BENCH_ROUNDS=100
 增加这两项及 yignshe 共 2,000 键，所有匹配开启并读取首屏标记；与原有长句语料分开报告。
-默认 package_windows.py revision=13；包完整负载复验见 build/delivery-preview13.json。
+默认 package_windows.py revision=13；包完整负载复验见 build/delivery-preview14.json。
 
 核心：cargo fmt --all -- --check；cargo clippy --workspace --all-targets --locked -- -D warnings；cargo test --workspace --locked。
 C ABI：MSVC /utf-8 /W4 /WX 编译 tests/ffi_smoke.c，链接 release myswy_ime.dll.lib；原生 Windows CTest 七项。

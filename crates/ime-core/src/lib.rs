@@ -7,6 +7,7 @@ pub mod fuzzy;
 mod import;
 mod language;
 mod profile;
+mod profile_cache;
 mod session;
 
 pub use dictionary::{
@@ -14,7 +15,8 @@ pub use dictionary::{
     MAX_ACTIVE_STATES, MAX_CANDIDATES, MAX_DICTIONARY_BYTES, MAX_INPUT_BYTES, MAX_PINYIN_BYTES,
     MAX_TEXT_BYTES,
 };
-pub use profile::{Profile, MAX_PROFILE_BYTES};
+pub use profile::{Profile, MAX_PROFILE_BYTES, MAX_PROFILE_RECORDS};
+pub use profile_cache::HistoryCacheStats;
 pub use session::{Key, Modifiers, ProcessResult, Session};
 
 use std::sync::{Arc, OnceLock};

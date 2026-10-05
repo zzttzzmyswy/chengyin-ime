@@ -27,13 +27,19 @@ Windows, Linux X11, Linux Wayland, and Android.
   docs/WINDOWS_TASKLIST.md and docs/DEVELOPMENT.md for historical preview7: classic native
   tabs, embedded input tests, configuration notifications, language-bar mode and
   Chinese punctuation. Keep the standalone test app removed. The settings
-  executable is myswy_settings.exe; package scripts use preview13; read docs/WINDOWS_PREVIEW13_TASKLIST.md. Environment
+  executable is myswy_settings.exe; package scripts use preview14; read docs/WINDOWS_PREVIEW14_TASKLIST.md. Environment
   reproduction is in docs/ENVIRONMENT.md.
 - Previous delivery: preview7 MSVC installer from commit b14116e, GitHub Actions run
   37212769471. All six jobs passed, including six native Windows CTests and the
   installer lifecycle. Native NSIS needs the pinned AMD64 preparation helper
   and explicit UTF-8 source input. Real Win11/Notepad3 validation is still pending.
-- Current slice: preview13 separates whole-word and whole-character recall;
+- Current slice: preview14 expands learning to 8192 records / 4 MiB; reads legacy
+  MSWYUSR1, writes MSWYUSR2 with recent selection hits/opportunities and decay.
+  Independent per-session history-query caches adapt active capacity 4–16;
+  full keys/options/text budget identify entries, profile mutations invalidate.
+  Forgetting uses recent hit rate, never keystrokes or unconfirmed host writes.
+  53 Rust tests, zero-key-allocation/64 KiB, C ABI and seven native CTests pass.
+  Preview13 separates whole-word and whole-character recall;
   each lane has at most two exact and two fuzzy history promotions. No prefix
   characters pollute whole-word recall. Unattested adjacent-character synthesis
   is rejected, short full spelling avoids abbreviation synthesis, and correction

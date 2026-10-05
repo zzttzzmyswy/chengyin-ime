@@ -117,11 +117,11 @@ fn profile_rejects_damage_and_every_truncation() {
         damaged[i] ^= 0x40;
         assert!(Profile::from_binary(&damaged).is_none());
     }
-    assert!(Profile::from_binary(&[0; 2 * 1024 * 1024 + 1]).is_none());
-    for i in 0..4200 {
+    assert!(Profile::from_binary(&[0; 4 * 1024 * 1024 + 1]).is_none());
+    for i in 0..8300 {
         p.record("shi", &format!("词{}", char::from_u32(0x4e00 + i).unwrap()));
     }
-    assert_eq!(p.entry_count(), 4096);
+    assert_eq!(p.entry_count(), 8192);
     assert!(Profile::from_binary(&p.to_binary()).is_some());
 }
 #[test]

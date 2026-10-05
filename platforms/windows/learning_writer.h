@@ -13,7 +13,7 @@ class LearningWriter {
   public:
     explicit LearningWriter(std::wstring path);
     ~LearningWriter();
-    bool enqueue(const uint8_t *, size_t, const uint8_t *, size_t);
+    bool enqueue(const uint8_t *, size_t, const uint8_t *, size_t, uint32_t matchingFlags = 0);
   private:
     void run();
     struct Event {
@@ -21,6 +21,7 @@ class LearningWriter {
         std::array<uint8_t, 257> text{};
         size_t keySize = 0, textSize = 0;
         DWORD epoch = 0;
+        uint32_t matchingFlags = 0;
     };
     ModuleLifetime lifetime_;
     std::wstring path_;

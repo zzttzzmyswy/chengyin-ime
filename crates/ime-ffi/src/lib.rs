@@ -81,6 +81,43 @@ pub unsafe extern "C" fn myswy_profile_record(
     })
 }
 #[no_mangle]
+pub unsafe extern "C" fn myswy_profile_record_selection(
+    profile: *mut MyswyProfile,
+    key: *const u8,
+    key_len: usize,
+    text: *const u8,
+    text_len: usize,
+    flags: u32,
+) -> i32 {
+    guard(|| {
+        if profile.is_null()
+            || key.is_null()
+            || text.is_null()
+            || key_len > 63
+            || text_len > 256
+            || flags & !myswy_core::fuzzy::OPTIONS_MASK != 0
+        {
+            return INVALID;
+        }
+        // SAFETY: caller grants exclusive profile access and bounded readable strings.
+        let (profile, key, text) = unsafe {
+            (
+                &mut *profile,
+                std::slice::from_raw_parts(key, key_len),
+                std::slice::from_raw_parts(text, text_len),
+            )
+        };
+        let (Ok(key), Ok(text)) = (std::str::from_utf8(key), std::str::from_utf8(text)) else {
+            return INVALID;
+        };
+        if Arc::make_mut(&mut profile.0).record_selection(key, text, flags) {
+            0
+        } else {
+            INVALID
+        }
+    })
+}
+#[no_mangle]
 pub unsafe extern "C" fn myswy_profile_count(profile: *const MyswyProfile) -> i32 {
     guard(|| unsafe { profile.as_ref() }.map_or(INVALID, |p| p.0.entry_count() as i32))
 }

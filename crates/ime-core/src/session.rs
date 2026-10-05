@@ -114,6 +114,7 @@ pub struct Session {
     recent: [u32; 32],
     recent_len: usize,
     profile: Arc<crate::Profile>,
+    history_cache: crate::profile_cache::HistoryCache,
     learning_key: String,
     page_size: usize,
     learning_enabled: bool,
@@ -155,6 +156,7 @@ impl Session {
             recent: [u32::MAX; 32],
             recent_len: 0,
             profile: Arc::new(crate::Profile::default()),
+            history_cache: crate::profile_cache::HistoryCache::default(),
             learning_key: String::with_capacity(MAX_INPUT_BYTES),
             page_size: MAX_CANDIDATES,
             learning_enabled: true,
@@ -843,74 +845,100 @@ impl Session {
 
         self.exhausted = self.raw.len() == self.offset;
         if self.learning_enabled {
-            let mut exact = [[(0usize, 0u32, 0u32); 2]; 2];
-            let mut recalled = exact;
-            let mut previous = "";
-            let mut matches = false;
-            let range = if self.matching_options == 0 {
-                self.profile.matching_range(&self.raw[self.offset..])
+            let remaining = MAX_TEXT_BYTES - self.completed.len();
+            if let Some(cached) =
+                self.history_cache
+                    .get(&self.raw[self.offset..], self.matching_options, remaining)
+            {
+                self.exact_history = cached.exact;
+                self.recalled_history = cached.recalled;
+                self.exact_count = cached.exact_count.map(usize::from);
+                self.recalled_count = cached.recalled_count.map(usize::from);
             } else {
-                0..self.profile.rows.len()
-            };
-            for id in range {
-                let row = &self.profile.rows[id];
-                let accurate = row.key.as_ref() == &self.raw[self.offset..];
-                if row.key.as_ref() != previous {
-                    previous = &row.key;
-                    matches = !accurate
-                        && self.matching_options != 0
-                        && crate::fuzzy::complete_annotations(
-                            &self.raw[self.offset..],
-                            &row.pinyin,
-                            self.matching_options,
-                        )
-                        .is_some_and(|marks| marks != [0; 4]);
-                }
-                if (!accurate && !matches) || self.completed.len() + row.text.len() > MAX_TEXT_BYTES
-                {
-                    continue;
-                }
-                let lane = usize::from(row.text.chars().nth(1).is_none());
-                let (list, count) = if accurate {
-                    (&mut exact[lane], &mut self.exact_count[lane])
+                let mut exact = [[(0usize, 0u32, 0u32); 2]; 2];
+                let mut recalled = exact;
+                let mut previous = "";
+                let mut matches = false;
+                let range = if self.matching_options == 0 {
+                    self.profile.matching_range(&self.raw[self.offset..])
                 } else {
-                    (&mut recalled[lane], &mut self.recalled_count[lane])
+                    0..self.profile.rows.len()
                 };
-                if let Some(at) = list[..*count]
-                    .iter()
-                    .position(|&(i, _, _)| self.profile.rows[i].text == row.text)
-                {
-                    if (row.count, row.sequence) > (list[at].1, list[at].2) {
-                        list[at] = (id, row.count, row.sequence);
-                        list[..*count].sort_unstable_by_key(|a| std::cmp::Reverse((a.1, a.2)));
+                for id in range {
+                    let row = &self.profile.rows[id];
+                    let accurate = row.key.as_ref() == &self.raw[self.offset..];
+                    if row.key.as_ref() != previous {
+                        previous = &row.key;
+                        matches = !accurate
+                            && self.matching_options != 0
+                            && crate::fuzzy::complete_annotations(
+                                &self.raw[self.offset..],
+                                &row.pinyin,
+                                self.matching_options,
+                            )
+                            .is_some_and(|marks| marks != [0; 4]);
                     }
-                    continue;
+                    if (!accurate && !matches)
+                        || self.completed.len() + row.text.len() > MAX_TEXT_BYTES
+                    {
+                        continue;
+                    }
+                    let lane = usize::from(row.text.chars().nth(1).is_none());
+                    let (list, count) = if accurate {
+                        (&mut exact[lane], &mut self.exact_count[lane])
+                    } else {
+                        (&mut recalled[lane], &mut self.recalled_count[lane])
+                    };
+                    if let Some(at) = list[..*count]
+                        .iter()
+                        .position(|&(i, _, _)| self.profile.rows[i].text == row.text)
+                    {
+                        if (row.count, row.sequence) > (list[at].1, list[at].2) {
+                            list[at] = (id, row.count, row.sequence);
+                            list[..*count].sort_unstable_by_key(|a| std::cmp::Reverse((a.1, a.2)));
+                        }
+                        continue;
+                    }
+                    let at =
+                        list[..*count].partition_point(|v| (v.1, v.2) >= (row.count, row.sequence));
+                    if at < 2 {
+                        list.copy_within(at..(*count).min(1), at + 1);
+                        list[at] = (id, row.count, row.sequence);
+                        *count = (*count + 1).min(2);
+                    }
                 }
-                let at =
-                    list[..*count].partition_point(|v| (v.1, v.2) >= (row.count, row.sequence));
-                if at < 2 {
-                    list.copy_within(at..(*count).min(1), at + 1);
-                    list[at] = (id, row.count, row.sequence);
-                    *count = (*count + 1).min(2);
+                for lane in 0..2 {
+                    for (at, &(id, _, _)) in
+                        exact[lane][..self.exact_count[lane]].iter().enumerate()
+                    {
+                        self.exact_history[lane * 2 + at] = id as u32;
+                    }
+                    for (at, &(id, _, _)) in recalled[lane][..self.recalled_count[lane]]
+                        .iter()
+                        .enumerate()
+                    {
+                        self.recalled_history[lane * 2 + at] = id as u32;
+                    }
                 }
-            }
-            for lane in 0..2 {
-                for (at, &(id, _, _)) in exact[lane][..self.exact_count[lane]].iter().enumerate() {
-                    self.exact_history[lane * 2 + at] = id as u32;
-                }
-                for (at, &(id, _, _)) in recalled[lane][..self.recalled_count[lane]]
-                    .iter()
-                    .enumerate()
-                {
-                    self.recalled_history[lane * 2 + at] = id as u32;
-                }
+                self.history_cache.put(
+                    &self.raw[self.offset..],
+                    self.matching_options,
+                    remaining,
+                    crate::profile_cache::HistorySelection {
+                        exact: self.exact_history,
+                        recalled: self.recalled_history,
+                        exact_count: self.exact_count.map(|n| n as u8),
+                        recalled_count: self.recalled_count.map(|n| n as u8),
+                    },
+                );
             }
             if self.matching_options == 0 {
                 let mut best = [(0usize, 0u32, 0u32); 4];
                 let mut len = 0;
                 for lane in 0..2 {
-                    for &entry in &exact[lane][..self.exact_count[lane]] {
-                        best[len] = entry;
+                    for &id in &self.exact_history[lane * 2..lane * 2 + self.exact_count[lane]] {
+                        let row = &self.profile.rows[id as usize];
+                        best[len] = (id as usize, row.count, row.sequence);
                         len += 1;
                     }
                 }
@@ -957,7 +985,11 @@ impl Session {
         }
         self.clear_composition();
         self.profile = profile;
+        self.history_cache.invalidate();
         true
+    }
+    pub fn history_cache_stats(&self) -> crate::HistoryCacheStats {
+        self.history_cache.stats()
     }
     pub fn profile(&self) -> Arc<crate::Profile> {
         Arc::clone(&self.profile)
@@ -970,7 +1002,14 @@ impl Session {
     pub fn learn_commit(&mut self) -> bool {
         let success = self.learning_enabled
             && !self.learning_key.is_empty()
-            && Arc::make_mut(&mut self.profile).record(&self.learning_key, &self.commit);
+            && Arc::make_mut(&mut self.profile).record_selection(
+                &self.learning_key,
+                &self.commit,
+                self.matching_options,
+            );
+        if success {
+            self.history_cache.invalidate();
+        }
         self.learning_key.clear();
         success
     }

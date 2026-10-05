@@ -35,11 +35,15 @@ fn initialized_key_path_does_not_allocate() {
     let mut real = Session::new(daily);
     assert!(std::mem::size_of::<Session>() + real.estimated_heap_bytes() <= 64 * 1024);
     let mut profile = Profile::default();
+    for i in 0..8187 {
+        assert!(profile.record("shi", &format!("词{}", char::from_u32(0x4e00 + i).unwrap())));
+    }
     assert!(profile.record("shi", "士"));
     assert!(profile.record("wxhzw", "我喜欢中文"));
     assert!(profile.record("zhnag", "张"));
     assert!(profile.record("yingshe", "映射"));
     assert!(profile.record("yinshe", "银色"));
+    assert_eq!(profile.entry_count(), 8192);
     assert!(real.set_profile(std::sync::Arc::new(profile)));
     let mut display = [0u8; 319];
     COUNTING.store(true, Ordering::SeqCst);

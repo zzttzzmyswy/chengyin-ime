@@ -146,6 +146,9 @@ int main(void) {
     assert(myswy_session_profile(NULL) == NULL);
     assert(myswy_session_configure(NULL, 5, 3) == MYSWY_INVALID);
     MyswyProfile *profile = myswy_profile_new(NULL, 0); assert(profile);
+    assert(myswy_profile_record_selection(NULL, (const uint8_t *)"shi", 3, (const uint8_t *)"是", 3, 0) == MYSWY_INVALID);
+    assert(myswy_profile_record_selection(profile, (const uint8_t *)"shi", 3, (const uint8_t *)"是", 3, 1u << 31) == MYSWY_INVALID);
+    assert(myswy_profile_count(profile) == 0);
     assert(myswy_profile_record(profile, (const uint8_t *)"nihao", 5, (const uint8_t *)"拟好", 6) == 0);
     assert(myswy_profile_record(profile, (const uint8_t *)"nihao", 5, (const uint8_t *)"ASCII", 5) == MYSWY_INVALID);
     int32_t profile_size = myswy_profile_binary(profile, NULL, 0); assert(profile_size > 20);

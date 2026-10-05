@@ -77,8 +77,8 @@ int32_t myswy_dictionary_binary(const MyswyDictionary *, uint8_t *buffer, size_t
 /* Owned reference to the same immutable data; no data copy. */
 MyswyDictionary *myswy_dictionary_clone(const MyswyDictionary *dictionary);
 void myswy_dictionary_free(MyswyDictionary *dictionary);
-/* Local user preferences, ABI v1 additive. Bounded to 4096 spelling/text pairs,
- * 2 MiB, checksummed. new(NULL,0) creates an empty profile. Recording/export
+/* Local user preferences, ABI v1 additive. Bounded to 8192 spelling/text pairs,
+ * 4 MiB, checksummed. Reads MSWYUSR1 and MSWYUSR2, writes MSWYUSR2. Recording/export
  * allocate; callers serialize mutation and run disk persistence outside decoding.
  * Session keeps an immutable snapshot; freeing the profile handle is then safe.
  * Sensitive contexts MUST never train. No platform I/O occurs in this library. */
@@ -86,6 +86,10 @@ MyswyProfile *myswy_profile_new(const uint8_t *data, size_t length);
 void myswy_profile_free(MyswyProfile *profile);
 int32_t myswy_profile_record(MyswyProfile *, const uint8_t *key, size_t key_length,
                              const uint8_t *text, size_t text_length);
+/* Host-confirmed Chinese selection feedback, including matching opportunities.
+ * Same ownership as record; allocates, no I/O. Invalid flags do not mutate. */
+int32_t myswy_profile_record_selection(MyswyProfile *, const uint8_t *key, size_t key_length,
+                                     const uint8_t *text, size_t text_length, uint32_t matching_flags);
 int32_t myswy_profile_count(const MyswyProfile *);
 /* Required bytes, no NUL; NULL/small output writes nothing. */
 int32_t myswy_profile_binary(const MyswyProfile *, uint8_t *output, size_t capacity);

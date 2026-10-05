@@ -258,6 +258,39 @@ int main() {
     require(!myswy::importProfile(source, profilePath), "empty backup cannot replace learning");
     require(myswy::readSmallFile(profilePath, after, 2 * 1024 * 1024)
             && before == after, "empty backup preserves learning");
+    {
+        auto *large = myswy_profile_new(nullptr, 0);
+        require(large != nullptr, "large learning fixture");
+        std::string key, prefix;
+        for (int i = 0; i < 21; ++i) key += "shi";
+        for (int i = 0; i < 84; ++i) prefix += "字";
+        for (int i = 0; i < 8192; ++i) {
+            wchar_t tail = static_cast<wchar_t>(0x4e00 + i);
+            char utf8[4]{};
+            const int n = WideCharToMultiByte(CP_UTF8, 0, &tail, 1, utf8, sizeof(utf8), nullptr, nullptr);
+            const auto word = prefix + std::string(utf8, static_cast<size_t>(n));
+            require(n == 3 && myswy_profile_record(large, bytes(key.c_str()), key.size(), bytes(word.c_str()), word.size()) == 0,
+                    "8192 maximum string records");
+        }
+        require(myswy_profile_count(large) == 8192 && myswy_profile_binary(large, nullptr, 0) > 2 * 1024 * 1024,
+                "expanded profile exceeds previous byte limit");
+        require(myswy::saveProfile(source, large), "save expanded profile");
+        myswy_profile_free(large);
+        require(myswy::importProfile(source, profilePath), "import expanded profile with statistics");
+        large = myswy::loadProfile(profilePath);
+        require(large && myswy_profile_count(large) == 8192, "reload full expanded profile");
+        myswy_profile_free(large);
+        auto *feedback = myswy_profile_new(nullptr, 0);
+        require(feedback && myswy_profile_record(feedback, bytes("shi"), 3, bytes("士"), 3) == 0,
+                "hit rate feedback fixture");
+        for (int i = 0; i < 16; ++i)
+            require(myswy_profile_record_selection(feedback, bytes("shi"), 3, bytes("是"), 3, 0) == 0,
+                    "accepted selection opportunity");
+        require(myswy_profile_count(feedback) == 1 && myswy::saveProfile(source, feedback),
+                "low hit rate forgotten and persisted");
+        myswy_profile_free(feedback);
+        require(myswy::importProfile(source, profilePath), "restore feedback statistics");
+    }
     write(profilePath, "damaged");
     require(!myswy::loadProfile(profilePath), "damaged profile does not silently reset");
     require(!myswy::updateProfile(profilePath, bytes("hao"), 3, bytes("好"), 3),

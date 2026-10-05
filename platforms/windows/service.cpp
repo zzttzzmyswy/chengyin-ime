@@ -788,7 +788,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
                 }
                 if (writer_ && keySize > 1 && keySize <= static_cast<int>(sizeof(spelling)) && textSize > 1
                         && textSize <= static_cast<int>(sizeof(text)))
-                    writer_->enqueue(spelling, static_cast<size_t>(keySize - 1), text, static_cast<size_t>(textSize - 1));
+                    writer_->enqueue(spelling, static_cast<size_t>(keySize - 1), text, static_cast<size_t>(textSize - 1), sessionMatchingOptions_);
             }
         }
         // Text was changed: even if a later caret/UI operation fails, do not replay this key.
@@ -1094,7 +1094,8 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             return false;
         myswy_session_configure(session_, static_cast<uint32_t>(preferences_.pageSize),
                                 (preferences_.learning ? 1u : 0u) | (preferences_.associations ? 2u : 0u));
-        myswy_session_configure_matching(session_,preferences_.matchingOptions);
+        sessionMatchingOptions_ = myswy_session_configure_matching(session_,preferences_.matchingOptions) == 0
+                                  ? preferences_.matchingOptions : 0;
         if (profile_)
             myswy_session_set_profile(session_, profile_);
         context_.attach(context);
@@ -1167,6 +1168,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     Ptr<ITfComposition> composition_;
     Ptr<ITfRange> associationRange_;
     MyswySession *session_ = nullptr;
+    uint32_t sessionMatchingOptions_ = 0; // frozen with the composition, unlike a new preference snapshot
     MyswyDictionary *dictionary_ = nullptr;
     CandidateWindow candidates_;
     Preferences preferences_{};

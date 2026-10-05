@@ -14,7 +14,7 @@ LearningWriter::~LearningWriter() {
     if (thread_.joinable())
         thread_.join();
 }
-bool LearningWriter::enqueue(const uint8_t *key, size_t keySize, const uint8_t *text, size_t textSize) {
+bool LearningWriter::enqueue(const uint8_t *key, size_t keySize, const uint8_t *text, size_t textSize, uint32_t matchingFlags) {
     if (!epoch_.valid() || !keySize || keySize > 63 || !textSize || textSize > 256)
         return false;
     {
@@ -25,6 +25,7 @@ bool LearningWriter::enqueue(const uint8_t *key, size_t keySize, const uint8_t *
         std::copy_n(key, keySize, event.key.begin());
         std::copy_n(text, textSize, event.text.begin());
         event.epoch = epoch_.current();
+        event.matchingFlags = matchingFlags;
         event.keySize = keySize;
         event.textSize = textSize;
         ++count_;
@@ -49,7 +50,7 @@ void LearningWriter::run() {
         bool saved = false;
         try {
             saved = updateProfile(path_, event.key.data(), event.keySize, event.text.data(), event.textSize,
-                                  &event.epoch);
+                                  &event.epoch, event.matchingFlags);
         } catch (...) { /* Input remains usable if learning storage fails. */ }
         if (!saved) {
             std::lock_guard<std::mutex> lock(mutex_);
