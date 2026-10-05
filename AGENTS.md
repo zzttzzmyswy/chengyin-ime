@@ -33,7 +33,10 @@ Windows, Linux X11, Linux Wayland, and Android.
   37212769471. All six jobs passed, including six native Windows CTests and the
   installer lifecycle. Native NSIS needs the pinned AMD64 preparation helper
   and explicit UTF-8 source input. Real Win11/Notepad3 validation is still pending.
-- Current slice: preview16 adds accurate lexical prefix phrase/character choices
+- This Windows preview8–16 phase is closed as of 2026-10-05. Read
+  docs/WINDOWS_PHASE_WRAPUP.md for final delivery, local integration and retained
+  validation gaps; start a new codex/ branch for new feature work.
+- Final slice: preview16 adds accurate lexical prefix phrase/character choices
   after whole matching. Windows opts into immediate prefix commits and rematches
   remaining pinyin with a shortened TSF composition range. Legacy core/C ABI
   default staged selection is unchanged; configure_incremental is additive.

@@ -21,7 +21,7 @@
 
 | 平台 | 目前实现 | 验证边界 |
 | --- | --- | --- |
-| Windows 10 2004+/11 x64 | TSF、候选、设置、学习、单 EXE 安装器 | preview10 本机 Win11/MSVC 七项 CTest 通过；preview8 Edit/RichEdit 实测、preview7 隔离安装生命周期曾通过；新包多屏/应用矩阵仍待验收 |
+| Windows 10 2004+/11 x64 | TSF、候选、设置、学习、单 EXE 安装器 | preview16 本机 Win11/MSVC 七项 CTest 通过；preview8/10 已有桌面记录、preview7 安装生命周期曾通过；新包多屏/宿主矩阵仍待验收 |
 | Linux X11 / Wayland | Fcitx 5 插件、自定义词库后台切换、Debian 测试包 | 无头事件测试与包生命周期；真实桌面应用矩阵待验收 |
 | Android | 共享核心 ARM64 编译检查 | 输入服务与软键盘尚未实现 |
 | 双拼、Windows ARM64/x86 | 已规划 | 尚未实现 |
@@ -37,8 +37,9 @@ Windows 原生构建文件为 `chengyin-windows-x64-0.1.0-preview16-msvc.exe`；
 使用、升级、卸载和集中实测步骤见 [Windows 指南](platforms/windows/README.md)。
 构建产物不提交到源码库；[GitHub Actions](https://github.com/zzttzzmyswy/myswyIm/actions/workflows/ci.yml)
 通过 Windows 构建及安装回归后保存安装 EXE，可在对应运行的 Artifacts 中下载。
-preview10 完成角色主题删除、可配置模糊音与常见键盘纠错；本机 Windows 11/MSVC 回归与核心/C ABI 检查见
-[最新状态](docs/STATUS.md)和[任务清单](docs/WINDOWS_PREVIEW10_TASKLIST.md)。安装包位于 `build/packages/`。
+Windows preview8–16 阶段已结项，最终 preview16 通过 67 项 Rust 与七项原生 Windows 测试。
+交付、源码整理及后续验收范围见 [结项记录](docs/WINDOWS_PHASE_WRAPUP.md)和[最新状态](docs/STATUS.md)。
+最终安装包位于 `build/packages/`，旧交付与测试记录保存在本地 `build/archive/`。
 本轮未运行新远程 CI；preview7 的[已通过构建](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37212769471)
 包含隔离安装生命周期。新版本安装后应用矩阵、物理混合 DPI 多屏仍待验收。
 
