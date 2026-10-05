@@ -1,5 +1,21 @@
 # 项目状态
 
+## 最新：preview19 拍照候选与旧学习保护 · 2026-10-05
+
+任务见 [preview19 清单](WINDOWS_PREVIEW19_TASKLIST.md)。隔离 preview12、空历史、全部规则复现
+无依据的“拍找、派找”等先于“拍照”；在运行的 Chrome/steamwebhelper 等确实仍加载 preview12。
+preview18 已有完整词保护；本次补齐未收录旧历史累计计数可直接提权的漏洞：
+须有至少三次近期命中才提权，词库可证明的旧习惯继续可用，个人历史没有清空。
+`paizhao/pai'zhao` 的空历史首两项“拍照、牌照”；错拼召回、正常学习与前缀选词保持回归。
+
+82 项 Rust Release、fmt、Clippy、零按键分配/64902 bytes、MSVC /W4 /WX C ABI 通过；
+原生 7/7 CTest（22.08 s）、窗口绘制/拍照选词、三二进制和包内负载一致、PE/7-Zip/完整 SHA-256/COM、
+21 项许可 CRC 通过。Debug 有一项已有测试 EXE 启动时文件占用错误，未把它算作通过，详见本批清单。
+交付 `chengyin-windows-x64-0.1.0-preview19-msvc.exe`，4384807 bytes，SHA-256
+`f9f460e54f372af89fa83feda5201080c24ed28cd3d7bcdb224b4385e773132b`，复制至主工作目录。
+尚未安装到个人电脑；升级后完整退出重开加载旧 DLL 的应用才能使用新算法。
+下一步仍优先学习跨应用 revision/有界重试，再按审查计划推进词库、性能与实装矩阵。
+
 ## 最新：preview18 代码审查修复 · 2026-10-05
 
 原 preview8–17 的 12 个未推送提交已快进合入并推送 main `d07fe57`。

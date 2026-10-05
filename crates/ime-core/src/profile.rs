@@ -149,11 +149,17 @@ impl Preference {
     }
 }
 impl Profile {
-    /// Unattested text is probationary until selected repeatedly. Unknown legacy
-    /// observations are neutral; sufficiently observed poor habits lose promotion.
+    /// Lifetime counts from v1 cannot establish the quality of unattested text:
+    /// they may include the old decoder's unsupported character combinations.
+    pub(crate) fn has_repeated_evidence(&self, row: &Preference) -> bool {
+        row.count >= 3 && row.recent(self.sequence).0 >= 3
+    }
+
+    /// Unattested text needs repeated recent selections. Dictionary-attested
+    /// legacy habits stay usable; sufficiently observed poor habits lose promotion.
     pub(crate) fn reliable(&self, row: &Preference, attested: bool) -> bool {
         let (hits, trials) = row.recent(self.sequence);
-        (attested || row.count >= 3)
+        (attested || self.has_repeated_evidence(row))
             && !(trials >= 8 && (u32::from(hits) + 1) * 2 < u32::from(trials) + 2)
     }
     pub fn entry_count(&self) -> usize {

@@ -420,18 +420,24 @@ int wmain(int argc, wchar_t **argv) {
     {
         myswy::CandidateWindow candidates;
         myswy::Preferences prefs; prefs.density = 0; prefs.candidatePinyin = true;
-        for (const char *raw : {"yingshe", "yinshe", "yin'she"}) {
+        for (const char *raw : {"yingshe", "yinshe", "yin'she", "paizhao", "pai'zhao"}) {
             myswy_session_reset(session);
             for (const char *c = raw; *c; ++c) myswy_session_process(session, static_cast<uint32_t>(*c), 0);
+            const bool photo = std::strncmp(raw, "pai", 3) == 0;
             bool mapping = false;
             for (int i = 0; i < myswy_session_candidate_count(session); ++i) {
                 uint8_t text[257]{};
                 require(myswy_session_text(session, MYSWY_TEXT_CANDIDATE, i, text, sizeof(text)) > 0,
                         "mapping candidate text");
                 const auto *word = reinterpret_cast<const char *>(text);
-                mapping |= std::strcmp(word, "映射") == 0;
+                mapping |= std::strcmp(word, photo ? "拍照" : "映射") == 0;
+                if (photo && i < 2)
+                    require(std::strcmp(word, i == 0 ? "拍照" : "牌照") == 0,
+                        "photo complete words precede corrected alternatives");
                 require(std::strcmp(word, "应设") != 0 && std::strcmp(word, "因设") != 0 && std::strcmp(word, "银设") != 0,
                         "no unattested single character cross product in production vocabulary");
+                for (const char *unsupported : {"拍找", "派找", "排找", "牌找", "拍赵"})
+                    require(std::strcmp(word, unsupported) != 0, "no unsupported photo character pair");
                 require(myswy_session_candidate_consumed(session, i) == static_cast<int>(std::strlen(raw)),
                         "whole word line does not consume just a prefix character");
             }
@@ -439,6 +445,13 @@ int wmain(int argc, wchar_t **argv) {
             candidates.show(session, owner, RECT{100, 150, 101, 170}, false, nullptr, nullptr, 200, prefs, true);
             const auto name = L"candidate-mapping-" + std::wstring(raw, raw + std::strlen(raw));
             capture(candidates.handle(), name.c_str());
+            if (photo) {
+                uint8_t text[257]{};
+                myswy_session_process(session, MYSWY_KEY_SELECT_1, 0);
+                require(myswy_session_text(session, MYSWY_TEXT_COMMIT, 0, text, sizeof(text)) > 0
+                    && std::strcmp(reinterpret_cast<const char *>(text), "拍照") == 0,
+                    "photo selection commits the full word through ABI");
+            }
         }
     }
     myswy_session_free(session);

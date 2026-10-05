@@ -1048,7 +1048,7 @@ impl Session {
                     }
                     if !self.profile.reliable(
                         row,
-                        row.count < 3
+                        !self.profile.has_repeated_evidence(row)
                             && self
                                 .dictionary
                                 .attests(&row.text, &row.key, self.matching_options),

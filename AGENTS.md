@@ -27,7 +27,7 @@ Windows, Linux X11, Linux Wayland, and Android.
   docs/WINDOWS_TASKLIST.md and docs/DEVELOPMENT.md for historical preview7: classic native
   tabs, embedded input tests, configuration notifications, language-bar mode and
   Chinese punctuation. Keep the standalone test app removed. The settings
-  executable is myswy_settings.exe; package scripts use preview18; read docs/WINDOWS_PREVIEW18_TASKLIST.md. Environment
+  executable is myswy_settings.exe; package scripts use preview19; read docs/WINDOWS_PREVIEW19_TASKLIST.md. Environment
   reproduction is in docs/ENVIRONMENT.md.
 - Previous delivery: preview7 MSVC installer from commit b14116e, GitHub Actions run
   37212769471. All six jobs passed, including six native Windows CTests and the
@@ -36,6 +36,10 @@ Windows, Linux X11, Linux Wayland, and Android.
 - This Windows preview8–16 phase is closed as of 2026-10-05. Read
   docs/WINDOWS_PHASE_WRAPUP.md for final delivery, local integration and retained
   validation gaps; start a new codex/ branch for new feature work.
+- Latest quality slice: preview19 requires three recent hits for unattested learned
+  text, preserving dictionary-attested legacy preferences. Read the preview19 tasklist.
+  82 Rust Release tests, C ABI and seven native CTests pass. Several real processes
+  still load preview12/7; binary upgrades require reopening those hosts.
 - Current review slice: preview18 fixes separated digraphs, word-cardinality
   parsing, trailing terminal separators, per-profile destructive generations,
   strict release asset/version binding and isolated fixture notifications.

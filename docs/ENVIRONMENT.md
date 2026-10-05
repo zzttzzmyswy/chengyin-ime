@@ -1,6 +1,6 @@
 # 开发环境与复现
 
-2026-10-05。最新交付为 Windows x64 preview18（审查修复）；77 项 Rust、C ABI、七项原生 CTest（28.50 s）已通过。
+2026-10-05。最新交付为 Windows x64 preview19（拍照与旧学习质量）；82 项 Rust Release、C ABI、七项原生 CTest（22.08 s）已通过。
 本机为 Windows 11 build 26200 / Ryzen 9 9950X 16C/32T，当前构建环境：
 
 - VS 2022 Build Tools 17.14.41，MSVC 19.44.35229 / 14.44.35207；SDK 10.0.26100.0。
@@ -24,6 +24,7 @@ python scripts/package_windows.py --build-dir build/windows-msvc --toolchain msv
 临时脚本、旧安装包和旧截图已归档到忽略的 build/archive/，最新安装包及 preview16/17 证据仍保留。
 NSIS AMD64 与 portable 工具目录、最终 Rust release 和 Windows 原生构建目录保留，preview16 结项时 debug 缓存由 cargo clean --profile dev 清理，preview17 已重新生成。
 windows_desktop_test 是可选的开发者桌面驱动，仅显式指定该 target 时构建；不随默认 ALL 或安装包交付。
+preview19 Debug 已有 initials 测试 EXE 因 Windows 文件占用无法启动；正常 cargo test --workspace --release --locked 的全量 82 项通过，未停用安全软件。
 核心复查：cargo fmt --all -- --check；cargo clippy --workspace --all-targets --locked -- -D warnings；cargo test --workspace --locked。
 
 已有安装和个人学习数据不参与回归 fixture。安装生命周期仅在隔离 runner 运行；

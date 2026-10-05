@@ -1,6 +1,18 @@
 # 项目精简交接 · 2026-10-05
 
-## 当前任务
+## 最新追加：拍照候选 · preview19
+
+用户报告 paizhao 出现无依据的拼接。隔离 preview12 全规则复现四项前排拼接；
+实际 Chrome/steamwebhelper 加载 preview12，部分其他宿主加载 preview7/11。
+preview18 的整词保护正确，但旧 v1 高计数未知组合可直接提权，本次加入 >=3 近期命中门槛；
+词库可证明的旧习惯保留，数据没有清空。五项新回归与 native 拍照首选/上屏检查通过。
+最新安装包 preview19，4384807 bytes，SHA256 f9f460e54f372af89fa83feda5201080c24ed28cd3d7bcdb224b4385e773132b。
+82 Rust Release、fmt/Clippy、零分配/64KiB、C ABI、7 CTest22.08s、包/负载/COM/许可通过。
+Debug 已有 initials 测试 EXE 启动遭文件占用，不算通过；Release 正常全量通过。
+新包未替换个人安装；安装后必须完整退出重开加载旧 DLL 的应用。任务见 WINDOWS_PREVIEW19_TASKLIST。
+原审查后续 B–E 计划保持，当前分支 codex/photo-word-quality。
+
+## 此前任务
 
 用户要求：推送已完成改动，压缩上下文，对整个项目详细 review，并自行排期修复问题。
 第一步已完成：12 个未发布提交快进合入 main，推送并验证远端为 d07fe57。
@@ -42,7 +54,7 @@ preview18 ad84c9d 的六作业和隔离安装/升级/回滚/卸载通过（37314
 - cargo fmt；cargo test --workspace --locked；cargo clippy --workspace --all-targets --locked -- -D warnings。
 - 静态核心：RUSTFLAGS=-C target-feature=+crt-static，release myswy-ffi，x86_64-pc-windows-msvc。
 - CMake 显式构建 production 和七项 CTest 依赖；ctest -C Release --output-on-failure。
-- package_windows.py 默认 preview18，固定 NSIS AMD64 helper；版本改变应同步 UI、更新 fixture、CI。
+- package_windows.py 默认 preview19，固定 NSIS AMD64 helper；版本改变应同步 UI、更新 fixture、CI。
 - windows_desktop_test 为手动目标，不交付；已有 AV 提示不绕过、不关闭安全软件。
 - build/target 忽略；旧证据在 build/archive。个人备份不加入 Git。
 - 性能记录硬件、语料、范围及百分位；核心微基准、模拟 TSF、真实宿主证据分开。

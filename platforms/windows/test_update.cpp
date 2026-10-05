@@ -20,17 +20,17 @@ int main(int argc, char **argv) {
     }
     ReleaseUpdate result;
     require(parse("[]", result) && !result.available, "no published releases is a normal result");
-    const char fixture[] = R"([{"draft":false,"tag_name":"v0.1.0-preview19","body":"New\n\u4e2d\u6587","assets":[{"name":"chengyin-windows-x64-0.1.0-preview19-msvc.exe","browser_download_url":"https://github.com/zzttzzmyswy/myswyIm/releases/download/v0.1.0-preview19/chengyin-windows-x64-0.1.0-preview19-msvc.exe","digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}]}])";
-    require(parse(fixture, result) && result.available && result.version == L"v0.1.0-preview19"
+    const char fixture[] = R"([{"draft":false,"tag_name":"v0.1.0-preview20","body":"New\n\u4e2d\u6587","assets":[{"name":"chengyin-windows-x64-0.1.0-preview20-msvc.exe","browser_download_url":"https://github.com/zzttzzmyswy/myswyIm/releases/download/v0.1.0-preview20/chengyin-windows-x64-0.1.0-preview20-msvc.exe","digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}]}])";
+    require(parse(fixture, result) && result.available && result.version == L"v0.1.0-preview20"
             && result.notes == L"New\n中文", "newer release with verified repository asset and Unicode notes");
     std::string mismatched = fixture;
-    auto nameAt = mismatched.find("chengyin-windows-x64-0.1.0-preview19-msvc.exe");
-    mismatched.replace(nameAt, std::strlen("chengyin-windows-x64-0.1.0-preview19-msvc.exe"),
+    auto nameAt = mismatched.find("chengyin-windows-x64-0.1.0-preview20-msvc.exe");
+    mismatched.replace(nameAt, std::strlen("chengyin-windows-x64-0.1.0-preview20-msvc.exe"),
                        "chengyin-windows-x64-0.1.0-preview17-msvc.exe");
     require(parse(mismatched.c_str(), result) && !result.available, "asset filename must match release version");
     mismatched = fixture;
-    auto urlAt = mismatched.find("/download/v0.1.0-preview19/");
-    mismatched.replace(urlAt, std::strlen("/download/v0.1.0-preview19/"), "/download/v0.1.0-preview17/");
+    auto urlAt = mismatched.find("/download/v0.1.0-preview20/");
+    mismatched.replace(urlAt, std::strlen("/download/v0.1.0-preview20/"), "/download/v0.1.0-preview17/");
     require(parse(mismatched.c_str(), result) && !result.available, "asset URL must use the declared release tag");
     mismatched = fixture;
     auto draftAt = mismatched.find("false");
@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     image[88] = 0x0b; image[89] = 0x02;
     require(verifyReleaseImage(imageRelease, image), "x64 EXE and SHA256 verified before installation");
     auto wrongTag = imageRelease;
-    wrongTag.version = L"v0.1.0-preview20";
+    wrongTag.version = L"v0.1.0-preview9999";
     require(!verifyReleaseImage(wrongTag, image), "image verification also binds the tag to the asset URL");
     image[255] ^= 1;
     require(!verifyReleaseImage(imageRelease, image), "modified download rejected by digest");
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     require(parse(unsafe.c_str(), result) && !result.available, "external executable URL cannot become an update");
     unsafe = fixture; at = unsafe.find("sha256:"); unsafe.replace(at, 7, "sha512:");
     require(parse(unsafe.c_str(), result) && !result.available, "missing or wrong digest algorithm rejected");
-    unsafe = fixture; at = unsafe.find("preview19\""); unsafe.replace(at, 10, "preview7\"");
+    unsafe = fixture; at = unsafe.find("preview20\""); unsafe.replace(at, 10, "preview7\"");
     require(parse(unsafe.c_str(), result) && !result.available, "old version cannot downgrade installation");
     unsafe = fixture; at = unsafe.find("false"); unsafe.replace(at, 5, "true");
     require(parse(unsafe.c_str(), result) && !result.available, "draft release never offered");

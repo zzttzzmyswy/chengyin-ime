@@ -3,6 +3,13 @@
 preview8–16 阶段已结项；开发与交付定位见 [结项记录](WINDOWS_PHASE_WRAPUP.md)。
 preview8–15 的实现细节见 [历史归档](history/DEVELOPMENT_PREVIEW8_15.md)。
 
+## preview19 旧学习可信度
+
+见 [本批清单](WINDOWS_PREVIEW19_TASKLIST.md)。Profile.has_repeated_evidence 同时检查累计次数 >=3
+和衰减后的近期 hits >=3；Session 在缺少这项证据时查询 dictionary.attests，缓存仍随
+profile/dictionary 快照、匹配 flags 和输入预算失效。未知组合的 v1 高计数不能取代近期选择，
+可证明的词语保留旧偏好，查询不修改学习数据。两种匹配模式及模糊历史共用门槛，核心没有词语特例。
+
 ## preview18 审查修复与后续批次
 
 详细问题、复现和边界见 [审查报告](CODE_REVIEW_2026-10-05.md)，顺序见 [修复计划](REVIEW_REPAIR_PLAN.md)。
