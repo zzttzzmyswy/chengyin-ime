@@ -120,6 +120,9 @@ pub struct Session {
     learning_enabled: bool,
     associations_enabled: bool,
     matching_options: u32,
+    incremental: bool,
+    prefix_ends: u64,
+    prefix_end: u8,
     exact_sentence_index: usize,
     exact_history: [u32; 4],
     exact_count: [usize; 2],
@@ -162,6 +165,9 @@ impl Session {
             learning_enabled: true,
             associations_enabled: true,
             matching_options: 0,
+            incremental: false,
+            prefix_ends: 0,
+            prefix_end: 0,
             exact_sentence_index: 0,
             exact_history: [0; 4],
             exact_count: [0; 2],
@@ -264,6 +270,70 @@ impl Session {
         }
         self.matching_options = options;
         true
+    }
+    /// Opt in to immediate prefix commits plus a remaining preedit. Legacy
+    /// adapters retain staged, reversible segment selection by default.
+    pub fn configure_incremental(&mut self, enabled: bool) -> bool {
+        if !self.preedit.is_empty() {
+            return false;
+        }
+        self.incremental = enabled;
+        true
+    }
+    fn next_prefix(&mut self) -> Option<ResultRef> {
+        loop {
+            if self.prefix_end == 0 {
+                if self.prefix_ends == 0 {
+                    return None;
+                }
+                self.prefix_end = (63 - self.prefix_ends.leading_zeros()) as u8;
+                self.prefix_ends &= !(1u64 << self.prefix_end);
+                self.cursor
+                    .reset(
+                        &self.dictionary,
+                        self.raw[self.offset..self.offset + self.prefix_end as usize]
+                            .trim_end_matches('\''),
+                    )
+                    .expect("validated prefix");
+            }
+            match self.cursor.next(&self.dictionary) {
+                Ok(Some(id)) => {
+                    let letters = self.raw[self.offset..self.offset + self.prefix_end as usize]
+                        .bytes()
+                        .filter(|&b| b != b'\'')
+                        .count();
+                    if self
+                        .dictionary
+                        .entry(id)
+                        .pinyin
+                        .bytes()
+                        .filter(|&b| b != b'\'')
+                        .count()
+                        == letters
+                    {
+                        return Some(ResultRef::new(
+                            id,
+                            self.prefix_end,
+                            false,
+                            false,
+                            if self.matching_options == 0 {
+                                SEGMENT
+                            } else {
+                                OTHER_COMPLETION
+                            },
+                        ));
+                    }
+                    // Exact terminals precede subtree completions; do not scan
+                    // the whole subtree for a prefix's remaining homophones.
+                    self.prefix_end = 0;
+                }
+                Err(_) => {
+                    self.budget_limited = true;
+                    self.prefix_end = 0;
+                }
+                Ok(None) => self.prefix_end = 0,
+            }
+        }
     }
     pub fn candidate_marks(&self, index: usize) -> Option<[u64; 4]> {
         let candidate = self.candidate(index)?;
@@ -458,6 +528,19 @@ impl Session {
                     self.phase = 3;
                 }
                 3 => {
+                    if self.incremental {
+                        if let Some(prefix) = self.next_prefix() {
+                            return Some(prefix);
+                        }
+                        self.phase = if self.decoder.full_coverage { 4 } else { 5 };
+                        if self.decoder.full_coverage {
+                            self.budget_limited |= self
+                                .cursor
+                                .reset_fast(&self.dictionary, &self.raw[self.offset..])
+                                .unwrap_or(true);
+                        }
+                        continue;
+                    }
                     // Segmentation is useful for continuous input with a complete decode.
                     if (self.decoder.count > 0 || !self.lexical_matches)
                         && self.segment_index < self.decoder.segment_count
@@ -707,6 +790,14 @@ impl Session {
                         self.character_line = true;
                         return Some(r);
                     }
+                    self.phase = 13;
+                }
+                13 => {
+                    if self.incremental {
+                        if let Some(prefix) = self.next_prefix() {
+                            return Some(prefix);
+                        }
+                    }
                     self.budget_limited |= self
                         .cursor
                         .reset_fast(&self.dictionary, &self.raw[self.offset..])
@@ -792,7 +883,9 @@ impl Session {
             // pronunciations and sentence paths while retaining distinct input spans.
             if self.results.iter().any(|&old| {
                 (old.consumed() == item.consumed()
-                    || (self.matching_options != 0 && old.consumed() > item.consumed()))
+                    || (!self.incremental
+                        && self.matching_options != 0
+                        && old.consumed() > item.consumed()))
                     && self.result_candidate(old).text == self.result_candidate(item).text
             }) {
                 continue;
@@ -830,6 +923,20 @@ impl Session {
                 self.budget_limited = true;
             }
             Ok(limited) => self.budget_limited = limited,
+        }
+        self.prefix_end = 0;
+        self.prefix_ends = 0;
+        if self.incremental && crate::syllables::count_spelling(&self.raw[self.offset..]) != Some(1)
+        {
+            let input = &self.raw[self.offset..];
+            self.budget_limited |= self
+                .dictionary
+                .matches(input, 0, 1, |_, end| {
+                    if end < input.len() {
+                        self.prefix_ends |= 1u64 << end;
+                    }
+                })
+                .is_err();
         }
         self.results.clear();
         self.page = 0;
@@ -1021,6 +1128,9 @@ impl Session {
             self.history_cache.invalidate();
         }
         self.learning_key.clear();
+        if success && self.incremental && !self.raw.is_empty() {
+            self.refresh();
+        }
         success
     }
     /// Candidate-window display only; original preedit/caret offsets stay intact.
@@ -1134,7 +1244,10 @@ impl Session {
                     - self.dictionary.context_bonus(context, word.text)
                     - recent
             };
-            let single = if self.matching_options == 0 {
+            let single = if self.incremental && r.consumed() < (self.raw.len() - self.offset) as u8
+            {
+                2
+            } else if self.matching_options == 0 {
                 0
             } else {
                 let text = if r.id() & LEARNED != 0 {
@@ -1160,12 +1273,7 @@ impl Session {
             *target = item;
         }
     }
-    fn after_commit(&mut self, chosen: Option<u32>) {
-        if self.learning_enabled && crate::profile::chinese(&self.commit) && !self.raw.is_empty() {
-            self.learning_key.clear();
-            self.learning_key.push_str(&self.raw);
-        }
-        self.clear_composition();
+    fn remember_commit(&mut self, chosen: Option<u32>) -> bool {
         // Raw/ASCII commits and punctuation cannot supply a Chinese context.
         if self.commit.is_empty()
             || self
@@ -1174,7 +1282,7 @@ impl Session {
                 .any(|c| !matches!(c as u32,0x3400..=0x9fff|0x20000..=0x3134f))
         {
             self.context.clear();
-            return;
+            return false;
         }
         let mut start = self.commit.len().saturating_sub(63);
         while !self.commit.is_char_boundary(start) {
@@ -1190,6 +1298,17 @@ impl Session {
             self.recent.copy_within(0..at, 1);
             self.recent[0] = id;
             self.recent_len = (self.recent_len + 1).min(32);
+        }
+        true
+    }
+    fn after_commit(&mut self, chosen: Option<u32>) {
+        if self.learning_enabled && crate::profile::chinese(&self.commit) && !self.raw.is_empty() {
+            self.learning_key.clear();
+            self.learning_key.push_str(&self.raw);
+        }
+        self.clear_composition();
+        if !self.remember_commit(chosen) {
+            return;
         }
         if !self.associations_enabled {
             return;
@@ -1279,6 +1398,20 @@ impl Session {
             return;
         }
         if !force && (item.consumed() as usize) < self.raw.len() - self.offset {
+            if self.incremental {
+                let consumed = item.consumed() as usize;
+                self.commit.push_str(self.dictionary.entry(item.id()).text);
+                if self.learning_enabled {
+                    self.learning_key
+                        .push_str(self.raw[..consumed].trim_end_matches('\''));
+                }
+                self.remember_commit(Some(item.id()));
+                self.raw.drain(..consumed);
+                self.offset = 0;
+                self.caret = self.raw.len();
+                self.refresh();
+                return;
+            }
             self.boundaries[self.boundary_count] = Boundary {
                 raw: self.offset as u8,
                 text: self.completed.len() as u16,

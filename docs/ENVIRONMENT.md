@@ -1,3 +1,14 @@
+# 当前本机 Windows 环境 · preview16
+
+沿用下文 Win11/MSVC/Rust/NSIS 环境及显式生产/七测试 target，包 revision 为 16。
+67 Rust 测试、fmt、Clippy -D warnings、MSVC /W4 /WX C ABI、七原生 CTest 通过。
+Session 64,894 bytes、初始化后按键零分配；核心基准的真实词库 Session 启用立即分段模式。
+MYSWY_BENCH_ROUNDS=100，语料、硬件及百分位见 STATUS 与 build/bench-preview16.txt。
+真实分段候选与剩余候选横纵截图核对，SetText/ShiftStart 故障、鼠标/数字/宿主选择回归通过。
+测试宿主写后提供有效 EditRecord，不将缺失记录的非标准通知冒充真实接入。
+单 EXE 负载哈希/COM/构建字节一致和许可校验通过；本批未替换个人安装或操作个人学习。
+真实安装后的现代宿主矩阵、物理混合 DPI、新安装生命周期及远程 CI 继续单独验收。
+
 # 当前本机 Windows 环境 · preview15
 
 沿用以下 MSVC/Rust/NSIS 环境及显式生产/七测试 target，包 revision 为 15。

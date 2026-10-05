@@ -35,6 +35,7 @@ fn main() {
         daily.estimated_heap_bytes()
     );
     let mut real = Session::new(Arc::clone(&daily));
+    assert!(real.configure_incremental(true));
     println!(
         "session capacity+inline={}bytes",
         real.estimated_heap_bytes() + std::mem::size_of::<Session>()

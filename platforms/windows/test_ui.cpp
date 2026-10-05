@@ -456,13 +456,17 @@ int wmain(int argc, wchar_t **argv) {
         "synthetic one-off regex history");
     require(myswy_session_set_profile(session, history) == 0 && myswy_session_configure(session, 5, 3) == 0
         && myswy_session_configure_matching(session, MYSWY_MATCHING_MASK) == 0, "regex history and matching fixture");
+    require(myswy_session_configure_incremental(session, 1) == 0, "production prefix candidate mode");
     myswy_profile_free(history);
     for (const char *c = regexRaw; *c; ++c) myswy_session_process(session, static_cast<uint32_t>(*c), 0);
     uint8_t firstRegex[257]{};
     require(myswy_session_text(session, MYSWY_TEXT_CANDIDATE, 0, firstRegex, sizeof(firstRegex)) > 0
         && std::strcmp(reinterpret_cast<const char *>(firstRegex), "正则表达式") == 0,
         "technical term wins despite one wrong historical selection");
-    require(myswy_session_candidate_count(session) == 1, "no split homophone alternatives for complete regex term");
+    require(myswy_session_candidate_count(session) > 1, "complete term plus manual prefix choices");
+    for (size_t i = 1; i < myswy_session_candidate_count(session); ++i)
+        require(myswy_session_candidate_consumed(session, i) < static_cast<int>(sizeof(regexRaw) - 1),
+                "extra regex choices consume only an initial dictionary prefix");
     {
         myswy::CandidateWindow candidates;
         myswy::Preferences prefs; prefs.candidatePinyin = true;
@@ -471,6 +475,23 @@ int wmain(int argc, wchar_t **argv) {
             candidates.show(session, owner, RECT{100, 150, 101, 170}, false, nullptr, nullptr, 300, prefs, true);
             capture(candidates.handle(), layout == 0 ? L"candidate-regex-vertical" : L"candidate-regex-horizontal");
         }
+    }
+    int prefixIndex = -1;
+    for (size_t i = 0; i < myswy_session_candidate_count(session); ++i) {
+        uint8_t word[257]{};
+        myswy_session_text(session, MYSWY_TEXT_CANDIDATE, i, word, sizeof(word));
+        if (std::strcmp(reinterpret_cast<const char *>(word), "正则") == 0) prefixIndex = static_cast<int>(i);
+    }
+    require(prefixIndex >= 0, "regex first page has selectable prefix phrase");
+    require(myswy_session_process(session, MYSWY_KEY_SELECT_1 + prefixIndex, 0) > 0, "select regex prefix phrase");
+    uint8_t remaining[257]{};
+    require(myswy_session_text(session, MYSWY_TEXT_PREEDIT, 0, remaining, sizeof(remaining)) > 0
+            && std::strcmp(reinterpret_cast<const char *>(remaining), "biaodashi") == 0, "regex prefix leaves only suffix pinyin");
+    {
+        myswy::CandidateWindow candidates;
+        myswy::Preferences prefs; prefs.candidatePinyin = true;
+        candidates.show(session, owner, RECT{100,150,101,170}, false, nullptr, nullptr, 301, prefs, true);
+        capture(candidates.handle(), L"candidate-regex-remaining");
     }
     myswy_session_free(session);
     DestroyWindow(owner);

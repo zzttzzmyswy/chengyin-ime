@@ -29,6 +29,36 @@ static void expect_text(MyswySession *s, uint32_t field, size_t index, const cha
 
 int main(void) {
     {
+        const char source[] = "wo\t我\t1000\nhao\t好\t900\n";
+        MyswyDictionary *d = myswy_dictionary_new_tsv((const uint8_t *)source, strlen(source));
+        MyswySession *s = myswy_session_new_with_dictionary(d);
+        myswy_dictionary_free(d);
+        assert(s && myswy_session_configure_incremental(NULL, 1) == MYSWY_INVALID);
+        assert(myswy_session_configure_incremental(s, 2) == MYSWY_INVALID);
+        assert(myswy_session_configure_incremental(s, 1) == 0);
+        assert(myswy_session_configure(s, 9, 1) == 0);
+        type_ascii(s, "wovvvv");
+        assert(myswy_session_configure_incremental(s, 0) == MYSWY_BUSY);
+        assert(myswy_session_candidate_consumed(s, 0) == 2);
+        assert(myswy_session_process(s, MYSWY_KEY_SELECT_1, 0) == MYSWY_HANDLED);
+        expect_text(s, MYSWY_TEXT_COMMIT, 0, "我");
+        expect_text(s, MYSWY_TEXT_PREEDIT, 0, "vvvv");
+        expect_text(s, MYSWY_TEXT_LEARNING_KEY, 0, "wo");
+        assert(myswy_session_configure_incremental(s, 0) == MYSWY_BUSY);
+        expect_text(s, MYSWY_TEXT_COMMIT, 0, "我");
+        assert(myswy_session_learn_commit(s) == 1);
+        assert(myswy_session_learn_commit(s) == 0);
+        myswy_session_process(s, MYSWY_KEY_ESCAPE, 0);
+        expect_text(s, MYSWY_TEXT_PREEDIT, 0, "");
+        expect_text(s, MYSWY_TEXT_COMMIT, 0, "");
+        assert(myswy_session_configure_incremental(s, 0) == 0);
+        type_ascii(s, "wovvvv");
+        myswy_session_process(s, MYSWY_KEY_SELECT_1, 0);
+        expect_text(s, MYSWY_TEXT_PREEDIT, 0, "我vvvv");
+        expect_text(s, MYSWY_TEXT_COMMIT, 0, "");
+        myswy_session_free(s);
+    }
+    {
         const char source[]="zhang\t\xe5\xbc\xa0\t1000\n";
         MyswyDictionary *d=myswy_dictionary_new_tsv((const uint8_t *)source,strlen(source));
         assert(d);

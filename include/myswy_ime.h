@@ -111,6 +111,11 @@ enum MyswyMatching {
     MYSWY_MATCHING_MASK=0x000f07ffu
 };
 int32_t myswy_session_configure_matching(MyswySession *, uint32_t flags);
+/* Additive opt-in, idle only: 0=legacy staged segments (default), 1=immediate
+ * prefix commit plus remaining preedit. Unknown values INVALID, active BUSY.
+ * After a prefix selection COMMIT and PREEDIT can BOTH be nonempty: host must
+ * accept COMMIT outside the remaining composition, then acknowledge learning. */
+int32_t myswy_session_configure_incremental(MyswySession *, uint32_t enabled);
 /* One 0/1 annotation per canonical ASCII pinyin byte, including unmarked '.
  * Required byte count, no NUL; NULL/small output writes nothing; invalid index
  * returns INVALID. Mutation-free and allocation-free, same lifetime as text. */
@@ -148,7 +153,8 @@ int32_t myswy_session_candidate_count(const MyswySession *session);
 /* Additive getters, no mutation/allocation. Pages are zero-based, each <=9 rows.
  * Candidate indexes are relative to the CURRENT page. Cursor is a UTF-8 byte
  * offset at a character boundary. consumed is the pending ASCII input span;
- * a prefix selection keeps the remainder in preedit with an empty commit.
+ * in default mode a prefix selection keeps the remainder in preedit with an
+ * empty commit; incremental mode commits the prefix and rematches the remainder.
  * Page enumeration is lazy. Work/result budget exhaustion is explicit.
  */
 /* Highlight only, preserves commit/preedit; returns INVALID for an absent row. */

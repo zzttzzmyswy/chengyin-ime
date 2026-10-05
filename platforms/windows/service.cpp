@@ -767,11 +767,49 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             std::copy_n(text, n, commit.data + commit.length);
             commit.length += n;
         }
-        const WideText &output = hasCommit ? commit : preedit;
+        WideText output = hasCommit ? commit : preedit;
+        const bool partialCommit = hasCommit && preedit.length > 0;
+        if (partialCommit) {
+            if (commit.length + preedit.length >= static_cast<int>(std::size(output.data))) {
+                endLocked(cookie);
+                return S_OK;
+            }
+            std::copy_n(preedit.data, preedit.length, output.data + output.length);
+            output.length += preedit.length;
+        }
         if (FAILED(range->SetText(cookie, 0, output.data, output.length))) {
             // The host still has its previous raw text. Abandon state and let this key through.
             endLocked(cookie);
             return S_OK;
+        }
+        // A successful write must never be replayed, including boundary failures.
+        eaten = (result & MYSWY_HANDLED) || hasCommit;
+        if (partialCommit) {
+            Ptr<ITfRange> boundary;
+            LONG shifted = 0;
+            HRESULT boundaryHr = range->Clone(boundary.put());
+            if (SUCCEEDED(boundaryHr)) boundaryHr = boundary->Collapse(cookie, TF_ANCHOR_START);
+            if (SUCCEEDED(boundaryHr)) boundaryHr = boundary->ShiftEnd(cookie, commit.length, &shifted, nullptr);
+            if (SUCCEEDED(boundaryHr) && shifted != commit.length) boundaryHr = E_FAIL;
+            if (SUCCEEDED(boundaryHr)) boundaryHr = boundary->Collapse(cookie, TF_ANCHOR_END);
+            if (SUCCEEDED(boundaryHr)) boundaryHr = composition_->ShiftStart(cookie, boundary.get());
+            if (SUCCEEDED(boundaryHr)) {
+                Ptr<ITfRange> remaining;
+                boundaryHr = composition_->GetRange(remaining.put());
+                if (SUCCEEDED(boundaryHr)) range.attach(remaining.detach());
+            }
+            if (FAILED(boundaryHr)) {
+                // The replacement can be shorter than the old raw spelling.
+                // Leave a valid host caret even when shrinking the composition fails.
+                Ptr<ITfRange> fallbackCaret;
+                if (SUCCEEDED(range->Clone(fallbackCaret.put()))
+                        && SUCCEEDED(fallbackCaret->Collapse(cookie, TF_ANCHOR_END))) {
+                    TF_SELECTION fallback{fallbackCaret.get(), {TF_AE_NONE, FALSE}};
+                    context->SetSelection(cookie, 1, &fallback);
+                }
+                endLocked(cookie);
+                return S_OK;
+            }
         }
         if (hasCommit && plan.punctuation)
             punctuation_.accepted(plan.punctuation, !english_ && preferences_.chinesePunctuation);
@@ -795,7 +833,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         eaten = (result & MYSWY_HANDLED) || hasCommit;
         Ptr<ITfRange> caret;
         HRESULT hr;
-        if (hasCommit || preedit.length == 0) {
+        if (preedit.length == 0) {
             hr = range->Clone(caret.put());
             if (SUCCEEDED(hr))
                 hr = caret->Collapse(cookie, TF_ANCHOR_END);
@@ -1094,6 +1132,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             return false;
         myswy_session_configure(session_, static_cast<uint32_t>(preferences_.pageSize),
                                 (preferences_.learning ? 1u : 0u) | (preferences_.associations ? 2u : 0u));
+        myswy_session_configure_incremental(session_, 1);
         sessionMatchingOptions_ = myswy_session_configure_matching(session_,preferences_.matchingOptions) == 0
                                   ? preferences_.matchingOptions : 0;
         if (profile_)

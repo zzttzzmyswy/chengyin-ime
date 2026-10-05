@@ -1,3 +1,23 @@
+# preview16 立即分段上屏
+
+2026-10-05：见 [WINDOWS_PREVIEW16_TASKLIST](WINDOWS_PREVIEW16_TASKLIST.md)。
+Session 增加默认 false 的 incremental 模式；Windows bind 时显式开启。
+默认 C ABI/核心保留过去的可撤销暂存段行为；新 configure_incremental 只在 idle 接受 0/1。
+模式 1 的部分选择同时提供 commit（仅所选文字）和 preedit（剩余 raw），宿主必须将 commit 排除在 composition 外。
+
+前缀结束点为 u64 位图，由共享词库 DAG 的准确边生成，排除完整输入和单个完整音节。
+同音候选复用一个游标逐结束点懒加载，不复制词库或增加第二个游标；保留不同消耗范围的同字候选。
+完整匹配/历史仍在原两线内排序，前缀为独立末级，按消耗长度降序和词库顺序排列。
+选择前缀后 raw 删除 consumed（包含末尾音节分隔符），从新起点 refresh，学习键只保存本次选择拼音。
+未获得宿主确认前不修改 Profile；成功 learn_commit 后使缓存失效并刷新剩余候选。
+所有 prefix 缓冲预分配，会话 inline + capacity 64,894 bytes < 64 KiB；没有按键分配。
+
+Windows 一次 SetText 写 commit+preedit，再将 composition 起点 ShiftStart 到 commit 后的 UTF-16 边界。
+已有选择用剩余 range 对照 core preedit_cursor，OnEndEdit 仅核对剩余 raw；Escape 删除剩余 range。
+若文本接受而 ShiftStart/GetRange 失败，用有效范围末端恢复光标，吞掉选择并结束状态，不记录学习。
+测试发现短输出后旧光标超界，现已补上恢复并回归下一段输入；不会重新派发已经改动宿主的选择键。
+数字、鼠标及宿主候选 Finalize 统一 editKey 路径；异步去重、代际检查和敏感字段透传保留。
+
 # preview15 长拼音质量和历史可信度
 
 2026-10-05：见 [WINDOWS_PREVIEW15_TASKLIST](WINDOWS_PREVIEW15_TASKLIST.md)。整词与单字仍互不干扰。

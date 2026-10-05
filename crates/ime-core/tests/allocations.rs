@@ -46,6 +46,7 @@ fn initialized_key_path_does_not_allocate() {
     assert_eq!(profile.entry_count(), 8192);
     assert!(real.set_profile(std::sync::Arc::new(profile)));
     let mut display = [0u8; 319];
+    assert!(real.configure_incremental(true));
     COUNTING.store(true, Ordering::SeqCst);
     assert!(real.configure_matching(myswy_core::fuzzy::OPTIONS_MASK));
     for raw in [
@@ -68,6 +69,13 @@ fn initialized_key_path_does_not_allocate() {
         real.process(Key::PageUp, Modifiers::default());
         real.reset();
     }
+    for c in "wovvvv".chars() {
+        real.process(Key::Character(c), Modifiers::default());
+    }
+    real.process(Key::Select(0), Modifiers::default());
+    assert_eq!(real.commit(), "我");
+    assert_eq!(real.preedit(), "vvvv");
+    real.reset();
     assert!(real.configure_matching(0));
     for _ in 0..100 {
         for c in "zhong'guoren".chars() {

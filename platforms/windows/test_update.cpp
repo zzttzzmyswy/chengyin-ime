@@ -20,8 +20,8 @@ int main(int argc, char **argv) {
     }
     ReleaseUpdate result;
     require(parse("[]", result) && !result.available, "no published releases is a normal result");
-    const char fixture[] = R"([{"draft":false,"tag_name":"v0.1.0-preview16","body":"New\n\u4e2d\u6587","assets":[{"name":"chengyin-windows-x64-0.1.0-preview16-msvc.exe","browser_download_url":"https://github.com/zzttzzmyswy/myswyIm/releases/download/v0.1.0-preview16/chengyin-windows-x64-0.1.0-preview16-msvc.exe","digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}]}])";
-    require(parse(fixture, result) && result.available && result.version == L"v0.1.0-preview16"
+    const char fixture[] = R"([{"draft":false,"tag_name":"v0.1.0-preview17","body":"New\n\u4e2d\u6587","assets":[{"name":"chengyin-windows-x64-0.1.0-preview17-msvc.exe","browser_download_url":"https://github.com/zzttzzmyswy/myswyIm/releases/download/v0.1.0-preview17/chengyin-windows-x64-0.1.0-preview17-msvc.exe","digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}]}])";
+    require(parse(fixture, result) && result.available && result.version == L"v0.1.0-preview17"
             && result.notes == L"New\n中文", "newer release with verified repository asset and Unicode notes");
     ReleaseUpdate imageRelease = result;
     imageRelease.digest = L"sha256:228f47e1d41177fb11a95b237d5738131b6e44a586f217e8438b1a0b5fae3ae4";
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     require(parse(unsafe.c_str(), result) && !result.available, "external executable URL cannot become an update");
     unsafe = fixture; at = unsafe.find("sha256:"); unsafe.replace(at, 7, "sha512:");
     require(parse(unsafe.c_str(), result) && !result.available, "missing or wrong digest algorithm rejected");
-    unsafe = fixture; at = unsafe.find("preview16\""); unsafe.replace(at, 10, "preview7\"");
+    unsafe = fixture; at = unsafe.find("preview17\""); unsafe.replace(at, 10, "preview7\"");
     require(parse(unsafe.c_str(), result) && !result.available, "old version cannot downgrade installation");
     unsafe = fixture; at = unsafe.find("false"); unsafe.replace(at, 5, "true");
     require(parse(unsafe.c_str(), result) && !result.available, "draft release never offered");

@@ -27,13 +27,21 @@ Windows, Linux X11, Linux Wayland, and Android.
   docs/WINDOWS_TASKLIST.md and docs/DEVELOPMENT.md for historical preview7: classic native
   tabs, embedded input tests, configuration notifications, language-bar mode and
   Chinese punctuation. Keep the standalone test app removed. The settings
-  executable is myswy_settings.exe; package scripts use preview15; read docs/WINDOWS_PREVIEW15_TASKLIST.md. Environment
+  executable is myswy_settings.exe; package scripts use preview16; read docs/WINDOWS_PREVIEW16_TASKLIST.md. Environment
   reproduction is in docs/ENVIRONMENT.md.
 - Previous delivery: preview7 MSVC installer from commit b14116e, GitHub Actions run
   37212769471. All six jobs passed, including six native Windows CTests and the
   installer lifecycle. Native NSIS needs the pinned AMD64 preparation helper
   and explicit UTF-8 source input. Real Win11/Notepad3 validation is still pending.
-- Current slice: preview15 protects complete lexical input spans and constrains
+- Current slice: preview16 adds accurate lexical prefix phrase/character choices
+  after whole matching. Windows opts into immediate prefix commits and rematches
+  remaining pinyin with a shortened TSF composition range. Legacy core/C ABI
+  default staged selection is unchanged; configure_incremental is additive.
+  Prefix learning is acknowledged only after host acceptance; failures after a
+  text write must consume the choice and recover a valid caret.
+  67 Rust tests, zero-key-allocation/64 KiB, native C ABI and seven CTests pass.
+  Package, complete payload hashes/COM and licenses verified; personal install unchanged.
+- Preview15 protects complete lexical input spans and constrains
   sentence boundaries using attested words/authored links/limited pronoun frames.
   Unknown exact phrase joins are at most one boundary and one fallback candidate;
   fuzzy/corrected/abbreviated/predicted paths require supported boundaries.

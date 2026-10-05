@@ -1,5 +1,50 @@
 # 开发记录 / 下次从这里继续
 
+更新：2026-10-05。当前批次：**preview16 增加从前到后的词组/单字选择，立即上屏所选部分，再匹配剩余拼音。**
+任务见 [WINDOWS_PREVIEW16_TASKLIST](WINDOWS_PREVIEW16_TASKLIST.md)。整词、整句和准确/模糊历史字词两线保持优先。
+前缀来自准确词库边，按消耗长度优先并支持同音分页；不依赖组句猜测，不受单项未知整句兜底额度约束。
+`zhengzebiaodashi` 首选“正则表达式”，随后“正则”、“正”等前缀；选“正则”即上屏这两个字，
+剩余 `biaodashi` 重新给出“表达式”、“表达”、“表”等选项，也可连选“正”→“则”→“表达式”。
+单个完整音节不做不必要的内部截断；未知尾部仍可修改、取消或通过空格提交其原始拼音。
+
+Windows 默认启用新模式；C ABI v1 追加显式 configure_incremental，旧适配器默认暂存段协议保持不变。
+TSF 同一写锁提交选择及剩余预编辑，再收缩 composition 起点，已选文字退出临时编辑。
+Home、退格和 Escape 仅影响剩余 raw；数字、鼠标和宿主 Finalize 同一路径，重复异步选择仍合并。
+学习只记录被接受的前缀拼音与文字，末尾分隔符不进入学习键，未接受的范围变更不训练。
+故障注入发现短输出后的旧光标超界，已在 ShiftStart/GetRange 失败时恢复有效光标、结束编辑并吞掉选择。
+鼠标持续编辑检查还补全了模拟宿主写后 EditRecord，使立即及异步选择后的剩余 composition 都受到真实式通知核对。
+
+**67 项 Rust 测试**、fmt、Clippy -D warnings、MSVC /W4 /WX C ABI、
+**7/7 原生 Windows CTest（18.44 s）**通过。新增真实词库及 137 同音前缀分页、分隔符、连选、取消、
+模式忙拒绝、C ABI 双输出/旧模式兼容、三种宿主选择与 SetText/ShiftStart 故障回归。
+8192 历史的初始化后按键路径零分配测试启用立即分段，会话 inline + 预分配容量 **64,894 bytes** <64 KiB。
+候选横/纵截图显示整词加前缀，选中后的剩余窗口已人工核对；八页原生设置、字体、模拟多 DPI 回归通过。
+
+性能：Win11 build 26200，Ryzen 9 9950X 16C/32T，Rust 1.99 MSVC release，87540 条词库，100 轮；
+以下 real Session 均启用立即分段，计核心 process 与可见字母标记，排除宿主/UI/磁盘：
+
+| 语料/范围 | 样本 | P50 | P95 | P99 |
+| --- | --- | --- | --- | --- |
+| 全规则六输入，逐键及可见标记 | 4900 | 1.001 ms | 10.713 ms | 13.004 ms |
+| 全规则 yingshe/yinshe/yignshe，逐键及标记 | 2000 | 0.261 ms | 3.291 ms | 3.395 ms |
+| 无规则五输入，含 60 bytes 长句，逐键 | 12100 | 0.066 ms | 2.683 ms | 3.512 ms |
+
+词库加载 **55.508 ms**，共享词库堆估算 **12,637,655 bytes**。零按键分配不包含成功学习确认的快照分配。
+合成 8192 历史与缓存、确认和查询基准另列 build/bench-preview16.txt，不能替代独立输入质量或端到端延迟测量。
+
+交付：build/packages/chengyin-windows-x64-0.1.0-preview16-msvc.exe，**4385302 bytes**；
+SHA-256 **c0d0bc1e9203033e5506194adca18632813afa77560dfac1cd1eee66e437c299**。
+包预检查、7-Zip、解包全负载哈希/COM、三二进制与最终构建一致及 21 项许可 ZIP CRC 通过。
+证据：build/tests-preview16.txt、clippy-preview16.txt、abi-test-preview16.txt、native-test-preview16.txt、
+bench-preview16.txt、ui-test-preview16.txt、package-preview16.txt、delivery-preview16.json；截图 build/ui-preview16/。
+本批没有替换个人安装或修改个人设置/学习；无新安装生命周期、远程 CI 或公开 Release。
+
+下一步：安装后验证更多真实宿主的分段上屏与 composition 属性；物理混合 DPI 多屏、隔离安装生命周期及独立
+长句/歧义切分质量语料继续单独验收；继续降低长句高百分位成本。
+升级后需重开已加载旧 DLL 的应用一次，既有学习和用户词库无需清除。
+
+## 以下为 preview15 记录
+
 更新：2026-10-05。当前批次：**preview15 修复一次未知历史抢占准确整词，并约束长拼音拆词同音组句。**
 任务见 [WINDOWS_PREVIEW15_TASKLIST](WINDOWS_PREVIEW15_TASKLIST.md)。准确整词直接保护完整输入范围；
 `zhengzebiaodashi` 在一次错误历史下只显示“正则表达式”，不再生成“正则表达是/时/事/使”。

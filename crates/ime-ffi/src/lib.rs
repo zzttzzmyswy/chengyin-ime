@@ -218,6 +218,29 @@ pub unsafe extern "C" fn myswy_session_configure_matching(
     })
 }
 
+/// Enable immediate prefix commits while idle. Default is legacy staged mode.
+/// # Safety
+/// `session` must be null or exclusively borrowed from a live session handle.
+#[no_mangle]
+pub unsafe extern "C" fn myswy_session_configure_incremental(
+    session: *mut MyswySession,
+    enabled: u32,
+) -> i32 {
+    guard(|| {
+        if enabled > 1 {
+            return INVALID;
+        }
+        let Some(s) = (unsafe { session.as_mut() }) else {
+            return INVALID;
+        };
+        if s.0.configure_incremental(enabled != 0) {
+            0
+        } else {
+            BUSY
+        }
+    })
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn myswy_session_candidate_marks(
     session: *const MyswySession,

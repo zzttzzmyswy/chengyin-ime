@@ -34,7 +34,7 @@ struct Document {
     std::wstring text;
     LONG start = 0, end = 0;
     bool locked = false, denyLock = false, denyWrite = false, denySelection = false, readOnly = false,
-         queueReads = false;
+         queueReads = false, denyShift = false;
     int writes = 0, ends = 0, reads = 0, viewQueries = 0;
     int inputScope = -1;
     HWND owner = nullptr;
@@ -232,8 +232,12 @@ class Composition final : public ITfComposition {
         (*out)->AddRef();
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE ShiftStart(TfEditCookie, ITfRange *) override {
-        return E_NOTIMPL;
+    HRESULT STDMETHODCALLTYPE ShiftStart(TfEditCookie cookie, ITfRange *start) override {
+        require(doc.locked && cookie == 123, "ShiftStart under write lock");
+        if (doc.denyShift) return E_FAIL;
+        auto *current = static_cast<Range *>(range.get());
+        current->begin = static_cast<Range *>(start)->begin;
+        return current->begin <= current->finish ? S_OK : E_FAIL;
     }
     HRESULT STDMETHODCALLTYPE ShiftEnd(TfEditCookie, ITfRange *) override {
         return E_NOTIMPL;
@@ -350,8 +354,7 @@ class Context final : public ContextStub, public CompositionContextStub, public 
         doc.locked = true;
         *result = edit->DoEditSession(123);
         doc.locked = false;
-        if (writing && sink)
-            sink->OnEndEdit(this, 456, nullptr);
+        if (writing) notifyAcceptedEdit();
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetSelection(TfEditCookie, ULONG, ULONG, TF_SELECTION *out,
@@ -449,6 +452,7 @@ class Context final : public ContextStub, public CompositionContextStub, public 
         doc.locked = true;
         require(SUCCEEDED(edit->DoEditSession(123)), "queued candidate edit completion");
         doc.locked = false;
+        notifyAcceptedEdit();
     }
     Document doc;
     Ptr<ITfTextEditSink> sink;
@@ -527,9 +531,35 @@ void runEditTests(ITfKeyEventSink *keys) {
                 && editing->doc.end == static_cast<LONG>(prefix.size()) + 1,
                 "UTF-8 core cursor maps to Chinese UTF-16 caret");
         require(key(keys, editing.get(), VK_BACK)
-                && editing->doc.text == prefix + L"wovvvv", "Backspace unlocks confirmed segment");
+                && editing->doc.text == prefix + L"我vvvv", "Backspace cannot unlock an already committed prefix");
         key(keys, editing.get(), VK_ESCAPE);
+        require(editing->doc.text == prefix + L"我", "Escape cancels only remaining pinyin after prefix commit");
 
+    }
+    {
+        Ptr<Context> partial;
+        partial.attach(new Context);
+        type(keys, partial.get(), "wovvvv");
+        partial->doc.denyShift = true;
+        const int writes = partial->doc.writes;
+        require(key(keys, partial.get(), '1') && partial->doc.text == L"我vvvv"
+                && partial->doc.writes == writes + 1,
+                "failed prefix range shift after write eats choice and preserves all text");
+        partial->doc.denyShift = false;
+        require(!key(keys, partial.get(), VK_ESCAPE) && partial->doc.text == L"我vvvv",
+                "failed prefix boundary retires composition without replay or later erasure");
+        type(keys, partial.get(), "wo");
+        require(key(keys, partial.get(), VK_SPACE) && partial->doc.text == L"我vvvvwo",
+                "typing after boundary failure starts an independent composition");
+    }
+    {
+        Ptr<Context> partial;
+        partial.attach(new Context);
+        type(keys, partial.get(), "wovvvv");
+        partial->doc.denyWrite = true;
+        require(!key(keys, partial.get(), '1') && partial->doc.text == L"wovvvv",
+                "failed partial SetText preserves original input and does not claim success");
+        partial->doc.denyWrite = false;
     }
     {
         Ptr<Context> raw;
@@ -809,6 +839,12 @@ void runEditTests(ITfKeyEventSink *keys) {
     b->doc.denyLock = false;
     click();
     require(b->doc.text == prefix + L"你好", "mouse candidate commits exactly once");
+    type(keys, b, "wovvvv");
+    click();
+    require(b->doc.text == prefix + L"你好我vvvv", "mouse prefix choice commits Chinese and retains raw suffix");
+    const bool partialSpace = key(keys, b, VK_SPACE);
+    require(partialSpace && b->doc.text == prefix + L"你好我vvvv",
+            "Space commits only remaining raw suffix after mouse prefix choice");
     type(keys, b, "nihao");
     b->doc.queueChoices = true;
     click();
@@ -1033,6 +1069,20 @@ void runServiceTests(myswy::ProcessorEx *service, ITfKeyEventSink *keys) {
     modern->flushChoice();
     require(modern->doc.text == chosen && !manager->ui, "host abort cancels current preedit");
     require(candidate->Abort() == E_UNEXPECTED, "late host abort cannot change text");
+    candidate.reset();
+    type(keys, modern.get(), "wovvvv");
+    require(SUCCEEDED(query(manager->ui.get(), kCandidateBehavior, candidate)), "prefix host UI element");
+    require(candidate->SetSelection(0) == S_OK && candidate->Finalize() == S_OK
+            && candidate->Finalize() == S_OK, "coalesced host prefix finalize");
+    const int prefixWrites = modern->doc.writes;
+    modern->flushChoice();
+    require(modern->doc.text == chosen + L"我vvvv" && modern->doc.writes == prefixWrites + 1
+            && manager->ui, "host prefix commits once and keeps remaining composition UI");
+    candidate.reset();
+    require(SUCCEEDED(query(manager->ui.get(), kCandidateBehavior, candidate)), "remaining host candidate interface");
+    require(candidate->Abort() == S_OK, "abort remaining prefix input");
+    modern->flushChoice();
+    require(modern->doc.text == chosen + L"我", "host abort cannot erase committed prefix");
     candidate.reset();
     require(service->Deactivate() == S_OK && manager->refs == 1
             && modern->refs == 1, "modern UI lifecycle releases contexts and manager");

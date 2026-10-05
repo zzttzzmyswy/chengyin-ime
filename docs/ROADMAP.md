@@ -26,6 +26,10 @@ M0 已有实现；M1 已有插件、自定义词典热切换和 Debian 测试包
 
 ## 当前优先：Windows 完整批次与集中实测
 
+preview16 追加前缀词组/单字的立即分段上屏：整词/整句保持优先，选中部分后只用剩余拼音再匹配。
+共享核心通过显式可选模式兼容旧分段协议，Windows 使用 TSF composition 起点收缩；任务及验收见
+[WINDOWS_PREVIEW16_TASKLIST](WINDOWS_PREVIEW16_TASKLIST.md)。
+
 preview15 增加完整词条输入范围保护、长句跨词边界证据、保守的单项未知组合兜底和历史可信度门槛。
 见 WINDOWS_PREVIEW15_TASKLIST；正常整句、错拼/模糊和字词两线排序继续回归。
 未知准确多字词组合的单项兜底仍保留，独立语料质量与歧义切分召回率继续评测。
