@@ -273,13 +273,17 @@ int main() {
             require(GetMonitorInfoW(MonitorFromWindow(popup, MONITOR_DEFAULTTONEAREST), &monitor), "popup monitor");
             const RECT work = monitor.rcWork;
             const LONG middle = (work.top + work.bottom) / 2;
-            const RECT high{100, work.bottom - 200, 101, work.bottom - 180};
-            candidates.show(session, owner, high, false, &clicks, clicked, 30, headerPrefs, true);
+            // A caret on the last line has no room below it, so the popup must sit
+            // entirely above the caret instead of covering it or leaving the work
+            // area.
+            const RECT bottomLine{100, work.bottom - 20, 101, work.bottom};
+            candidates.show(session, owner, bottomLine, false, &clicks, clicked, 30, headerPrefs, true);
             RECT above{}; GetWindowRect(popup, &above);
-            require(above.bottom <= high.top, "popup near the work-area bottom is placed above the caret");
+            require(above.bottom <= bottomLine.top && above.top >= work.top,
+                    "a caret at the work-area bottom places the popup above it, inside the work area");
             // A one-pixel caret-height wobble must not move the popup: above, the
             // top edge comes from the caret top, not from the caret height.
-            candidates.show(session, owner, RECT{100, work.bottom - 200, 101, work.bottom - 179},
+            candidates.show(session, owner, RECT{100, work.bottom - 20, 101, work.bottom - 19},
                             false, &clicks, clicked, 31, headerPrefs, true);
             RECT wobble{}; GetWindowRect(popup, &wobble);
             require(wobble.top == above.top && wobble.left == above.left,
