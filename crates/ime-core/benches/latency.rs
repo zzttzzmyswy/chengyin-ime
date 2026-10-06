@@ -179,6 +179,38 @@ fn main() {
             black_box(real.process(Key::PageDown, Modifiers::default()));
         }
     });
+    // Mid-composition editing: the review asks for per-key, marking, editing and
+    // paging to be measured separately, and editing was the missing one. Each
+    // sample is one edit key inside an active composition, with the visible
+    // annotations refreshed the way a host would after it.
+    let mut editing_samples = Vec::new();
+    for _ in 0..rounds {
+        real.reset();
+        for c in "zhongguoren".chars() {
+            black_box(real.process(Key::Character(c), Modifiers::default()));
+        }
+        for (key, times) in [
+            (Key::Left, 3),
+            (Key::Right, 1),
+            (Key::Backspace, 2),
+            (Key::Character('o'), 2),
+            (Key::Delete, 1),
+            (Key::Home, 1),
+            (Key::End, 1),
+        ] {
+            for _ in 0..times {
+                let start = Instant::now();
+                black_box(real.process(key, Modifiers::default()));
+                for i in 0..real.candidate_count() {
+                    black_box(real.candidate_marks(i));
+                }
+                editing_samples.push(start.elapsed().as_nanos());
+            }
+        }
+    }
+    editing_samples.sort_unstable();
+    let n = editing_samples.len();
+    println!("daily: mid-composition editing (11 edit keys) + visible annotations: n={n} p50={}ns p95={}ns p99={}ns max={}ns",editing_samples[n/2],editing_samples[n*95/100],editing_samples[n*99/100],editing_samples[n-1]);
     let mut modern_samples = Vec::new();
     for _ in 0..rounds {
         for spelling in ["zg", "zhongg", "zguo", "wxhzw", "jttqhh", "womenmtj"] {
