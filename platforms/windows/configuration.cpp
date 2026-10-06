@@ -19,8 +19,11 @@ FileStamp stamp(const std::wstring &path) {
 }
 }
 ConfigurationWatcher::ConfigurationWatcher(DWORD observed, std::function<Snapshot()> load,
-        std::function<void(Snapshot)> apply, const wchar_t *name, std::wstring preferencesPath):
-        epoch_(name ? name : configurationEpochName().c_str()), apply_(std::move(apply)) {
+        std::function<void(Snapshot)> apply, const wchar_t *name, std::wstring preferencesPath,
+        std::wstring revisionName, std::function<bool()> due):
+        epoch_(name ? name : configurationEpochName().c_str()),
+        revision_(revisionName.empty() ? nullptr : revisionName.c_str()), apply_(std::move(apply)),
+        due_(std::move(due)) {
     stop_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     window_ = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, module, nullptr);
     if (!window_ || !stop_ || (!epoch_.valid() && preferencesPath.empty()))
@@ -31,15 +34,28 @@ ConfigurationWatcher::ConfigurationWatcher(DWORD observed, std::function<Snapsho
         worker_ = std::thread([this, observed, load = std::move(load), path = std::move(preferencesPath)]() mutable {
             auto previous = stamp(path);
             bool initial = !path.empty();
+            DWORD observedRevision = revision_.valid() ? revision_.current() : 0;
             ULONGLONG retryAt = 0;
             while (WaitForSingleObject(stop_, 200) == WAIT_TIMEOUT) {
                 const DWORD next = epoch_.current();
+                const DWORD nextRevision = revision_.valid() ? revision_.current() : 0;
                 const auto current = stamp(path);
-                if ((!initial && next == observed && current == previous) || GetTickCount64() < retryAt)
+                // An ordinary learning revision is additive: it must trigger a
+                // reload even when the configuration generation and the
+                // preference file are both unchanged.
+                const bool revised = nextRevision != observedRevision;
+                // A retry that is due must reload even though neither the file nor
+                // any generation changed; otherwise an unfulfilled vocabulary would
+                // wait for an unrelated event before it is ever retried (review R09).
+                const bool due = due_ && due_();
+                if ((!initial && next == observed && current == previous && !revised && !due)
+                        || GetTickCount64() < retryAt)
                     continue;
                 try {
                     auto update = load();
                     if (update) {
+                        update->learningRevision = nextRevision;
+                        update->hasRevision = revision_.valid();
                         std::lock_guard<std::mutex> guard(mutex_);
                         pending_ = std::move(update);
                         PostMessageW(window_, kReady, 0, 0);
@@ -52,6 +68,7 @@ ConfigurationWatcher::ConfigurationWatcher(DWORD observed, std::function<Snapsho
                         }
                     }
                     observed = next;
+                    observedRevision = nextRevision;
                 } catch (...) { /* Preserve the active snapshot; retry on the next wake. */ }
             }
         });

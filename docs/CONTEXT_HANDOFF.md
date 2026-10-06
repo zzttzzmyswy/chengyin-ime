@@ -1,5 +1,21 @@
 # 项目精简交接 · 2026-10-06
 
+## 当前追加：preview22 全身 Q 版大肥鱼与准确结构组句
+
+分支 codex/q-dafeiyu-skin；本批 c08ac94 功能已与 main 0b2ae4b 的 B/C/D 基线合并。
+用户明确授权本地裁切去白底：指定设定图左上正面全身，保留白色服饰/鲸尾，透明449×512部署；详见资产 README。
+准确 A/不A、A不/A、多字词＋的用词典边锚定，仅准确路径可用；可靠准确句压住纠错扩张组句，独立词语/前缀仍保留。
+空历史四种匹配配置首选开不开/电脑的/手机的；自造词条和分段提交回归防止示例硬编码。
+修复 GDI+ DLL 全局析构等待；图片仅持 RGBA/至多四项 DIB，GDI+ 调用内关闭。
+UI 进程本地 COM 工厂绑定 fixture，避免已安装 preview21 TIP 在关闭时干扰；不改个人安装/配置/学习。
+96 Rust Release、fmt/Clippy、零按键分配/64KiB、MSVC C ABI、8/8 CTest31.04s、完整五档模拟DPI/UI通过。
+version.json 单版本源 preview22，CI 安装包名动态派生，模拟 bump 通过。
+488 条独立集重放总体与 I03 一致：Top1 92.0%，Top9 97.7%，可达98.8%；D优化/E实装继续待办。
+本机安装包5104648 bytes，SHA256 110e733b16b1a7a1ef77de40abde114988a66d52ba93b118e6491e2242a6786c，主目录副本一致。
+包PE/全负载SHA/COM/生产字节一致/22项许可与插画署名CRC通过；见 preview22 tasklist 和 build/delivery-preview22.json。
+合并前未交付的旧preview22构建已移到 build/archive/preview22-before-integration；不能与最终包混淆。
+推送/本批CI结果须以实际记录为准。真实升级宿主与物理混合DPI待集中验证，不自动操作UAC。
+
 ## 当前追加：候选皮肤 · preview21
 
 分支 codex/theme-skins，基于 e42516a。用户重新要求完整皮肤、自定义与鲸鱼娘，最终指定 TreapGoGo 网站形象。

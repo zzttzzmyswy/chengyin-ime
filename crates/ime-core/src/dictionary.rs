@@ -9,6 +9,11 @@ pub const MAX_ACTIVE_STATES: usize = 256;
 pub const MAX_DICTIONARY_BYTES: usize = 64 * 1024 * 1024;
 const MAX_ENTRIES: usize = 250_000;
 const FRONTIER: usize = 1024;
+/// Bound on the distinct one-letter keys derived from a single word. A word whose
+/// unseparated spelling admits more same-cardinality parses than this keeps the
+/// first `MAX_INITIAL_KEYS` and is counted in `Dictionary::initials_limited`, so
+/// the truncation is reported rather than silently losing recall (review R12).
+const MAX_INITIAL_KEYS: usize = 8;
 const TERMINAL: u32 = 1 << 31;
 const ABBREVIATED: u32 = 1 << 31;
 const NONE: u32 = u32::MAX;
@@ -112,65 +117,116 @@ pub struct Dictionary {
     initials_keys: String,
     initials_groups: Vec<InitialGroup>,
     initials_words: Vec<u32>,
+    /// Words whose initial keys had to be truncated by [`MAX_INITIAL_KEYS`]. These
+    /// stay reachable through the normal trie/full-pinyin paths; only the strict
+    /// one-letter lane is incomplete for them, and this count is the marker that
+    /// keeps that loss reportable instead of silent (review R12).
+    initials_limited: usize,
 }
 impl Dictionary {
-    fn word_initials(spelling: &str, count: usize) -> Option<String> {
-        let mut key = String::with_capacity(count);
-        for part in spelling.split('\'') {
-            if !crate::syllables::contains(part) {
-                break;
+    /// Every distinct one-letter-per-character key a word can be reached by.
+    ///
+    /// A spelling with explicit apostrophes has exactly one reading. An
+    /// unseparated spelling can have several *same-cardinality* readings whose
+    /// first letters differ (`xiangang` -> both `xa` and `xg`), so indexing only
+    /// one of them silently drops the word from the other query. Every reading is
+    /// indexed here, bounded by [`MAX_INITIAL_KEYS`]; the return value counts how
+    /// many words had to be truncated, which is reported instead of hidden.
+    ///
+    /// Dictionary-initialization only, bounded by the 255-byte canonical spelling
+    /// limit rather than the 63-byte input limit.
+    fn word_initial_keys(spelling: &str, count: usize, keys: &mut Vec<String>) -> bool {
+        keys.clear();
+        let bytes = spelling.as_bytes();
+        let separated: Vec<&str> = spelling.split('\'').collect();
+        if separated.len() == count && separated.iter().all(|p| crate::syllables::contains(p)) {
+            let mut key = String::with_capacity(count);
+            for part in &separated {
+                key.push(char::from(part.as_bytes()[0]));
             }
-            key.push(char::from(part.as_bytes()[0]));
+            keys.push(key);
+            return false;
         }
-        if key.len() == count && spelling.split('\'').count() == count {
-            return Some(key);
-        }
-        // Ambiguous unseparated spelling must fit the number of characters.
-        // This table is dictionary-initialization only, independently bounded by
-        // the 255-byte canonical spelling limit rather than the 63-byte input limit.
-        let stride = spelling.len() + 1;
-        let mut suffix = vec![0u8; (count + 1) * stride];
-        suffix[spelling.len()] = 1;
+        // Bounded reachability: reachable[r][at] holds when the suffix from `at`
+        // parses into exactly `r` syllables. This replaces the former single-path
+        // table, which committed to one reading and lost the others.
+        let stride = bytes.len() + 1;
+        let mut reachable = vec![false; (count + 1) * stride];
+        reachable[bytes.len()] = true;
         for remaining in 1..=count {
-            for at in (0..spelling.len()).rev() {
-                if spelling.as_bytes()[at] == b'\'' {
+            for at in (0..bytes.len()).rev() {
+                if bytes[at] == b'\'' {
                     continue;
                 }
-                for end in (at + 1..=(at + 6).min(spelling.len())).rev() {
-                    let next = end + usize::from(spelling.as_bytes().get(end) == Some(&b'\''));
-                    if suffix[(remaining - 1) * stride + next] != 0
+                for end in (at + 1..=(at + 6).min(bytes.len())).rev() {
+                    let next = end + usize::from(bytes.get(end) == Some(&b'\''));
+                    if reachable[(remaining - 1) * stride + next]
                         && crate::syllables::contains(&spelling[at..end])
                     {
-                        suffix[remaining * stride + at] = (next - at) as u8;
+                        reachable[remaining * stride + at] = true;
                         break;
                     }
                 }
             }
         }
-        if suffix[count * stride] == 0 {
-            return None;
+        if !reachable[count * stride] {
+            return false;
         }
-        key.clear();
-        let mut at = 0;
-        for remaining in (1..=count).rev() {
-            key.push(char::from(spelling.as_bytes()[at]));
-            at += suffix[remaining * stride + at] as usize;
+        // Depth-first over reachable readings only, so dead ends cost nothing.
+        // The visited-state budget keeps the walk linear in the spelling even for a
+        // pathological number of readings; spending it is itself a reported
+        // truncation rather than a silent one (review R12).
+        let mut limited = false;
+        let mut budget = MAX_INITIAL_KEYS * 64;
+        let mut stack = vec![(0usize, count, String::new())];
+        while let Some((at, remaining, key)) = stack.pop() {
+            if keys.len() == MAX_INITIAL_KEYS || budget == 0 {
+                // The stack may still hold further readings; that is the truncation
+                // the caller has to count and report (review R12).
+                limited = true;
+                break;
+            }
+            budget -= 1;
+            if remaining == 0 {
+                if at == bytes.len() && !keys.contains(&key) {
+                    keys.push(key);
+                }
+                continue;
+            }
+            if bytes.get(at) == Some(&b'\'') {
+                continue;
+            }
+            for end in (at + 1..=(at + 6).min(bytes.len())).rev() {
+                let next = end + usize::from(bytes.get(end) == Some(&b'\''));
+                if !reachable[(remaining - 1) * stride + next]
+                    || !crate::syllables::contains(&spelling[at..end])
+                {
+                    continue;
+                }
+                let mut child = key.clone();
+                child.push(char::from(bytes[at]));
+                stack.push((next, remaining - 1, child));
+            }
         }
-        Some(key)
+        limited
     }
     // Immutable, complete terminal groups for one-letter-per-character queries.
     // Unlike the bounded ambiguous trie search, this cannot discard rare words
     // before the session sees them. The serialized dictionary remains unchanged.
     fn build_initials(&mut self) {
         let mut groups: BTreeMap<String, Vec<u32>> = BTreeMap::new();
+        let mut keys = Vec::new();
         for id in 0..self.entries.len() as u32 {
             let word = self.entry(id);
             let count = word.text.chars().count();
             if !(2..=MAX_INPUT_BYTES).contains(&count) {
                 continue;
             }
-            if let Some(key) = Self::word_initials(word.pinyin, count) {
-                groups.entry(key).or_default().push(id);
+            if Self::word_initial_keys(word.pinyin, count, &mut keys) {
+                self.initials_limited += 1;
+            }
+            for key in &keys {
+                groups.entry(key.clone()).or_default().push(id);
             }
         }
         self.initials_keys
@@ -303,6 +359,7 @@ impl Dictionary {
             initials_keys: String::new(),
             initials_groups: Vec::new(),
             initials_words: Vec::new(),
+            initials_limited: 0,
         };
         result
             .pool
@@ -635,6 +692,12 @@ impl Dictionary {
     }
     pub fn entry_count(&self) -> usize {
         self.entries.len()
+    }
+    /// Number of words whose strict one-letter keys had to be truncated by
+    /// [`MAX_INITIAL_KEYS`]. Non-zero means the one-letter lane is incomplete for
+    /// those words, so the loss is reportable instead of silent (review R12).
+    pub fn initials_truncated_words(&self) -> usize {
+        self.initials_limited
     }
     pub fn estimated_heap_bytes(&self) -> usize {
         self.entries.capacity() * std::mem::size_of::<Entry>()
@@ -1127,6 +1190,7 @@ impl Dictionary {
             initials_keys: String::new(),
             initials_groups: Vec::new(),
             initials_words: Vec::new(),
+            initials_limited: 0,
         };
         let half = |at: usize| u16::from_le_bytes(bytes[at..at + 2].try_into().unwrap());
         let mut at = 36;

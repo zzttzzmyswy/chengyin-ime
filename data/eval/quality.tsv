@@ -1,0 +1,496 @@
+# 澄音输入法独立质量标注集（审查 R11）。由 scripts/generate_eval_corpus.py 生成，请勿手工编辑。
+# 来源与许可：全部派生自 data/daily.tsv（Rime pinyin-simp Apache-2.0 + jieba MIT）与本仓库自写规则；
+# 不读取任何用户输入历史。说明与指标见 docs/QUALITY_BASELINE.md。
+# 列：category split flags input expected train bucket note
+# input：用户实际敲入的串（fuzzy/typo 类给出混淆后的串）；initials 为一字一首字母。
+# expected：期望的首选文字，取词库中该读音词频最高的读法（initials 取该键最高频词）。
+# train：空，或分号分隔的 `record:<拼音>=><文字>` 步骤，表示宿主已确认的选词，评测前写入 profile。
+# bucket：难度分档（类别前缀）。note：来源/规则标记。
+fuzzy	dev	64	angpai	安排		fz;an->ang	freq-high
+fuzzy	dev	1024	anquang	安全		fz;uan->uang	freq-high
+fuzzy	dev	128	bengshen	本身		fz;en->eng	freq-high
+fuzzy	dev	512	biaoxiang	表现		fz;ian->iang	freq-high
+fuzzy	dev	256	bujing	不仅		fz;in->ing	freq-high
+fuzzy	dev	2	cabuduo	差不多		fz;ch->c	freq-high
+fuzzy	dev	2	cenai	尘埃		fz;ch->c	freq-low
+fuzzy	dev	2	cila	吃辣		fz;ch->c	freq-low
+fuzzy	dev	2	cuishiban	炊事班		fz;ch->c	freq-low
+fuzzy	dev	128	gengfeng	跟风		fz;en->eng	freq-low
+fuzzy	dev	64	guangshangmen	关上门		fz;an->ang	freq-low
+fuzzy	dev	1024	guiquang	规劝		fz;uan->uang	freq-low
+fuzzy	dev	16	habu	发布		fz;f->h	freq-high
+fuzzy	dev	16	hanli	范例		fz;f->h	freq-low
+fuzzy	dev	16	hengding	封顶		fz;f->h	freq-low
+fuzzy	dev	512	huabiang	花边		fz;ian->iang	freq-low
+fuzzy	dev	16	huluan	孵卵		fz;f->h	freq-low
+fuzzy	dev	256	jingtai	金泰		fz;in->ing	freq-low
+fuzzy	dev	8	lajiu	那就		fz;n->l	freq-high
+fuzzy	dev	8	laolu	瑙鲁		fz;n->l	freq-low
+fuzzy	dev	8	liaoren	鸟人		fz;n->l	freq-low
+fuzzy	dev	8	luanhuo	暖和		fz;n->l	freq-low
+fuzzy	dev	64	piangke	片刻		fz;an->ang	freq-low
+fuzzy	dev	512	piangshu	骗术		fz;ian->iang	freq-low
+fuzzy	dev	256	qingpeng	亲朋		fz;in->ing	freq-low
+fuzzy	dev	32	raile	来了		fz;l->r	freq-high
+fuzzy	dev	128	rengnaili	忍耐力		fz;en->eng	freq-low
+fuzzy	dev	1024	reyuang	热源		fz;uan->uang	freq-low
+fuzzy	dev	32	riangbufen	两部分		fz;l->r	freq-low
+fuzzy	dev	32	ringmeikuang	菱镁矿		fz;l->r	freq-low
+fuzzy	dev	32	ruanhonghong	乱哄哄		fz;l->r	freq-low
+fuzzy	dev	4	sangban	上班		fz;sh->s	freq-high
+fuzzy	dev	4	sejiju	设计局		fz;sh->s	freq-low
+fuzzy	dev	4	sisannian	十三年		fz;sh->s	freq-low
+fuzzy	dev	4	suilinlin	水淋淋		fz;sh->s	freq-low
+fuzzy	dev	512	xiangrou	鲜肉		fz;ian->iang	freq-low
+fuzzy	dev	64	xuangxu	玄虚		fz;an->ang	freq-low
+fuzzy	dev	256	yingbao	引爆		fz;in->ing	freq-low
+fuzzy	dev	128	yinseng	阴森		fz;en->eng	freq-low
+fuzzy	dev	1024	yuangshengzhi	原生质		fz;uan->uang	freq-low
+fuzzy	dev	1	zaodao	找到		fz;zh->z	freq-high
+fuzzy	dev	1	zemenan	这么难		fz;zh->z	freq-low
+fuzzy	dev	1	ziyuanjun	志愿军		fz;zh->z	freq-low
+fuzzy	dev	1	zucheng	主城		fz;zh->z	freq-low
+fuzzy	test	64	angquan	安全		fz;an->ang	freq-high
+fuzzy	test	128	banbeng	版本		fz;en->eng	freq-high
+fuzzy	test	512	biangcheng	变成		fz;ian->iang	freq-high
+fuzzy	test	1024	buguang	不管		fz;uan->uang	freq-high
+fuzzy	test	2	cangqi	长期		fz;ch->c	freq-high
+fuzzy	test	2	cencang	陈仓		fz;ch->c	freq-low
+fuzzy	test	256	chanping	产品		fz;in->ing	freq-high
+fuzzy	test	2	ciyouren	持有人		fz;ch->c	freq-low
+fuzzy	test	2	cuixiao	吹箫		fz;ch->c	freq-low
+fuzzy	test	128	fengtuan	分团		fz;en->eng	freq-low
+fuzzy	test	1024	guiyuang	柜员		fz;uan->uang	freq-low
+fuzzy	test	64	guxiangcheng	顾宪成		fz;an->ang	freq-low
+fuzzy	test	16	habiao	发表		fz;f->h	freq-high
+fuzzy	test	16	hanlongduan	反垄断		fz;f->h	freq-low
+fuzzy	test	16	henfan	纷繁		fz;f->h	freq-low
+fuzzy	test	16	hujiao	复交		fz;f->h	freq-low
+fuzzy	test	512	jiajiang	加减		fz;ian->iang	freq-low
+fuzzy	test	256	jingque	紧缺		fz;in->ing	freq-low
+fuzzy	test	8	lage	那个		fz;n->l	freq-high
+fuzzy	test	8	laohou	脑后		fz;n->l	freq-low
+fuzzy	test	8	lidexin	你的心		fz;n->l	freq-low
+fuzzy	test	8	longyeju	农业局		fz;n->l	freq-low
+fuzzy	test	512	qianggongqing	千公顷		fz;ian->iang	freq-low
+fuzzy	test	64	qiangguize	潜规则		fz;an->ang	freq-low
+fuzzy	test	256	qingheli	亲和力		fz;in->ing	freq-low
+fuzzy	test	1024	quangqian	圈钱		fz;uan->uang	freq-low
+fuzzy	test	32	raji	垃圾		fz;l->r	freq-high
+fuzzy	test	128	renghai	人还		fz;en->eng	freq-low
+fuzzy	test	32	riangduo	良多		fz;l->r	freq-low
+fuzzy	test	32	rinjia	邻家		fz;l->r	freq-low
+fuzzy	test	32	ruanxiang	乱想		fz;l->r	freq-low
+fuzzy	test	4	sanchu	删除		fz;sh->s	freq-high
+fuzzy	test	4	senbaoxu	申包胥		fz;sh->s	freq-low
+fuzzy	test	4	sishibing	师实兵		fz;sh->s	freq-low
+fuzzy	test	4	suiwangwang	水汪汪		fz;sh->s	freq-low
+fuzzy	test	512	xiaoxindiang	小心点		fz;ian->iang	freq-low
+fuzzy	test	128	yangchenghui	杨晨晖		fz;en->eng	freq-low
+fuzzy	test	64	yangdao	烟道		fz;an->ang	freq-low
+fuzzy	test	256	yejingxue	冶金学		fz;in->ing	freq-low
+fuzzy	test	1024	yuangchengxu	源程序		fz;uan->uang	freq-low
+fuzzy	test	1	zaopian	照片		fz;zh->z	freq-high
+fuzzy	test	1	zener	震耳		fz;zh->z	freq-low
+fuzzy	test	1	zongeryan	中耳炎		fz;zh->z	freq-low
+fuzzy	test	1	zuishou	追授		fz;zh->z	freq-low
+homophone	dev	0	bajiao	八角		ho;gap-le2	rivals-2;second-143
+homophone	dev	0	changde	长的		ho;gap-le2	rivals-4;second-796
+homophone	dev	0	dashu	大叔		ho;gap-le4	rivals-3;second-806
+homophone	dev	0	dazhang	大涨		ho;gap-le2	rivals-2;second-769
+homophone	dev	0	gongqi	工期		ho;gap-le4	rivals-2;second-125
+homophone	dev	0	guannei	关内		ho;gap-le2	rivals-3;second-120
+homophone	dev	0	hu	胡		ho;gap-le2	rivals-105;second-3479
+homophone	dev	0	huihao	徽号		ho;gap-le2	rivals-2;second-1
+homophone	dev	0	jiangzhi	降至		ho;gap-le4	rivals-4;second-239
+homophone	dev	0	jingwu	景物		ho;gap-le2	rivals-2;second-237
+homophone	dev	0	jiuda	就打		ho;gap-le2	rivals-3;second-242
+homophone	dev	0	jizhen	急诊		ho;gap-le2	rivals-2;second-195
+homophone	dev	0	qianceng	浅层		ho;gap-le2	rivals-2;second-112
+homophone	dev	0	qieji	切忌		ho;gap-le2	rivals-2;second-403
+homophone	dev	0	quandang	全党		ho;gap-le4	rivals-2;second-165
+homophone	dev	0	tuanyuan	团员		ho;gap-le2	rivals-2;second-304
+homophone	dev	0	xiangge	像个		ho;gap-le4	rivals-5;second-490
+homophone	dev	0	yangqin	养禽		ho;gap-le2	rivals-2;second-1
+homophone	dev	0	yangshi	央视		ho;gap-le2	rivals-3;second-1684
+homophone	dev	0	ziyang	字样		ho;gap-le4	rivals-3;second-366
+homophone	test	0	bijian	比肩		ho;gap-le2	rivals-3;second-115
+homophone	test	0	buren	不忍		ho;gap-le2	rivals-2;second-376
+homophone	test	0	daiwei	代为		ho;gap-le4	rivals-2;second-169
+homophone	test	0	daota	倒塌		ho;gap-le2	rivals-2;second-609
+homophone	test	0	dengta	等他		ho;gap-le4	rivals-2;second-198
+homophone	test	0	fan	饭		ho;gap-le2	rivals-67;second-6966
+homophone	test	0	fuyi	服役		ho;gap-le2	rivals-4;second-232
+homophone	test	0	gaiguo	该国		ho;gap-le2	rivals-3;second-392
+homophone	test	0	huanwen	换文		ho;gap-le2	rivals-2;second-1
+homophone	test	0	jinqiao	金桥		ho;gap-le4	rivals-2;second-126
+homophone	test	0	liangshou	两手		ho;gap-le4	rivals-2;second-287
+homophone	test	0	pu	普		ho;gap-le2	rivals-50;second-1930
+homophone	test	0	shenhou	身后		ho;gap-le4	rivals-2;second-1125
+homophone	test	0	tianwei	天威		ho;gap-le2	rivals-2;second-146
+homophone	test	0	xu	需		ho;gap-le2	rivals-101;second-5622
+homophone	test	0	yangmian	仰面		ho;gap-le2	rivals-2;second-1
+homophone	test	0	youchang	有偿		ho;gap-le2	rivals-3;second-174
+homophone	test	0	youdao	诱导		ho;gap-le4	rivals-3;second-255
+homophone	test	0	youxia	游侠		ho;gap-le4	rivals-2;second-232
+homophone	test	0	zhongjie	中介		ho;gap-le4	rivals-3;second-924
+initials	dev	0	ap	安排		in;chars-2;group-4	freq-high
+initials	dev	0	bjjt	百家讲坛		in;chars-4;group-1	freq-low
+initials	dev	0	cmhl	充满活力		in;chars-4;group-1	freq-low
+initials	dev	0	dbd	得不到		in;chars-3;group-8	freq-mid
+initials	dev	0	dnbd	电脑病毒		in;chars-4;group-1	freq-low
+initials	dev	0	flgw	法律顾问		in;chars-4;group-1	freq-low
+initials	dev	0	gpgz	公平公正		in;chars-4;group-1	freq-low
+initials	dev	0	hrym	花容月貌		in;chars-4;group-1	freq-low
+initials	dev	0	jp	金盆		in;deep;chars-2	freq-low
+initials	dev	0	kxfz	科学发展		in;chars-4;group-1	freq-low
+initials	dev	0	mcs	麻城市		in;chars-3;group-1	freq-low
+initials	dev	0	nzgj	那种感觉		in;chars-4;group-1	freq-low
+initials	dev	0	qyhj	氢氧化钾		in;chars-4;group-1	freq-low
+initials	dev	0	shkn	生活困难		in;chars-4;group-1	freq-low
+initials	dev	0	syyt	商业用途		in;chars-4;group-1	freq-low
+initials	dev	0	whld	物化劳动		in;chars-4;group-1	freq-low
+initials	dev	0	xgwj	相关文件		in;chars-4;group-1	freq-low
+initials	dev	0	ydar	印第安人		in;chars-4;group-1	freq-low
+initials	dev	0	yxhh	英雄好汉		in;chars-4;group-1	freq-low
+initials	dev	0	zljs	专利技术		in;chars-4;group-1	freq-low
+initials	test	0	az	安装		in;chars-2;group-27	freq-high
+initials	test	0	bjgj	北京国际		in;chars-4;group-1	freq-low
+initials	test	0	cpxx	产品信息		in;chars-4;group-1	freq-low
+initials	test	0	dse	第十二		in;chars-3;group-1	freq-low
+initials	test	0	en	儿女		in;chars-2;group-9	freq-mid
+initials	test	0	ftl	腓特烈		in;chars-3;group-1	freq-low
+initials	test	0	gsf	公司法		in;chars-3;group-1	freq-low
+initials	test	0	hygd	欢迎广大		in;chars-4;group-1	freq-low
+initials	test	0	jsxy	军事学院		in;chars-4;group-1	freq-low
+initials	test	0	kzrk	脍炙人口		in;chars-4;group-1	freq-low
+initials	test	0	mcq	孟春祈		in;chars-3;group-1	freq-low
+initials	test	0	nw	牛蛙		in;deep;chars-2	freq-low
+initials	test	0	qtcy	求同存异		in;chars-4;group-1	freq-low
+initials	test	0	sgyy	三国演义		in;chars-4;group-1	freq-low
+initials	test	0	symm	商业秘密		in;chars-4;group-1	freq-low
+initials	test	0	wfdk	无法打开		in;chars-4;group-1	freq-low
+initials	test	0	xfzh	心腹之患		in;chars-4;group-1	freq-low
+initials	test	0	ycx	运筹学		in;deep;chars-3	freq-low
+initials	test	0	yxf	杨兴富		in;chars-3;group-2	freq-low
+initials	test	0	zmw	怎么玩		in;chars-3;group-2	freq-low
+learning	dev	0	aba	吖仈	record:aba=>吖仈;record:aba=>吖仈;record:aba=>吖仈	ln;promote_unattested	unattested
+learning	dev	0	aba	阿坝	record:aba=>吖仈	ln;reject_one_off	unattested
+learning	dev	0	chiming	侈冥	record:chiming=>侈冥;record:chiming=>侈冥;record:chiming=>侈冥	ln;promote_unattested	unattested
+learning	dev	0	chiming	驰名	record:chiming=>侈冥	ln;reject_one_off	unattested
+learning	dev	0	chuhu	储户	record:chuhu=>储户	ln;promote_attested	freq-low
+learning	dev	0	fanbei	仮倍	record:fanbei=>仮倍;record:fanbei=>仮倍;record:fanbei=>仮倍	ln;promote_unattested	unattested
+learning	dev	0	fanbei	翻倍	record:fanbei=>仮倍	ln;reject_one_off	unattested
+learning	dev	0	fengshi	风蚀	record:fengshi=>风蚀	ln;promote_attested	freq-low
+learning	dev	0	gushi	股市	record:gushi=>股市	ln;promote_attested	freq-high
+learning	dev	0	heixian	嗨仙	record:heixian=>嗨仙;record:heixian=>嗨仙;record:heixian=>嗨仙	ln;promote_unattested	unattested
+learning	dev	0	heixian	黑线	record:heixian=>嗨仙	ln;reject_one_off	unattested
+learning	dev	0	huigu	灰谷	record:huigu=>灰谷	ln;promote_attested	freq-low
+learning	dev	0	junyong	俊佣	record:junyong=>俊佣;record:junyong=>俊佣;record:junyong=>俊佣	ln;promote_unattested	unattested
+learning	dev	0	junyong	军用	record:junyong=>俊佣	ln;reject_one_off	unattested
+learning	dev	0	kailu	开颅	record:kailu=>开颅	ln;promote_attested	freq-low
+learning	dev	0	meiqiu	堳丘	record:meiqiu=>堳丘;record:meiqiu=>堳丘;record:meiqiu=>堳丘	ln;promote_unattested	unattested
+learning	dev	0	meiqiu	煤球	record:meiqiu=>堳丘	ln;reject_one_off	unattested
+learning	dev	0	nixiang	逆向	record:nixiang=>逆向	ln;promote_attested	freq-low
+learning	dev	0	qingnang	亲嚢	record:qingnang=>亲嚢;record:qingnang=>亲嚢;record:qingnang=>亲嚢	ln;promote_unattested	unattested
+learning	dev	0	qingnang	倾囊	record:qingnang=>亲嚢	ln;reject_one_off	unattested
+learning	dev	0	shexian	射线	record:shexian=>射线	ln;promote_attested	freq-low
+learning	dev	0	shunxin	吮伈	record:shunxin=>吮伈;record:shunxin=>吮伈;record:shunxin=>吮伈	ln;promote_unattested	unattested
+learning	dev	0	shunxin	顺心	record:shunxin=>吮伈	ln;reject_one_off	unattested
+learning	dev	0	weiguan	围观	record:weiguan=>围观	ln;promote_attested	freq-low
+learning	dev	0	xiacai	下偲	record:xiacai=>下偲;record:xiacai=>下偲;record:xiacai=>下偲	ln;promote_unattested	unattested
+learning	dev	0	xiacai	瞎猜	record:xiacai=>下偲	ln;reject_one_off	unattested
+learning	dev	0	yayi	牙医	record:yayi=>牙医	ln;promote_attested	freq-low
+learning	dev	0	yuandai	元代	record:yuandai=>元傣	ln;reject_one_off	unattested
+learning	dev	0	yuandai	元傣	record:yuandai=>元傣;record:yuandai=>元傣;record:yuandai=>元傣	ln;promote_unattested	unattested
+learning	dev	0	zhiyao	制药	record:zhiyao=>制药	ln;promote_attested	freq-low
+learning	test	0	aa	吖吖	record:aa=>吖吖;record:aa=>吖吖;record:aa=>吖吖	ln;promote_unattested	unattested
+learning	test	0	aa	啊啊	record:aa=>吖吖	ln;reject_one_off	unattested
+learning	test	0	chounv	丑女	record:chounv=>丑恧	ln;reject_one_off	unattested
+learning	test	0	chounv	丑恧	record:chounv=>丑恧;record:chounv=>丑恧;record:chounv=>丑恧	ln;promote_unattested	unattested
+learning	test	0	cixi	慈溪	record:cixi=>慈溪	ln;promote_attested	freq-low
+learning	test	0	fanlai	仮來	record:fanlai=>仮來;record:fanlai=>仮來;record:fanlai=>仮來	ln;promote_unattested	unattested
+learning	test	0	fanlai	翻来	record:fanlai=>仮來	ln;reject_one_off	unattested
+learning	test	0	fuzhe	覆辙	record:fuzhe=>覆辙	ln;promote_attested	freq-low
+learning	test	0	houpa	侯啪	record:houpa=>侯啪;record:houpa=>侯啪;record:houpa=>侯啪	ln;promote_unattested	unattested
+learning	test	0	houpa	后怕	record:houpa=>侯啪	ln;reject_one_off	unattested
+learning	test	0	jiama	价码	record:jiama=>价码	ln;promote_attested	freq-low
+learning	test	0	jishi	及时	record:jishi=>及时	ln;promote_attested	freq-high
+learning	test	0	keliu	克六	record:keliu=>克六;record:keliu=>克六;record:keliu=>克六	ln;promote_unattested	unattested
+learning	test	0	keliu	客流	record:keliu=>克六	ln;reject_one_off	unattested
+learning	test	0	laoli	劳力	record:laoli=>劳力	ln;promote_attested	freq-low
+learning	test	0	mingwang	冥亡	record:mingwang=>冥亡;record:mingwang=>冥亡;record:mingwang=>冥亡	ln;promote_unattested	unattested
+learning	test	0	mingwang	冥王	record:mingwang=>冥亡	ln;reject_one_off	unattested
+learning	test	0	pumian	扑面	record:pumian=>扑面	ln;promote_attested	freq-low
+learning	test	0	quanze	佺仄	record:quanze=>佺仄;record:quanze=>佺仄;record:quanze=>佺仄	ln;promote_unattested	unattested
+learning	test	0	quanze	权责	record:quanze=>佺仄	ln;reject_one_off	unattested
+learning	test	0	shoufu	首富	record:shoufu=>首富	ln;promote_attested	freq-low
+learning	test	0	songyuan	倯元	record:songyuan=>倯元;record:songyuan=>倯元;record:songyuan=>倯元	ln;promote_unattested	unattested
+learning	test	0	songyuan	宋元	record:songyuan=>倯元	ln;reject_one_off	unattested
+learning	test	0	woyi	我已	record:woyi=>我已	ln;promote_attested	freq-low
+learning	test	0	xianmu	仙亩	record:xianmu=>仙亩;record:xianmu=>仙亩;record:xianmu=>仙亩	ln;promote_unattested	unattested
+learning	test	0	xianmu	羡慕	record:xianmu=>仙亩	ln;reject_one_off	unattested
+learning	test	0	yehu	夜壶	record:yehu=>夜壶	ln;promote_attested	freq-low
+learning	test	0	yuanyou	元优	record:yuanyou=>元优;record:yuanyou=>元优;record:yuanyou=>元优	ln;promote_unattested	unattested
+learning	test	0	yuanyou	原有	record:yuanyou=>元优	ln;reject_one_off	unattested
+learning	test	0	zhilian	智联	record:zhilian=>智联	ln;promote_attested	freq-low
+long_sentence	dev	0	chanpinjingli	产品经理		ls;chars-4	entry-sep
+long_sentence	dev	0	dishiyijie	第十一届		ls;chars-4	entry-sep
+long_sentence	dev	0	gegehuanjie	各个环节		ls;chars-4	entry-sep
+long_sentence	dev	0	hahayihou	哈哈以后		ls;chars-4	composed
+long_sentence	dev	0	haishishenlou	海市蜃楼		ls;chars-4	entry-sep
+long_sentence	dev	0	jiefangsixiang	解放思想		ls;chars-4	entry-sep
+long_sentence	dev	0	kelongdianqi	科龙电器		ls;chars-4	entry-sep
+long_sentence	dev	0	meiyouliyou	没有理由		ls;chars-4	entry-sep
+long_sentence	dev	0	qirenyoutian	杞人忧天		ls;chars-4	entry-sep
+long_sentence	dev	0	shenghuoziliao	生活资料		ls;chars-4	entry-sep
+long_sentence	dev	0	suweiaizhengfu	苏维埃政府		ls;chars-5	entry-sep
+long_sentence	dev	0	wufazhaodao	无法找到		ls;chars-4	entry-sep
+long_sentence	dev	0	xitongweihu	系统维护		ls;chars-4	entry-sep
+long_sentence	dev	0	yizhiduxiu	一枝独秀		ls;chars-4	entry-sep
+long_sentence	dev	0	zhishijingji	知识经济		ls;chars-4	entry-sep
+long_sentence	test	0	canjiagongzuo	参加工作		ls;chars-4	entry-sep
+long_sentence	test	0	diershiertiao	第二十二条		ls;chars-5	entry-sep
+long_sentence	test	0	doushiziji	都是自己		ls;chars-4	composed
+long_sentence	test	0	fuwuwaibao	服务外包		ls;chars-4	entry-sep
+long_sentence	test	0	hanxinruku	含辛茹苦		ls;chars-4	entry-sep
+long_sentence	test	0	jilvjiancha	纪律检查		ls;chars-4	entry-sep
+long_sentence	test	0	kuangfengbaoyu	狂风暴雨		ls;chars-4	entry-sep
+long_sentence	test	0	momowuyan	默默无言		ls;chars-4	entry-sep
+long_sentence	test	0	qizixingche	骑自行车		ls;chars-4	entry-sep
+long_sentence	test	0	shengmingzhouqi	生命周期		ls;chars-4	entry-sep
+long_sentence	test	0	taiyangdianchi	太阳电池		ls;chars-4	entry-sep
+long_sentence	test	0	wucihuiyi	五次会议		ls;chars-4	entry-sep
+long_sentence	test	0	xuanzhendaoren	玄贞道人		ls;chars-4	entry-sep
+long_sentence	test	0	yiyebaofu	一夜暴富		ls;chars-4	entry-sep
+long_sentence	test	0	zhizaogongyi	制造工艺		ls;chars-4	entry-sep
+prefix	dev	0	aaa	啊啊啊		pf;head-3	longer-word-prefix
+prefix	dev	0	canyu	参与		pf;head-2	longer-word-prefix
+prefix	dev	0	dengxiao	等效		pf;head-2	longer-word-prefix
+prefix	dev	0	fenggong	冯巩		pf;head-2	longer-word-prefix
+prefix	dev	0	guosheng	过剩		pf;head-2	longer-word-prefix
+prefix	dev	0	huzhi	沪指		pf;head-2	longer-word-prefix
+prefix	dev	0	jizhen	急诊		pf;head-2	longer-word-prefix
+prefix	dev	0	liufang	流放		pf;head-2	longer-word-prefix
+prefix	dev	0	nianling	年龄		pf;head-2	longer-word-prefix
+prefix	dev	0	rizhao	日照		pf;head-2	longer-word-prefix
+prefix	dev	0	shunfeng	顺丰		pf;head-2	longer-word-prefix
+prefix	dev	0	wangshang	网上		pf;head-2	longer-word-prefix
+prefix	dev	0	xieyi	协议		pf;head-2	longer-word-prefix
+prefix	dev	0	yingjie	迎接		pf;head-2	longer-word-prefix
+prefix	dev	0	zhengfang	正方		pf;head-2	longer-word-prefix
+prefix	test	0	aa	啊啊		pf;head-2	longer-word-prefix
+prefix	test	0	caifu	财富		pf;head-2	longer-word-prefix
+prefix	test	0	dehen	得很		pf;head-2	longer-word-prefix
+prefix	test	0	fengguo	风过		pf;head-2	longer-word-prefix
+prefix	test	0	haizhen	还真		pf;head-2	longer-word-prefix
+prefix	test	0	jiaolv	焦虑		pf;head-2	longer-word-prefix
+prefix	test	0	kexuan	可选		pf;head-2	longer-word-prefix
+prefix	test	0	lvdai	履带		pf;head-2	longer-word-prefix
+prefix	test	0	pingfang	平方		pf;head-2	longer-word-prefix
+prefix	test	0	shahai	杀害		pf;head-2	longer-word-prefix
+prefix	test	0	suhua	俗话		pf;head-2	longer-word-prefix
+prefix	test	0	wokan	我看		pf;head-2	longer-word-prefix
+prefix	test	0	xinzhong	心中		pf;head-2	longer-word-prefix
+prefix	test	0	yisilan	伊斯兰		pf;head-3	longer-word-prefix
+prefix	test	0	zhengshi	正式		pf;head-2	longer-word-prefix
+single_char	dev	0	bei	被		sc;hom-21plus	hom-53
+single_char	dev	0	cu	粗		sc;hom-21plus	hom-21
+single_char	dev	0	dai	带		sc;hom-21plus	hom-34
+single_char	dev	0	dei	得		sc;hom-1to5	hom-1
+single_char	dev	0	e	额		sc;hom-21plus	hom-85
+single_char	dev	0	ge	个		sc;hom-21plus	hom-61
+single_char	dev	0	heng	横		sc;hom-6to20	hom-18
+single_char	dev	0	jin	进		sc;hom-21plus	hom-76
+single_char	dev	0	jue	觉		sc;hom-21plus	hom-69
+single_char	dev	0	jun	均		sc;hom-21plus	hom-44
+single_char	dev	0	kan	看		sc;hom-21plus	hom-25
+single_char	dev	0	kong	空		sc;hom-6to20	hom-11
+single_char	dev	0	lue	略		sc;hom-1to5	hom-5
+single_char	dev	0	m	呒		sc;hom-1to5	hom-3
+single_char	dev	0	ma	吗		sc;hom-21plus	hom-38
+single_char	dev	0	men	们		sc;hom-21plus	hom-24
+single_char	dev	0	neng	能		sc;hom-1to5	hom-2
+single_char	dev	0	niu	牛		sc;hom-6to20	hom-13
+single_char	dev	0	sai	赛		sc;hom-6to20	hom-10
+single_char	dev	0	sou	搜		sc;hom-21plus	hom-30
+single_char	dev	0	tian	天		sc;hom-21plus	hom-47
+single_char	dev	0	weng	翁		sc;hom-6to20	hom-16
+single_char	dev	0	yang	样		sc;hom-21plus	hom-70
+single_char	dev	0	yu	与		sc;hom-21plus	hom-261
+single_char	dev	0	yue	月		sc;hom-21plus	hom-57
+single_char	dev	0	zai	在		sc;hom-6to20	hom-14
+single_char	dev	0	zan	咱		sc;hom-21plus	hom-31
+single_char	dev	0	zhan	站		sc;hom-21plus	hom-63
+single_char	dev	0	zhuan	转		sc;hom-21plus	hom-40
+single_char	dev	0	zong	总		sc;hom-21plus	hom-42
+single_char	test	0	an	按		sc;hom-21plus	hom-40
+single_char	test	0	bang	帮		sc;hom-21plus	hom-28
+single_char	test	0	bu	不		sc;hom-21plus	hom-35
+single_char	test	0	cang	藏		sc;hom-6to20	hom-16
+single_char	test	0	chua	欻		sc;hom-1to5	hom-1
+single_char	test	0	cun	村		sc;hom-6to20	hom-10
+single_char	test	0	er	而		sc;hom-21plus	hom-42
+single_char	test	0	gen	跟		sc;hom-6to20	hom-7
+single_char	test	0	gui	贵		sc;hom-21plus	hom-68
+single_char	test	0	huo	或		sc;hom-21plus	hom-52
+single_char	test	0	jiong	囧		sc;hom-21plus	hom-22
+single_char	test	0	ju	据		sc;hom-21plus	hom-125
+single_char	test	0	keng	坑		sc;hom-6to20	hom-11
+single_char	test	0	ku	哭		sc;hom-21plus	hom-26
+single_char	test	0	liu	刘		sc;hom-21plus	hom-58
+single_char	test	0	mou	某		sc;hom-6to20	hom-14
+single_char	test	0	ng	嗯		sc;hom-1to5	hom-2
+single_char	test	0	ni	你		sc;hom-21plus	hom-61
+single_char	test	0	o	哦		sc;hom-1to5	hom-5
+single_char	test	0	pi	皮		sc;hom-21plus	hom-86
+single_char	test	0	qie	且		sc;hom-21plus	hom-32
+single_char	test	0	rang	让		sc;hom-6to20	hom-19
+single_char	test	0	rui	瑞		sc;hom-6to20	hom-18
+single_char	test	0	sa	撒		sc;hom-6to20	hom-16
+single_char	test	0	shua	刷		sc;hom-1to5	hom-3
+single_char	test	0	ta	他		sc;hom-21plus	hom-48
+single_char	test	0	ti	提		sc;hom-21plus	hom-73
+single_char	test	0	tui	退		sc;hom-21plus	hom-23
+single_char	test	0	xin	新		sc;hom-21plus	hom-43
+single_char	test	0	zu	组		sc;hom-21plus	hom-38
+typo	dev	65536	abngzhu	帮助		ty;swap	freq-high
+typo	dev	131072	adao	达到		ty;omit	freq-high
+typo	dev	262144	aeishenme	为什么		ty;neighbor	freq-high
+typo	dev	524288	aiqqing	爱情		ty;repeat	freq-high
+typo	dev	131072	caoshui	草率		ty;omit	freq-low
+typo	dev	65536	carnan	惨然		ty;swap	freq-low
+typo	dev	524288	chenyuanyuann	陈圆圆		ty;repeat	freq-low
+typo	dev	262144	chjncha	春茶		ty;neighbor	freq-low
+typo	dev	65536	falaing	发亮		ty;swap	freq-low
+typo	dev	131072	falvua	法律化		ty;omit	freq-low
+typo	dev	524288	ffaxingren	发行人		ty;repeat	freq-low
+typo	dev	262144	fhunxia	春夏		ty;neighbor	freq-low
+typo	dev	65536	guaani	关爱		ty;swap	freq-mid
+typo	dev	131072	gudog	股东		ty;omit	freq-mid
+typo	dev	524288	guoggao	过高		ty;repeat	freq-mid
+typo	dev	262144	gyangjie	逛街		ty;neighbor	freq-mid
+typo	dev	131072	hufang	混纺		ty;omit	freq-low
+typo	dev	65536	hunagyiyi	黄依依		ty;swap	freq-low
+typo	dev	524288	huxxiao	呼啸		ty;repeat	freq-low
+typo	dev	262144	hyihei	灰黑		ty;neighbor	freq-low
+typo	dev	65536	keokng	可控		ty;swap	freq-low
+typo	dev	131072	keu	可不		ty;omit	freq-low
+typo	dev	262144	linjujka	邻居家		ty;neighbor	freq-low
+typo	dev	524288	linrrugeng	林儒耕		ty;repeat	freq-low
+typo	dev	65536	nongxinseh	农信社		ty;swap	freq-low
+typo	dev	131072	onghuashun	同花顺		ty;omit	freq-low
+typo	dev	262144	poufuchaj	剖腹产		ty;neighbor	freq-low
+typo	dev	524288	ppaohui	跑回		ty;repeat	freq-low
+typo	dev	65536	shouliudna	手榴弹		ty;swap	freq-low
+typo	dev	131072	shulian	睡莲		ty;omit	freq-low
+typo	dev	262144	sjta	斯塔		ty;neighbor	freq-low
+typo	dev	524288	songchhuqu	送出去		ty;repeat	freq-low
+typo	dev	65536	wenchaung	温床		ty;swap	freq-low
+typo	dev	131072	wnshi	万事		ty;omit	freq-low
+typo	dev	262144	xialnver	小女儿		ty;neighbor	freq-low
+typo	dev	524288	xiaoxxu	小徐		ty;repeat	freq-low
+typo	dev	65536	yuynog	御用		ty;swap	freq-low
+typo	dev	131072	zai	杂役		ty;omit	freq-low
+typo	dev	262144	zgengzong	正宗		ty;neighbor	freq-low
+typo	dev	524288	zhakkawei	扎卡维		ty;repeat	freq-low
+typo	test	65536	abng	帮		ty;swap	freq-high
+typo	test	262144	ahengfu	政府		ty;neighbor	freq-high
+typo	test	131072	ai	在		ty;omit	freq-high
+typo	test	524288	anzhuanng	安装		ty;repeat	freq-high
+typo	test	131072	cangjun	场均		ty;omit	freq-low
+typo	test	65536	canzhnog	惨重		ty;swap	freq-low
+typo	test	524288	chengshann	成山		ty;repeat	freq-low
+typo	test	262144	chish	吃素		ty;neighbor	freq-low
+typo	test	131072	fangcen	防尘		ty;omit	freq-low
+typo	test	65536	fangzhouiz	方舟子		ty;swap	freq-low
+typo	test	262144	fengchqn	丰产		ty;neighbor	freq-low
+typo	test	524288	fenjjiu	汾酒		ty;repeat	freq-low
+typo	test	131072	gnghaodi	更好地		ty;omit	freq-mid
+typo	test	262144	gongbu	同步		ty;neighbor	freq-mid
+typo	test	65536	guhoou	过后		ty;swap	freq-mid
+typo	test	524288	guiize	规则		ty;repeat	freq-mid
+typo	test	131072	huangshlang	黄鼠狼		ty;omit	freq-low
+typo	test	65536	huiyng	呼应		ty;swap	freq-low
+typo	test	262144	huoshaodiaj	火烧店		ty;neighbor	freq-low
+typo	test	524288	jiaaosheng	叫声		ty;repeat	freq-low
+typo	test	131072	kanzeni	看着你		ty;omit	freq-low
+typo	test	65536	kaunzhai	宽窄		ty;swap	freq-low
+typo	test	262144	lingjiqo	领教		ty;neighbor	freq-low
+typo	test	524288	lishhizhen	李时珍		ty;repeat	freq-low
+typo	test	131072	niuinxing	牛金星		ty;omit	freq-low
+typo	test	65536	nuohu	怒吼		ty;swap	freq-low
+typo	test	262144	piude	刘德		ty;neighbor	freq-low
+typo	test	524288	qiangzzu	羌族		ty;repeat	freq-low
+typo	test	131072	shiynglv	使用率		ty;omit	freq-low
+typo	test	65536	shniaide	施耐德		ty;swap	freq-low
+typo	test	262144	sinshaoan	孙少安		ty;neighbor	freq-low
+typo	test	524288	sshanzhuang	山庄		ty;repeat	freq-low
+typo	test	131072	webing	胃病		ty;omit	freq-low
+typo	test	65536	weiyiiy	唯一一		ty;swap	freq-low
+typo	test	262144	xhuanlu	转录		ty;neighbor	freq-low
+typo	test	524288	xiiada	下达		ty;repeat	freq-low
+typo	test	131072	yupa	又怕		ty;omit	freq-low
+typo	test	65536	yutna	羽坛		ty;swap	freq-low
+typo	test	262144	zajgmin	藏民		ty;neighbor	freq-low
+typo	test	524288	zhangleii	张磊		ty;repeat	freq-low
+whole_word	dev	0	aaa	啊啊啊		ww;freq-low	sep
+whole_word	dev	0	beitoupai	被偷拍		ww;freq-low	sep
+whole_word	dev	0	cangliang	苍凉		ww;freq-low	sep
+whole_word	dev	0	choushi	仇视		ww;freq-low	sep
+whole_word	dev	0	danyuange	单元格		ww;freq-low	sep
+whole_word	dev	0	dongmian	冬眠		ww;freq-low	sep
+whole_word	dev	0	fanlimiao	范蠡庙		ww;freq-low	sep
+whole_word	dev	0	ganzou	赶走		ww;freq-low	sep
+whole_word	dev	0	gundong	滚动		ww;freq-mid	sep
+whole_word	dev	0	hetong	合同		ww;freq-high	sep
+whole_word	dev	0	huzigao	胡自皋		ww;freq-low	sep
+whole_word	dev	0	jingdu	精度		ww;freq-mid	sep
+whole_word	dev	0	kanbudao	看不到		ww;freq-mid	sep
+whole_word	dev	0	laozhe	老者		ww;freq-low	sep
+whole_word	dev	0	lixiucheng	李秀成		ww;freq-low	sep
+whole_word	dev	0	menmian	门面		ww;freq-low	sep
+whole_word	dev	0	nicha	逆差		ww;freq-low	sep
+whole_word	dev	0	ponai	叵耐		ww;freq-low	sep
+whole_word	dev	0	quba	去吧		ww;freq-mid	sep
+whole_word	dev	0	shangban	上班		ww;freq-high	sep
+whole_word	dev	0	shiyanqu	试验区		ww;freq-low	sep
+whole_word	dev	0	suifengpiao	随风飘		ww;freq-low	sep
+whole_word	dev	0	tisigui	替死鬼		ww;freq-low	sep
+whole_word	dev	0	weiteng	胃疼		ww;freq-low	sep
+whole_word	dev	0	xiaodongxi	小东西		ww;freq-low	sep
+whole_word	dev	0	xuanbu	宣布		ww;freq-mid	sep
+whole_word	dev	0	yijiao	一脚		ww;freq-mid	sep
+whole_word	dev	0	yubo	玉帛		ww;freq-low	sep
+whole_word	dev	0	zhaozhui	招赘		ww;freq-low	sep
+whole_word	dev	0	zhuangkuang	状况		ww;freq-mid	sep
+whole_word	test	0	aa	啊啊		ww;freq-low	sep
+whole_word	test	0	benglie	崩裂		ww;freq-low	sep
+whole_word	test	0	cankao	参考		ww;freq-mid	sep
+whole_word	test	0	chuanranbing	传染病		ww;freq-low	sep
+whole_word	test	0	daomuzhe	盗墓者		ww;freq-low	sep
+whole_word	test	0	doumei	都没		ww;freq-mid	sep
+whole_word	test	0	fatie	发帖		ww;freq-mid	sep
+whole_word	test	0	geibaobao	给宝宝		ww;freq-low	sep
+whole_word	test	0	guqi	鼓起		ww;freq-low	sep
+whole_word	test	0	huaiyi	怀疑		ww;freq-mid	sep
+whole_word	test	0	jianqiang	坚强		ww;freq-mid	sep
+whole_word	test	0	jiongyi	迥异		ww;freq-low	sep
+whole_word	test	0	keyimin	柯以敏		ww;freq-low	sep
+whole_word	test	0	lianji	练级		ww;freq-mid	sep
+whole_word	test	0	luoding	螺钉		ww;freq-low	sep
+whole_word	test	0	mingzi	名字		ww;freq-high	sep
+whole_word	test	0	nongnu	农奴		ww;freq-low	sep
+whole_word	test	0	qianmao	前茅		ww;freq-low	sep
+whole_word	test	0	renfang	人防		ww;freq-low	sep
+whole_word	test	0	shanqu	山区		ww;freq-mid	sep
+whole_word	test	0	shuangbian	双边		ww;freq-low	sep
+whole_word	test	0	taimang	太忙		ww;freq-low	sep
+whole_word	test	0	touzhele	偷着乐		ww;freq-low	sep
+whole_word	test	0	woduini	我对你		ww;freq-low	sep
+whole_word	test	0	xiaowa	小娃		ww;freq-low	sep
+whole_word	test	0	xuexue	学学		ww;freq-low	sep
+whole_word	test	0	yiliangnian	一两年		ww;freq-low	sep
+whole_word	test	0	yuejing	月经		ww;freq-mid	sep
+whole_word	test	0	zhaosongshou	赵松寿		ww;freq-low	sep
+whole_word	test	0	zhuangju	壮举		ww;freq-low	sep

@@ -9,12 +9,19 @@ from pathlib import Path
 import platform
 import struct
 import subprocess
+import sys
 import tempfile
 import tomllib
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-REVISION = 22
+# The release version and preview number come from the single audited source
+# (review R13), so the packager cannot drift from the UI and updater literals.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from version import load as load_version
+
+VERSION = load_version()
+REVISION = VERSION.preview
 BINARIES = {"myswy_tsf.dll": True, "myswy_probe.exe": False, "myswy_settings.exe": False}
 
 
@@ -126,8 +133,7 @@ def main() -> None:
         parser.error("Installer needs --toolchain, --nsis-notice and revision 1..999")
     if args.toolchain == "gnu" and len(args.runtime_notice) < 2:
         parser.error("GNU packages require GCC and MinGW copyright notices (--runtime-notice)")
-    version = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["package"]["version"]
-    tag = f"{version}-preview{args.revision}"
+    tag = VERSION.tag if args.revision == VERSION.preview else f"{VERSION.version}-preview{args.revision}"
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / f"chengyin-windows-x64-{tag}-{args.toolchain}.exe"

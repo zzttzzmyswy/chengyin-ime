@@ -1,6 +1,9 @@
 #include "settings.h"
+#include "dictionary_source.h"
 #include "preferences.h"
 #include "learning_writer.h"
+#include "configuration.h"
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -25,6 +28,65 @@ void write(const std::wstring &path, const char *text) {
     DWORD size = static_cast<DWORD>(std::strlen(text)), written = 0;
     require(WriteFile(file, text, size, &written, nullptr) && written == size, "write fixture");
     CloseHandle(file);
+}
+// R07 at the consumer boundary: two already-running applications must both adopt
+// an ordinary selection saved by a third one, on the revision channel only.
+void concurrentRevisionConsumers(const std::wstring &folder) {
+    const auto path = folder + L"\\consumers.profile";
+    const auto generationName = myswy::profileEpochName(path);
+    const auto revisionName = myswy::profileRevisionName(path);
+    myswy::LearningEpoch generation(generationName.c_str());
+    myswy::LearningEpoch revision(revisionName.c_str());
+    require(generation.valid() && revision.valid(), "both consumer channels exist");
+    const auto generationBefore = generation.current();
+    const auto revisionBefore = revision.current();
+    std::atomic<unsigned> adopted{0};
+    DWORD seen[2]{};
+    auto load = [&] {
+        auto snapshot = std::make_shared<myswy::ConfigurationUpdate>();
+        snapshot->hasRevision = true;
+        snapshot->profile = myswy::loadProfile(path);
+        return snapshot;
+    };
+    auto pump = [] {
+        MSG message{};
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    };
+    {
+        myswy::ConfigurationWatcher first(0, load, [&](auto s) {
+            seen[0] = s->learningRevision;
+            ++adopted;
+        }, nullptr, std::wstring{}, revisionName);
+        myswy::ConfigurationWatcher second(0, load, [&](auto s) {
+            seen[1] = s->learningRevision;
+            ++adopted;
+        }, nullptr, std::wstring{}, revisionName);
+        require(first.valid() && second.valid(), "two live revision consumers");
+        const uint8_t key[] = "nihao", text[] = "你好";
+        require(myswy::updateProfile(path, key, 5, text, 6) == myswy::ProfileUpdate::saved,
+                "a third application saves an ordinary selection");
+        const auto published = revision.current();
+        require(published != revisionBefore, "the ordinary save publishes a revision");
+        const auto until = GetTickCount64() + 4000;
+        while (adopted < 2 && GetTickCount64() < until) {
+            pump();
+            Sleep(5);
+        }
+        require(adopted >= 2, "both running applications adopt the ordinary revision");
+        require(seen[0] == published && seen[1] == published, "each consumer sees the published revision");
+        require(generation.current() == generationBefore,
+                "an ordinary selection never moves the destructive generation");
+    }
+    // A destructive clear must still reach both, and must be distinguishable from
+    // the additive revision above.
+    const auto clearRevision = revision.current();
+    require(myswy::clearProfile(path), "clear publishes a destructive generation");
+    require(generation.current() != generationBefore, "clear moves the generation consumers watch");
+    require(revision.current() == clearRevision, "a clear does not republish an ordinary revision");
+    DeleteFileW(path.c_str());
 }
 }
 int main() {
@@ -245,6 +307,214 @@ int main() {
         }
     }
     {
+        // These cases deliberately clear and rewrite their target, so they use a
+        // dedicated path rather than the fixture later cases assert on.
+        const auto revisionPath = folder + L"\\revision.profile";
+        {
+            // An ordinary save must publish the revision channel and leave the
+            // destructive generation untouched, so other applications reload rather
+            // than discarding the events they already queued.
+            myswy::LearningEpoch generation(myswy::profileEpochName(revisionPath).c_str());
+            myswy::LearningEpoch revision(myswy::profileRevisionName(revisionPath).c_str());
+            require(generation.valid() && revision.valid(), "isolated profile exposes both learning channels");
+            require(myswy::profileEpochName(revisionPath) != myswy::profileRevisionName(revisionPath),
+                    "generation and revision are distinct objects");
+            const DWORD generationBefore = generation.current(), revisionBefore = revision.current();
+            require(myswy::updateProfile(revisionPath, bytes("hao"), 3, bytes("好"), 3, &generationBefore)
+                    == myswy::ProfileUpdate::saved, "ordinary selection is saved");
+            require(generation.current() == generationBefore,
+                    "ordinary learning never advances the destructive generation");
+            require(revision.current() != revisionBefore, "ordinary learning publishes a new revision");
+        }
+        {
+            // A clear/import is destructive: it advances the generation, so a queued
+            // event captured before it must be dropped rather than retried.
+            myswy::LearningEpoch generation(myswy::profileEpochName(revisionPath).c_str());
+            const DWORD clearedFrom = generation.current();
+            require(myswy::clearProfile(revisionPath), "clear advances the destructive generation");
+            require(generation.current() != clearedFrom, "clear moves the generation other applications observe");
+            require(myswy::updateProfile(revisionPath, bytes("hao"), 3, bytes("好"), 3, &clearedFrom)
+                    == myswy::ProfileUpdate::invalidated,
+                    "an event captured before a clear is dropped instead of retried");
+        }
+        {
+            // Every retry re-checks the generation, so a clear that lands between
+            // two attempts still wins over the queued event.
+            myswy::LearningEpoch generation(myswy::profileEpochName(revisionPath).c_str());
+            const DWORD stale = generation.current();
+            require(myswy::clearProfile(revisionPath), "clear between attempts");
+            require(myswy::updateProfile(revisionPath, bytes("hao"), 3, bytes("好"), 3, &stale)
+                    == myswy::ProfileUpdate::invalidated,
+                    "a later retry notices the clear that happened after enqueue");
+        }
+        // The revision channel must be independent per profile path, like the
+        // generation: a sibling profile's learning cannot wake this one.
+        require(!myswy::profileRevisionName(revisionPath).empty()
+                && myswy::profileRevisionName(revisionPath) != myswy::profileRevisionName(profilePath),
+                "different profiles have independent revisions");
+        DeleteFileW(revisionPath.c_str());
+    }
+    {
+        // A failed save must be retried and must reach disk once the store frees
+        // up, and retrying must not learn the same choice twice: the bytes must
+        // equal a single clean save of that one selection.
+        const auto retryPath = folder + L"\\retry.profile";
+        auto *emptyRetry = myswy_profile_new(nullptr, 0);
+        require(emptyRetry && myswy::saveProfile(retryPath, emptyRetry), "empty retry fixture");
+        myswy_profile_free(emptyRetry);
+        require(myswy::updateProfile(retryPath, bytes("hao"), 3, bytes("好"), 3)
+                == myswy::ProfileUpdate::saved, "reference single save");
+        std::vector<uint8_t> singleSave;
+        require(myswy::readSmallFile(retryPath, singleSave, 2 * 1024 * 1024), "reference bytes");
+        auto *reset = myswy_profile_new(nullptr, 0);
+        require(reset && myswy::saveProfile(retryPath, reset), "reset retry fixture");
+        myswy_profile_free(reset);
+        HANDLE locked = CreateFileW(retryPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+        require(locked != INVALID_HANDLE_VALUE, "make the retry target unwritable");
+        {
+            // A generous budget: the point of this case is recovery after the
+            // store frees up, not exhaustion.
+            myswy::LearningRetryPolicy policy;
+            policy.attempts = 200;
+            policy.window = 5000;
+            policy.backoff = 10;
+            myswy::LearningWriter writer(retryPath, policy);
+            require(writer.enqueue(bytes("hao"), 3, bytes("好"), 3), "queue onto an unavailable store");
+            // Wait for an observed failed attempt, not for success: while the file
+            // is locked, success is impossible by construction.
+            const auto retriedBy = GetTickCount64() + 5000;
+            while (writer.stats().retried == 0 && GetTickCount64() < retriedBy)
+                Sleep(10);
+            require(writer.stats().retried > 0, "a failed save is counted as a retry");
+            require(writer.stats().saved == 0, "the event stays queued while storage is unavailable");
+            CloseHandle(locked);
+            locked = INVALID_HANDLE_VALUE;
+            const auto savedBy = GetTickCount64() + 5000;
+            while (writer.stats().saved == 0 && GetTickCount64() < savedBy)
+                Sleep(10);
+            require(writer.stats().saved == 1, "the queued event recovers once storage is writable");
+        }
+        if (locked != INVALID_HANDLE_VALUE)
+            CloseHandle(locked);
+        std::vector<uint8_t> recovered;
+        require(myswy::readSmallFile(retryPath, recovered, 2 * 1024 * 1024)
+                && recovered == singleSave, "recovery learns the selection exactly once");
+        DeleteFileW(retryPath.c_str());
+    }
+    {
+        // The retry budget is bounded in attempts as well as time, and the queue
+        // reports exhaustion without ever recording input content.
+        const auto bounded = folder + L"\\bounded.profile";
+        auto *seed = myswy::loadProfile(bounded);
+        require(seed && myswy::saveProfile(bounded, seed), "seed bounded fixture");
+        myswy_profile_free(seed);
+        HANDLE locked = CreateFileW(bounded.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+        require(locked != INVALID_HANDLE_VALUE, "lock the bounded target");
+        {
+            // A short injectable budget keeps the regression quick while still
+            // exercising the real retry path.
+            myswy::LearningRetryPolicy policy;
+            policy.attempts = 2;
+            policy.window = 400;
+            policy.backoff = 20;
+            myswy::LearningWriter writer(bounded, policy);
+            require(writer.enqueue(bytes("hao"), 3, bytes("好"), 3), "queue against a wedged store");
+            const auto until = GetTickCount64() + 10000;
+            while (writer.stats().exhausted == 0 && GetTickCount64() < until)
+                Sleep(10);
+            const auto stats = writer.stats();
+            require(stats.exhausted == 1, "the retry budget is bounded and observable");
+            require(stats.retried == policy.attempts && stats.saved == 0,
+                    "every attempt is counted and an exhausted event is never counted as saved");
+        }
+        CloseHandle(locked);
+        DeleteFileW(bounded.c_str());
+    }
+    {
+        // A local selection that has not reached disk yet must be retained rather
+        // than overwritten by the older snapshot still on disk. While storage is
+        // unavailable the writer reports pending, so a reader knows not to adopt
+        // that stale snapshot; once storage frees, the selection lands.
+        const auto racePath = folder + L"\\race.profile";
+        auto *seed = myswy_profile_new(nullptr, 0);
+        require(seed && myswy::saveProfile(racePath, seed), "seed pending-race fixture");
+        myswy_profile_free(seed);
+        HANDLE held3 = CreateFileW(racePath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                   FILE_ATTRIBUTE_NORMAL, nullptr);
+        require(held3 != INVALID_HANDLE_VALUE, "lock the pending-race target");
+        {
+            myswy::LearningWriter writer(racePath, {200, 5000, 10});
+            require(writer.enqueue(bytes("hao"), 3, bytes("好"), 3), "queue a selection that cannot be saved yet");
+            const auto until = GetTickCount64() + 3000;
+            while (writer.stats().retried == 0 && GetTickCount64() < until)
+                Sleep(5);
+            require(writer.pending(), "an unsaved selection keeps the writer pending");
+            // The disk snapshot still predates the selection, which is exactly why
+            // a plain reload must not adopt it.
+            auto *stale = myswy::loadProfile(racePath);
+            require(stale && myswy_profile_count(stale) == 0, "the disk snapshot is older than the queued choice");
+            myswy_profile_free(stale);
+            CloseHandle(held3);
+            held3 = INVALID_HANDLE_VALUE;
+            const auto savedBy = GetTickCount64() + 5000;
+            while (writer.stats().saved == 0 && GetTickCount64() < savedBy)
+                Sleep(5);
+            require(writer.stats().saved == 1 && !writer.pending(), "the retained selection reaches disk");
+            // The writer remembers what it published, so a snapshot recorded
+            // before this save is still recognised as stale: adopting it would
+            // roll the in-memory profile back behind a persisted choice.
+            myswy::LearningEpoch revision(myswy::profileRevisionName(racePath).c_str());
+            const auto published = revision.current();
+            require(!writer.supersedes(published + 1),
+                    "a snapshot newer than this writer's own save is adoptable");
+            require(writer.supersedes(published),
+                    "a snapshot at this writer's own revision is stale");
+        }
+        if (held3 != INVALID_HANDLE_VALUE)
+            CloseHandle(held3);
+        auto *landed = myswy::loadProfile(racePath);
+        require(landed && myswy_profile_count(landed) == 1, "the local selection was not lost to the stale snapshot");
+        myswy_profile_free(landed);
+        DeleteFileW(racePath.c_str());
+    }
+    {
+        // Queue overflow is counted, and overload never blocks or corrupts input.
+        const auto full = folder + L"\\full.profile";
+        {
+        myswy::LearningWriter writer(full);
+        int accepted = 0;
+        for (int i = 0; i < 200; ++i) {
+            if (writer.enqueue(bytes("nihao"), 5, bytes("你好"), 6))
+                ++accepted;
+        }
+        require(accepted > 0 && accepted < 200, "the queue is bounded and rejects overflow");
+        require(writer.stats().rejected == static_cast<std::uint64_t>(200 - accepted),
+                "rejected events are counted without their content");
+        }
+        DeleteFileW(full.c_str());
+    }
+    {
+        // Unloading must not wait out a retry budget per queued event.
+        const auto wedged = folder + L"\\wedged.profile";
+        auto *seed = myswy::loadProfile(wedged);
+        require(seed && myswy::saveProfile(wedged, seed), "seed wedged fixture");
+        myswy_profile_free(seed);
+        HANDLE locked = CreateFileW(wedged.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+        require(locked != INVALID_HANDLE_VALUE, "lock the wedged target");
+        const auto started = GetTickCount64();
+        {
+            myswy::LearningWriter writer(wedged);
+            for (int i = 0; i < 8; ++i)
+                require(writer.enqueue(bytes("nihao"), 5, bytes("你好"), 6), "queue onto a wedged store");
+        }
+        require(GetTickCount64() - started < 8000, "unload abandons a wedged store promptly");
+        CloseHandle(locked);
+        DeleteFileW(wedged.c_str());
+    }
+    {
         // A clear must invalidate writes accepted before the clear, including queued events.
         HANDLE gate = CreateMutexW(nullptr, FALSE, L"Local\\MyswyIME.UserPreferences");
         require(gate && WaitForSingleObject(gate, 5000) == WAIT_OBJECT_0, "block writer before disk lock");
@@ -260,6 +530,8 @@ int main() {
         myswy_profile_free(cleared);
     }
     require(myswy::objects == 0, "worker module lifetimes drained");
+    concurrentRevisionConsumers(folder);
+    require(myswy::objects == 0, "revision consumers released");
     auto *learned = myswy::loadProfile(profilePath);
     require(learned && myswy_profile_count(learned) == 2, "concurrent workers preserve both choices");
     require(myswy::readSmallFile(profilePath, before, 2 * 1024 * 1024), "learning snapshot");
@@ -268,8 +540,8 @@ int main() {
     held = CreateFileW(profilePath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                        FILE_ATTRIBUTE_NORMAL, nullptr);
     require(held != INVALID_HANDLE_VALUE, "hold learning file");
-    require(!myswy::updateProfile(profilePath, bytes("hao"), 3, bytes("好"), 3),
-            "locked profile cannot be replaced");
+    require(myswy::updateProfile(profilePath, bytes("hao"), 3, bytes("好"), 3) == myswy::ProfileUpdate::retry,
+            "locked profile cannot be replaced and stays retryable");
     CloseHandle(held);
     require(myswy::readSmallFile(profilePath, after, 2 * 1024 * 1024)
             && before == after, "failed profile save preserves file");
@@ -318,8 +590,8 @@ int main() {
     }
     write(profilePath, "damaged");
     require(!myswy::loadProfile(profilePath), "damaged profile does not silently reset");
-    require(!myswy::updateProfile(profilePath, bytes("hao"), 3, bytes("好"), 3),
-            "record preserves damaged profile for recovery");
+    require(myswy::updateProfile(profilePath, bytes("hao"), 3, bytes("好"), 3) == myswy::ProfileUpdate::retry,
+            "record preserves damaged profile for recovery and stays retryable");
     write(profilePath, "");
     require(!myswy::loadProfile(profilePath), "empty existing profile is damaged");
     DeleteFileW(preferences.c_str());
@@ -364,12 +636,107 @@ int main() {
     write(library, "CYLIB\x01");
     require(!myswy::readDictionaryLibrary(library, entries) && !myswy::addDictionaryLibrary(source, library),
             "damaged library is preserved for recovery");
+    // R09: a custom vocabulary that fails once must be reloaded after the lock is
+    // released even though its size and timestamp never change. The accepted stamp
+    // may only advance after a successful load.
+    {
+        const auto retryTarget = folder + L"\\reload.custom";
+        write(source, "ni\tstale\t10\n");
+        require(myswy::installCustomDictionary(source, retryTarget), "seed a custom vocabulary to reload");
+        const auto stamp = myswy::readDictionaryStamp(retryTarget);
+        require(stamp.exists, "the seeded vocabulary has an identity to compare");
+
+        bool locked = false;
+        unsigned attempts = 0;
+        myswy::DictionarySource reload(
+            [&]() -> MyswyDictionary * {
+                ++attempts;
+                // The first load fails exactly like a temporarily locked file. The
+                // second succeeds while the identity stays byte-for-byte the same.
+                return locked ? nullptr : myswy_dictionary_new_demo();
+            },
+            []() -> MyswyDictionary * { return myswy_dictionary_new_demo(); },
+            myswy::DictionaryRetryPolicy{2, 400, 20});
+        locked = true;
+        bool renewed = false;
+        // Seed the built-in snapshot first, so the failed custom load has a valid
+        // previous vocabulary to keep rather than needing the first-use fallback.
+        MyswyDictionary *seeded = reload.acquire(false, myswy::DictionaryStamp{}, &renewed);
+        require(seeded != nullptr && renewed, "the built-in base is admitted first");
+        myswy_dictionary_free(seeded);
+        const auto loadedBefore = reload.stats().loaded;
+
+        MyswyDictionary *first = reload.acquire(true, stamp, &renewed);
+        require(first != nullptr, "a failed custom load still yields a usable vocabulary");
+        require(!renewed, "a failed load never admits a new snapshot");
+        require(reload.pending(), "the failed target stays pending for a retry");
+        require(reload.stats().transient == 1, "the failure is counted");
+        myswy_dictionary_free(first);
+
+        // An identical stamp must not be treated as already loaded: that is the
+        // defect this regression exists for. The service polls `retry` from its
+        // configuration watcher, so the retry is driven the same way here.
+        locked = false;
+        const auto released = GetTickCount64() + 3000;
+        while (reload.pending() && GetTickCount64() < released) {
+            reload.retry(true, stamp);
+            Sleep(5);
+        }
+        require(attempts >= 2, "the unchanged file is retried after the lock is released");
+        require(reload.stats().loaded == loadedBefore + 1, "the retry admits the newly readable vocabulary");
+        require(!reload.pending(), "a successful retry clears the pending target");
+        MyswyDictionary *second = reload.acquire(true, stamp, &renewed);
+        require(second != nullptr && !renewed, "the accepted stamp is not re-read while unchanged");
+        myswy_dictionary_free(second);
+        DeleteFileW(retryTarget.c_str());
+    }
+    // R09: a corrupt vocabulary keeps the last good snapshot while the failure is
+    // retried, so a transient parse/access error never leaves input without a
+    // vocabulary. Only the successful load may replace what is in use.
+    {
+        const auto badTarget = folder + L"\\corrupt.custom";
+        write(source, "ni\tfirst\t10\n");
+        require(myswy::installCustomDictionary(source, badTarget), "seed a good vocabulary");
+        const auto badStamp = myswy::readDictionaryStamp(badTarget);
+        bool corrupt = true;
+        unsigned badAttempts = 0;
+        myswy::DictionarySource corruptSource(
+            [&]() -> MyswyDictionary * {
+                ++badAttempts;
+                return corrupt ? nullptr : myswy_dictionary_new_demo();
+            },
+            []() -> MyswyDictionary * { return myswy_dictionary_new_demo(); },
+            myswy::DictionaryRetryPolicy{2, 300, 20});
+        bool badRenewed = false;
+        // Adopt the good snapshot first so the failure has something to preserve.
+        MyswyDictionary *seed = corruptSource.acquire(false, myswy::DictionaryStamp{}, &badRenewed);
+        require(seed != nullptr && badRenewed, "the good snapshot is admitted first");
+        myswy_dictionary_free(seed);
+        const auto goodLoaded = corruptSource.stats().loaded;
+
+        MyswyDictionary *kept = corruptSource.acquire(true, badStamp, &badRenewed);
+        require(kept != nullptr, "a corrupt custom load still returns a usable vocabulary");
+        require(!badRenewed, "a corrupt load never replaces the good snapshot");
+        require(corruptSource.pending(), "the corrupt target is retried rather than accepted");
+        require(corruptSource.stats().transient >= 1, "the corrupt load is counted");
+        myswy_dictionary_free(kept);
+
+        corrupt = false;
+        const auto healed = GetTickCount64() + 3000;
+        while (corruptSource.pending() && GetTickCount64() < healed) {
+            corruptSource.retry(true, badStamp);
+            Sleep(5);
+        }
+        require(badAttempts >= 2, "the corrupt target is retried until it parses");
+        require(corruptSource.stats().loaded == goodLoaded + 1, "the repaired vocabulary is admitted");
+        DeleteFileW(badTarget.c_str());
+    }
     DeleteFileW(library.c_str());
     DeleteFileW(profilePath.c_str());
     DeleteFileW(scelPath.c_str());
     DeleteFileW(source.c_str());
     DeleteFileW(target.c_str());
     require(RemoveDirectoryW(folder.c_str()) != FALSE, "temporary files cleaned");
-    std::puts("PASS: validated atomic vocabulary import, invalid/failure recovery and ownership.");
+    std::puts("PASS: validated atomic vocabulary import, invalid/failure recovery, reload retry and ownership.");
     return 0;
 }

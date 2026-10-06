@@ -2,6 +2,7 @@
 #include "candidate.h"
 #include "keymap.h"
 #include "settings.h"
+#include "dictionary_source.h"
 #include "preferences.h"
 #include "learning_writer.h"
 #include "configuration.h"
@@ -21,68 +22,63 @@ namespace myswy {
 namespace {
 constexpr GUID kInputScope = {0xfde1eaee, 0x6924, 0x4cdf, {0x91, 0xe7, 0xda, 0x38, 0xcf, 0xf5, 0x55, 0x9d}};
 constexpr GUID kPropInputScope = {0x1713dd5a, 0x68e7, 0x4a5b, {0x9a, 0xf6, 0x59, 0x2a, 0x59, 0x5c, 0x77, 0x8d}};
-// DLL-scoped ownership. A TIP DLL can be unloaded repeatedly, so retain a dictionary only
-// while activated services use it. The lock is never taken on the key path.
-SRWLOCK dictionaryLock = SRWLOCK_INIT;
-MyswyDictionary *sharedDictionary = nullptr;
-size_t dictionaryUsers = 0;
-WIN32_FILE_ATTRIBUTE_DATA dictionaryStamp{};
-bool dictionaryCustom = false;
+// DLL-scoped ownership. A TIP DLL can be unloaded repeatedly, so retain a dictionary
+// only while activated services use it. The lock is never taken on the key path.
 MyswyDictionary *embeddedDictionary() {
     HRSRC resource = FindResourceW(module, MAKEINTRESOURCEW(101), RT_RCDATA);
     HGLOBAL loaded = resource ? LoadResource(module, resource) : nullptr;
     const auto *data = loaded ? static_cast<const uint8_t *>(LockResource(loaded)) : nullptr;
     return data ? myswy_dictionary_new_binary(data, SizeofResource(module, resource)) : nullptr;
 }
-MyswyDictionary *acquireDictionary() {
+// Loads the wanted custom vocabulary, or null when it cannot be read/parsed.
+// The caller supplies the built-in base and keeps ownership of it.
+MyswyDictionary *loadCustomDictionary() {
 #ifdef MYSWY_FIXED_TEST_VOCABULARY
     const std::wstring path;
 #else
     const auto path = customDictionaryPath(false);
 #endif
-    WIN32_FILE_ATTRIBUTE_DATA stamp {};
-    const bool custom = !path.empty() && GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &stamp);
-    AcquireSRWLockExclusive(&dictionaryLock);
-    const bool changed = custom != dictionaryCustom || (custom
-                         && (stamp.nFileSizeLow != dictionaryStamp.nFileSizeLow ||
-                             stamp.nFileSizeHigh != dictionaryStamp.nFileSizeHigh
-                             || CompareFileTime(&stamp.ftLastWriteTime, &dictionaryStamp.ftLastWriteTime) != 0));
-    if (!sharedDictionary || changed) {
-        MyswyDictionary *replacement = nullptr;
-        std::vector<uint8_t> bytes;
-        if (custom && readDictionaryFile(path, bytes)) {
-            auto *base = embeddedDictionary();
-            replacement = loadEffectiveDictionary(bytes, base);
-            myswy_dictionary_free(base);
-        }
-        if (!custom || (!replacement && !sharedDictionary))
-            replacement = embeddedDictionary();
-        // Failed custom reload keeps the last valid shared snapshot. Each service
-        // owns a handle, so earlier active compositions retain their vocabulary.
-        if (replacement) {
-            MyswyDictionary *old = std::exchange(sharedDictionary, replacement);
-            if (old)
-                myswy_dictionary_free(old);
-        }
-        dictionaryCustom = custom;
-        dictionaryStamp = stamp;
-    }
-    MyswyDictionary *result = myswy_dictionary_clone(sharedDictionary);
-    if (result)
-        ++dictionaryUsers;
-    ReleaseSRWLockExclusive(&dictionaryLock);
+    std::vector<uint8_t> bytes;
+    if (path.empty() || !readDictionaryFile(path, bytes))
+        return nullptr;
+    auto *base = embeddedDictionary();
+    auto *result = base ? loadEffectiveDictionary(bytes, base) : nullptr;
+    myswy_dictionary_free(base);
     return result;
 }
-void releaseDictionary(MyswyDictionary *owned) {
-    myswy_dictionary_free(owned);
-    AcquireSRWLockExclusive(&dictionaryLock);
-    MyswyDictionary *old = nullptr;
-    if (--dictionaryUsers == 0)
-        old = std::exchange(sharedDictionary, nullptr);
-    ReleaseSRWLockExclusive(&dictionaryLock);
-    if (old)
-        myswy_dictionary_free(old);
+DictionarySource &dictionarySource() {
+    // Constructed on first use: the loader reads the custom path, and the
+    // fallback builds the embedded vocabulary from this module's resource.
+    static DictionarySource source(loadCustomDictionary, embeddedDictionary);
+    return source;
 }
+// The custom vocabulary target this process wants, and its on-disk identity. The
+// fixed-vocabulary fixture never reads a real user's file (review R09/R10).
+DictionaryStamp customDictionaryStamp() {
+#ifdef MYSWY_FIXED_TEST_VOCABULARY
+    return {};
+#else
+    return readDictionaryStamp(customDictionaryPath(false));
+#endif
+}
+MyswyDictionary *acquireDictionary() {
+    const auto stamp = customDictionaryStamp();
+    return dictionarySource().acquire(stamp.exists, stamp);
+}
+void releaseDictionary(MyswyDictionary *owned) {
+    dictionarySource().release(owned);
+}
+// Retries an unfulfilled custom vocabulary whose backoff elapsed. The caller only
+// republishes when a snapshot was actually admitted, so a still-locked file cannot
+// retire an active session's vocabulary (review R09).
+// The fixed-vocabulary fixture has no user file to retry, so the helper exists
+// only where a real custom vocabulary can fail (review R09).
+#ifndef MYSWY_FIXED_TEST_VOCABULARY
+bool retryDictionary() {
+    const auto stamp = customDictionaryStamp();
+    return dictionarySource().retry(stamp.exists, stamp);
+}
+#endif
 class EndEdit final : public ITfEditSession {
   public:
     explicit EndEdit(ITfComposition *composition) : composition_(composition) {}
@@ -388,8 +384,11 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             setInputMode();
 #ifndef MYSWY_FIXED_TEST_VOCABULARY
             if (!secure_) {
-                LearningEpoch learningEpoch(profileEpochName(userFile(L"learning.profile")).c_str());
+                const auto profilePath = userFile(L"learning.profile");
+                LearningEpoch learningEpoch(profileEpochName(profilePath).c_str());
                 learningGeneration_ = learningEpoch.current();
+                LearningEpoch revisionEpoch(profileRevisionName(profilePath).c_str());
+                learningRevision_ = revisionEpoch.current();
                 try {
                     watcher_ = std::make_unique<ConfigurationWatcher>(observedConfiguration, [] {
                         auto snapshot = std::make_shared<ConfigurationUpdate>();
@@ -407,7 +406,12 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
                         Ptr<Service>
                         keep(this);
                         receiveConfiguration(std::move(snapshot));
-                    }, kConfigurationEpoch, userFile(L"preferences.ini"));
+                    }, kConfigurationEpoch, userFile(L"preferences.ini"), profileRevisionName(profilePath),
+#ifdef MYSWY_FIXED_TEST_VOCABULARY
+                       {});
+#else
+                       [] { return retryDictionary(); });
+#endif
                 } catch (...) {
                     watcher_.reset();
                 }
@@ -446,16 +450,37 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         snapshot->preferencesValid = true;
         if (data) {
             snapshot->dictionary = myswy_dictionary_new_tsv(data, size);
-            if (snapshot->dictionary) {
-                AcquireSRWLockExclusive(&dictionaryLock);
-                ++dictionaryUsers;
-                ReleaseSRWLockExclusive(&dictionaryLock);
-            }
+            // The fixture's TSV dictionary is a consumer of the DLL-scoped source
+            // bookkeeping too, so it is counted here exactly like an acquired one.
+            if (snapshot->dictionary)
+                dictionarySource().adopt(snapshot->dictionary);
         } else
             snapshot->dictionary = acquireDictionary();
         snapshot->releaseDictionary = releaseDictionary;
         if (!snapshot->dictionary)
             return E_INVALIDARG;
+        receiveConfiguration(std::move(snapshot));
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE Revision(const uint8_t *key, size_t keySize, const uint8_t *text,
+                                       size_t textSize, DWORD revision) override {
+        if (secure_)
+            return E_ACCESSDENIED;
+        // A fixture publishing what another application's ordinary save produces:
+        // a profile that learned one selection, offered on the additive channel.
+        auto *learned = myswy_profile_new(nullptr, 0);
+        if (!learned || myswy_profile_record_selection(learned, key, keySize, text, textSize, 0) != 0) {
+            if (learned)
+                myswy_profile_free(learned);
+            return E_INVALIDARG;
+        }
+        auto snapshot = std::make_shared<ConfigurationUpdate>();
+        snapshot->preferences = preferences_;
+        snapshot->preferencesValid = true;
+        snapshot->profile = learned;
+        snapshot->hasRevision = true;
+        snapshot->learningRevision = revision;
+        snapshot->learningGeneration = learningGeneration_;
         receiveConfiguration(std::move(snapshot));
         return S_OK;
     }
@@ -1177,7 +1202,12 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
                 shift_.reset();
             preferences_ = snapshot->preferences;
         }
+        // Only a moved generation (clear/import) or learning being switched back on
+        // may discard this service's snapshot. An ordinary learning revision is
+        // additive and must not invalidate anything this service has queued.
         replaceProfile_ = replaceProfile_ || !wasLearning || snapshot->learningGeneration != learningGeneration_;
+        revisionOnly_ = !replaceProfile_ && snapshot->hasRevision
+                        && snapshot->learningRevision != learningRevision_;
         pendingConfiguration_ = std::move(snapshot);
         applyPendingConfiguration();
         if (session_ && composition_)
@@ -1188,20 +1218,49 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     void applyPendingConfiguration() {
         if (!pendingConfiguration_ || composition_)
             return;
+        // A snapshot carrying only a newer ordinary revision is a pure reload of
+        // another application's selections. Adopting it must not retire the active
+        // session, so it never unbinds and never touches the dictionary.
+        if (revisionOnly_) {
+            // The on-disk snapshot is older than a selection this service already
+            // made: either one is still queued, or this service itself published
+            // at least this revision. Adopting it would roll the in-memory profile
+            // back behind a confirmed choice, so it waits for the next revision.
+            if (writer_ && writer_->supersedes(pendingConfiguration_->learningRevision))
+                return;
+            auto next = std::move(pendingConfiguration_);
+            if (next->profile) {
+                if (profile_)
+                    myswy_profile_free(profile_);
+                profile_ = std::exchange(next->profile, nullptr);
+                // An idle session exists only for post-commit associations; pushing
+                // the merged profile in makes the other application's selection take
+                // effect without discarding that association.
+                if (session_)
+                    myswy_session_set_profile(session_, profile_);
+            }
+            learningRevision_ = next->learningRevision;
+            revisionOnly_ = false;
+            return;
+        }
         auto next = std::move(pendingConfiguration_);
+        const bool destructive = replaceProfile_;
         unbind(); // Only idle/association state is retired; raw input is preserved above.
         if (next->dictionary) {
             if (dictionary_)
                 releaseDictionary(dictionary_);
             dictionary_ = std::exchange(next->dictionary, nullptr);
         }
-        if (replaceProfile_ && next->profile) {
+        if (destructive && next->profile) {
             if (profile_)
                 myswy_profile_free(profile_);
             profile_ = std::exchange(next->profile, nullptr);
             learningGeneration_ = next->learningGeneration;
         }
+        if (next->hasRevision)
+            learningRevision_ = next->learningRevision;
         replaceProfile_ = false;
+        revisionOnly_ = false;
     }
     void freeDictionary() {
         if (!dictionary_)
@@ -1247,7 +1306,11 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     std::unique_ptr<ConfigurationWatcher> watcher_;
     ConfigurationWatcher::Snapshot pendingConfiguration_;
     DWORD learningGeneration_ = 0;
+    DWORD learningRevision_ = 0;
     bool replaceProfile_ = false;
+    // Set when the pending snapshot carries only a newer ordinary revision, so it
+    // is adopted without retiring the active session.
+    bool revisionOnly_ = false;
     ShiftSwitch shift_;
     MyswyProfile *profile_ = nullptr;
     std::unique_ptr<LearningWriter> writer_;

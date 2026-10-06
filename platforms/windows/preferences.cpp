@@ -210,7 +210,10 @@ bool saveProfile(const std::wstring &path, const MyswyProfile *p) {
     std::vector<uint8_t> bytes(static_cast<size_t>(size));
     return myswy_profile_binary(p, bytes.data(), bytes.size()) == size && atomicWrite(path, bytes);
 }
-std::wstring profileEpochName(const std::wstring &path) {
+namespace {
+// One shared-mapping name per profile path. The prefix gives the object its
+// meaning: destructive generation, or ordinary revision.
+std::wstring profileMappingName(const wchar_t *prefix, const std::wstring &path) {
     if (path.empty()) return {};
     const DWORD needed = GetFullPathNameW(path.c_str(), 0, nullptr, nullptr);
     if (!needed || needed > 32768) return {};
@@ -236,10 +239,17 @@ std::wstring profileEpochName(const std::wstring &path) {
     if (hash) BCryptDestroyHash(hash);
     BCryptCloseAlgorithmProvider(algorithm, 0);
     if (!ok) return {};
-    std::wstring name = L"Local\\MyswyIME.LearningGeneration.";
+    std::wstring name = prefix;
     constexpr wchar_t hex[] = L"0123456789abcdef";
     for (const auto byte : digest) { name.push_back(hex[byte >> 4]); name.push_back(hex[byte & 15]); }
     return name;
+}
+}
+std::wstring profileEpochName(const std::wstring &path) {
+    return profileMappingName(L"Local\\MyswyIME.LearningGeneration.", path);
+}
+std::wstring profileRevisionName(const std::wstring &path) {
+    return profileMappingName(L"Local\\MyswyIME.LearningRevision.", path);
 }
 LearningEpoch::LearningEpoch(const wchar_t *name) {
     if (!name || !*name) return;
@@ -272,22 +282,35 @@ void notifyConfiguration() {
     LearningEpoch epoch(configurationEpochName().c_str());
     epoch.advance();
 }
-bool updateProfile(const std::wstring &path, const uint8_t *key, size_t keySize, const uint8_t *text,
-                   size_t textSize, const DWORD *expectedEpoch, uint32_t matchingFlags) {
+ProfileUpdate updateProfile(const std::wstring &path, const uint8_t *key, size_t keySize, const uint8_t *text,
+                            size_t textSize, const DWORD *expectedEpoch, uint32_t matchingFlags) {
     Lock lock;
     if (!lock.held)
-        return false;
+        return ProfileUpdate::retry;
     LearningEpoch epoch(profileEpochName(path).c_str());
+    // A clear/import may have run while this event waited for the lock, so the
+    // generation is re-checked on every attempt, not only when it was enqueued.
+    // An unusable mapping is a storage problem to retry, never an invalidation;
+    // treating it as one would discard confirmed learning.
     if (expectedEpoch && !epoch.valid())
-        return false;
+        return ProfileUpdate::retry;
     if (expectedEpoch && epoch.current() != *expectedEpoch)
-        return true; // invalidated event: intentional no-op
+        return ProfileUpdate::invalidated;
     auto *profile = loadProfile(path);
     if (!profile)
-        return false;
-    bool ok = myswy_profile_record_selection(profile, key, keySize, text, textSize, matchingFlags) == 0 && saveProfile(path, profile);
+        return ProfileUpdate::retry;
+    const bool ok = myswy_profile_record_selection(profile, key, keySize, text, textSize, matchingFlags) == 0
+                    && saveProfile(path, profile);
     myswy_profile_free(profile);
-    return ok;
+    if (!ok)
+        return ProfileUpdate::retry;
+    // Ordinary learning is published on the revision channel only. Advancing a
+    // destructive generation here is what used to discard other applications'
+    // queued events for a merely additive change.
+    LearningEpoch revision(profileRevisionName(path).c_str());
+    if (revision.valid())
+        revision.advance();
+    return ProfileUpdate::saved;
 }
 bool importProfile(const std::wstring &source, const std::wstring &target) {
     std::vector<uint8_t> bytes;

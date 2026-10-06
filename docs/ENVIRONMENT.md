@@ -1,6 +1,6 @@
 # 开发环境与复现
 
-2026-10-05。当前批次为 Windows x64 preview20（单音节与受限激活）；86 项 Rust Release、C ABI、七项原生 CTest（31.00 s）已通过。
+2026-10-06。当前 Windows x64 preview22 已合并 B/C/D 基线；96 项 Rust Release、C ABI、八项原生 CTest（31.04 s）已通过。
 本机为 Windows 11 build 26200 / Ryzen 9 9950X 16C/32T，当前构建环境：
 
 - VS 2022 Build Tools 17.14.41，MSVC 19.44.35229 / 14.44.35207；SDK 10.0.26100.0。
@@ -15,8 +15,11 @@
 $env:PATH="C:\Users\xhxez\.cargo\bin;C:\Program Files\CMake\bin;" + $env:PATH
 $env:RUSTFLAGS='-C target-feature=+crt-static'
 cargo build --release -p myswy-ffi --target x86_64-pc-windows-msvc --locked
-cmake -S platforms/windows -B build/windows-msvc -G 'Visual Studio 17 2022' -A x64
-cmake --build build/windows-msvc --config Release --parallel 3 --target myswy_tsf myswy_settings myswy_probe windows_ui_test windows_key_test windows_settings_test windows_update_test windows_live_test myswy_tsf_fixture
+python scripts/version.py --generate
+python scripts/version.py --check
+python scripts/version.py --verify-bump
+cmake -S platforms/windows -B build/windows-msvc -G 'Visual Studio 17 2022' -A x64 -DPython3_EXECUTABLE=C:/Users/xhxez/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe
+cmake --build build/windows-msvc --config Release --parallel 3 --target myswy_tsf myswy_settings myswy_probe windows_skin_test windows_ui_test windows_key_test windows_settings_test windows_update_test windows_live_test myswy_tsf_fixture
 ctest --test-dir build/windows-msvc -C Release --output-on-failure
 python scripts/package_windows.py --build-dir build/windows-msvc --toolchain msvc --makensis build/nsis-amd64/makensis.exe --nsis-notice packaging/windows/NSIS-LICENSE.txt
 ```

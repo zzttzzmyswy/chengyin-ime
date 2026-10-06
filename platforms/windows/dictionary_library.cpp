@@ -148,16 +148,27 @@ MyswyDictionary *loadEffectiveDictionary(const std::vector<uint8_t> &bytes, Mysw
     if (!managed(bytes)) return loadDictionaryBytes(bytes); // preserve old configuration until first edit
     std::vector<DictionaryEntry> entries;
     if (!base || !parse(bytes, entries)) return nullptr;
-    auto *result = myswy_dictionary_clone(base);
+    // The base and every enabled library are compiled into one union in a single
+    // pass. Merging pair by pair would rebuild the whole dictionary once per
+    // library, so a library holding many vocabularies would pay a much higher
+    // peak for the same result (review R12). The base stays the first element so
+    // an all-disabled library still yields exactly the built-in vocabulary.
+    std::vector<MyswyDictionary *> parts{base};
     for (const auto &entry : entries) {
         if (!entry.enabled) continue;
         auto *dictionary = myswy_dictionary_new_binary(entry.binary.data(), entry.binary.size());
-        auto *merged = dictionary && result ? myswy_dictionary_merge(result, dictionary) : nullptr;
-        myswy_dictionary_free(dictionary);
-        myswy_dictionary_free(result);
-        result = merged;
-        if (!result) break;
+        if (!dictionary) {
+            for (size_t i = 1; i < parts.size(); ++i) myswy_dictionary_free(parts[i]);
+            return nullptr;
+        }
+        parts.push_back(dictionary);
     }
+    // The clone keeps the caller's `base` ownership contract intact, and avoids a
+    // pointless rebuild for the common all-disabled library.
+    MyswyDictionary *result = parts.size() == 1
+        ? myswy_dictionary_clone(base)
+        : myswy_dictionary_merge_all(parts.data(), parts.size());
+    for (size_t i = 1; i < parts.size(); ++i) myswy_dictionary_free(parts[i]);
     return result;
 }
 }

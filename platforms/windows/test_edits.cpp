@@ -716,6 +716,17 @@ void runEditTests(ITfKeyEventSink *keys) {
         require(SUCCEEDED(configuration->Update(9, TRUE, TRUE, TRUE, nullptr, 0)), "restore default fixture");
         require(key(keys, live.get(), VK_OEM_COMMA)
                 && live->doc.text == L"你好热更新，", "live punctuation enable applies immediately");
+        // R07: an ordinary learning revision published by another application
+        // arrives mid-composition. It must reload the profile without discarding
+        // the raw input the user is still typing.
+        type(keys, live.get(), "ni");
+        const auto typing = live->doc.text;
+        require(SUCCEEDED(configuration->Revision(reinterpret_cast<const uint8_t *>("nihao"), 5,
+                reinterpret_cast<const uint8_t *>("你好"), 6, 7)), "ordinary revision delivered mid-composition");
+        require(live->doc.text == typing, "an ordinary revision cannot discard raw input");
+        type(keys, live.get(), "hao");
+        require(key(keys, live.get(), '1') && live->doc.text == L"你好热更新，你好",
+                "the active composition still commits normally after a revision");
     }
     type(keys, a, "nihao");
     require(a->doc.text == L"nihao", "preedit exactly once");

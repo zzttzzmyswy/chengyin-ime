@@ -45,4 +45,4 @@ Ornament 为 0 无纹样、1 枝叶、2 星图、3 波纹。可选 `Image=` 后�
 物理混合 DPI 与完整实机矩阵需单独验收，不能用模拟 DPI 测试代替。
 
 参考：[搜狗官方皮肤编辑器说明](https://pinyin.sogou.com/help.php?list=5&q=3)。
-插画来源与生成提示词见 [assets/skins/README.md](../assets/skins/README.md)。
+插画来源与本地裁切说明见 [assets/skins/README.md](../assets/skins/README.md)。

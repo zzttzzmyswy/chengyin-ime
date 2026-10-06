@@ -29,6 +29,10 @@ try {
     }
     New-Item -ItemType Directory -Force -Path (Join-Path $root 'build') > $null
     $MakeNsis | Set-Content -LiteralPath (Join-Path $root 'build\nsis-compiler-path.txt') -Encoding UTF8
+    # The release version header is generated, never hand-edited (review R13), so
+    # every UI, updater and installer surface carries the same tag.
+    & python scripts/version.py --generate
+    if ($LASTEXITCODE -ne 0) { throw 'Release version generation failed' }
     & rustup target add x86_64-pc-windows-msvc
     if ($LASTEXITCODE -ne 0) { throw 'rustup failed' }
     & rustup component add rust-docs
