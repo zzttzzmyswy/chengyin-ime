@@ -388,8 +388,11 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             setInputMode();
 #ifndef MYSWY_FIXED_TEST_VOCABULARY
             if (!secure_) {
-                LearningEpoch learningEpoch(profileEpochName(userFile(L"learning.profile")).c_str());
+                const auto profilePath = userFile(L"learning.profile");
+                LearningEpoch learningEpoch(profileEpochName(profilePath).c_str());
                 learningGeneration_ = learningEpoch.current();
+                LearningEpoch revisionEpoch(profileRevisionName(profilePath).c_str());
+                learningRevision_ = revisionEpoch.current();
                 try {
                     watcher_ = std::make_unique<ConfigurationWatcher>(observedConfiguration, [] {
                         auto snapshot = std::make_shared<ConfigurationUpdate>();
@@ -407,7 +410,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
                         Ptr<Service>
                         keep(this);
                         receiveConfiguration(std::move(snapshot));
-                    }, kConfigurationEpoch, userFile(L"preferences.ini"));
+                    }, kConfigurationEpoch, userFile(L"preferences.ini"), profileRevisionName(profilePath));
                 } catch (...) {
                     watcher_.reset();
                 }
@@ -456,6 +459,28 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         snapshot->releaseDictionary = releaseDictionary;
         if (!snapshot->dictionary)
             return E_INVALIDARG;
+        receiveConfiguration(std::move(snapshot));
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE Revision(const uint8_t *key, size_t keySize, const uint8_t *text,
+                                       size_t textSize, DWORD revision) override {
+        if (secure_)
+            return E_ACCESSDENIED;
+        // A fixture publishing what another application's ordinary save produces:
+        // a profile that learned one selection, offered on the additive channel.
+        auto *learned = myswy_profile_new(nullptr, 0);
+        if (!learned || myswy_profile_record_selection(learned, key, keySize, text, textSize, 0) != 0) {
+            if (learned)
+                myswy_profile_free(learned);
+            return E_INVALIDARG;
+        }
+        auto snapshot = std::make_shared<ConfigurationUpdate>();
+        snapshot->preferences = preferences_;
+        snapshot->preferencesValid = true;
+        snapshot->profile = learned;
+        snapshot->hasRevision = true;
+        snapshot->learningRevision = revision;
+        snapshot->learningGeneration = learningGeneration_;
         receiveConfiguration(std::move(snapshot));
         return S_OK;
     }
@@ -1177,7 +1202,12 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
                 shift_.reset();
             preferences_ = snapshot->preferences;
         }
+        // Only a moved generation (clear/import) or learning being switched back on
+        // may discard this service's snapshot. An ordinary learning revision is
+        // additive and must not invalidate anything this service has queued.
         replaceProfile_ = replaceProfile_ || !wasLearning || snapshot->learningGeneration != learningGeneration_;
+        revisionOnly_ = !replaceProfile_ && snapshot->hasRevision
+                        && snapshot->learningRevision != learningRevision_;
         pendingConfiguration_ = std::move(snapshot);
         applyPendingConfiguration();
         if (session_ && composition_)
@@ -1188,20 +1218,49 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     void applyPendingConfiguration() {
         if (!pendingConfiguration_ || composition_)
             return;
+        // A snapshot carrying only a newer ordinary revision is a pure reload of
+        // another application's selections. Adopting it must not retire the active
+        // session, so it never unbinds and never touches the dictionary.
+        if (revisionOnly_) {
+            // The on-disk snapshot is older than a selection this service already
+            // made: either one is still queued, or this service itself published
+            // at least this revision. Adopting it would roll the in-memory profile
+            // back behind a confirmed choice, so it waits for the next revision.
+            if (writer_ && writer_->supersedes(pendingConfiguration_->learningRevision))
+                return;
+            auto next = std::move(pendingConfiguration_);
+            if (next->profile) {
+                if (profile_)
+                    myswy_profile_free(profile_);
+                profile_ = std::exchange(next->profile, nullptr);
+                // An idle session exists only for post-commit associations; pushing
+                // the merged profile in makes the other application's selection take
+                // effect without discarding that association.
+                if (session_)
+                    myswy_session_set_profile(session_, profile_);
+            }
+            learningRevision_ = next->learningRevision;
+            revisionOnly_ = false;
+            return;
+        }
         auto next = std::move(pendingConfiguration_);
+        const bool destructive = replaceProfile_;
         unbind(); // Only idle/association state is retired; raw input is preserved above.
         if (next->dictionary) {
             if (dictionary_)
                 releaseDictionary(dictionary_);
             dictionary_ = std::exchange(next->dictionary, nullptr);
         }
-        if (replaceProfile_ && next->profile) {
+        if (destructive && next->profile) {
             if (profile_)
                 myswy_profile_free(profile_);
             profile_ = std::exchange(next->profile, nullptr);
             learningGeneration_ = next->learningGeneration;
         }
+        if (next->hasRevision)
+            learningRevision_ = next->learningRevision;
         replaceProfile_ = false;
+        revisionOnly_ = false;
     }
     void freeDictionary() {
         if (!dictionary_)
@@ -1247,7 +1306,11 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     std::unique_ptr<ConfigurationWatcher> watcher_;
     ConfigurationWatcher::Snapshot pendingConfiguration_;
     DWORD learningGeneration_ = 0;
+    DWORD learningRevision_ = 0;
     bool replaceProfile_ = false;
+    // Set when the pending snapshot carries only a newer ordinary revision, so it
+    // is adopted without retiring the active session.
+    bool revisionOnly_ = false;
     ShiftSwitch shift_;
     MyswyProfile *profile_ = nullptr;
     std::unique_ptr<LearningWriter> writer_;

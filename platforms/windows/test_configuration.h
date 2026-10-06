@@ -7,5 +7,9 @@ struct ConfigurationTest : IUnknown {
     virtual HRESULT STDMETHODCALLTYPE Update(UINT pageSize, BOOL punctuation, BOOL associations, BOOL learning,
             const uint8_t *dictionary, size_t size) = 0;
     virtual HRESULT STDMETHODCALLTYPE Appearance(UINT fontSize, UINT layout, BOOL pinyin) = 0;
+    // Deliver an ordinary (non-destructive) learning revision that carries one
+    // selection, exactly as another running application's save would.
+    virtual HRESULT STDMETHODCALLTYPE Revision(const uint8_t *key, size_t keySize,
+            const uint8_t *text, size_t textSize, DWORD revision) = 0;
 };
 }
