@@ -147,10 +147,11 @@ struct Score {
     keys: Option<u32>,
 }
 
-fn score(dictionary: &Arc<Dictionary>, row: &Row) -> Score {
+fn score(dictionary: &Arc<Dictionary>, row: &Row, incremental: bool) -> Score {
     let mut session = Session::new(Arc::clone(dictionary));
     session.configure(TOP_N, true, false);
     session.configure_matching(row.flags);
+    session.configure_incremental(incremental);
     let profile = build_profile(row);
     assert!(session.set_profile(Arc::new(profile)));
     session.reset();
@@ -236,10 +237,15 @@ impl Aggregate {
 }
 
 fn main() {
-    let path = std::env::args()
-        .nth(1)
-        .unwrap_or_else(|| "data/eval/quality.tsv".to_owned());
-    let source = std::fs::read_to_string(&path).expect("read the corpus");
+    let args: Vec<_> = std::env::args().skip(1).collect();
+    let incremental = args.iter().any(|arg| arg == "--incremental");
+    let mut paths = args.iter().filter(|arg| arg.as_str() != "--incremental");
+    let path = paths.next().map_or("data/eval/quality.tsv", String::as_str);
+    assert!(
+        paths.next().is_none(),
+        "usage: quality_report [corpus.tsv] [--incremental]"
+    );
+    let source = std::fs::read_to_string(path).expect("read the corpus");
     let rows = load(&source);
     assert!(!rows.is_empty(), "empty corpus");
 
@@ -247,7 +253,7 @@ fn main() {
     let start = std::time::Instant::now();
     let dictionary = Arc::new(Dictionary::from_binary(bytes).unwrap());
     println!(
-        "corpus={path} rows={} dictionary entries={} load={}us",
+        "corpus={path} incremental={incremental} rows={} dictionary entries={} load={}us",
         rows.len(),
         dictionary.entry_count(),
         start.elapsed().as_micros()
@@ -263,7 +269,7 @@ fn main() {
     let mut by_bucket: BTreeMap<&str, Aggregate> = BTreeMap::new();
     let mut overall = Aggregate::new();
     for row in &rows {
-        let score = score(&dictionary, row);
+        let score = score(&dictionary, row, incremental);
         by_category
             .entry(row.category.as_str())
             .or_insert_with(Aggregate::new)

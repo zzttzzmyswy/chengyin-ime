@@ -1,6 +1,6 @@
 # 开发环境与复现
 
-2026-10-06。当前 Windows x64 preview22 已合并 B/C/D 基线；96 项 Rust Release、C ABI、八项原生 CTest（31.04 s）已通过。
+2026-10-06。当前 Windows x64 preview23 修复句末助词与准确前缀；102 项 Rust Release、C ABI、八项原生 CTest（38.61 s）已通过。
 本机为 Windows 11 build 26200 / Ryzen 9 9950X 16C/32T，当前构建环境：
 
 - VS 2022 Build Tools 17.14.41，MSVC 19.44.35229 / 14.44.35207；SDK 10.0.26100.0。

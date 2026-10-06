@@ -1,5 +1,23 @@
 # 性能预算与复现
 
+## preview23 准确句末与前缀 · 2026-10-06
+
+Win11 build26200 / Ryzen 9 9950X 16C32T / Rust1.99 MSVC目标。
+同一 rustc opt-level=3/full LTO/default codegen 配置，旧316d7f3与本批源码各自编译核心和同一重放器；
+构建/原生测试完成后顺序旧→新测量，非专用机器，未控制频率/温度/后台负载。
+87540条词库、空历史、立即分段、全flags；6串为 xianzaikaishiba/xianzaikaishi/mingtiankaishiba/
+womenxianzaikaishiba/xianzaikaishixuexi/xianzaikaishivvvv；10轮预热、100轮，每轮reset。
+核心逐键＋全部可见标注，9900样本；不含磁盘、TSF、GUI/DWM。不是Cargo thin-LTO生产构建的端到端延迟。
+
+| 源码 | P50 µs | P95 µs | P99 µs |
+| --- | ---: | ---: | ---: |
+| 316d7f3 · preview22 | 3727.7 | 19076.9 | 23955.8 |
+| preview23 | 222.9 | 11334.1 | 16782.3 |
+
+此次前缀保护减少了准确长输入的容错图工作量，但中间输入仍昂贵，不能据一次局部对照宣称全规则预算达标。
+原始日志 build/sentence-bench-preview23-before.txt / sentence-bench-preview23-after.txt，重放器 sentence-bench-preview23.rs。
+102项Rust（含三条新增长串的零分配/64KiB）及默认、立即分段488条质量对照另见STATUS。
+
 ## preview22 结构组句与全身皮肤 · 2026-10-06
 
 Win11 build26200 / Ryzen 9 9950X 16C/32T / Rust MSVC Release 与 MSVC 19.44 Release。

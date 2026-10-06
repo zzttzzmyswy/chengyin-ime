@@ -1,5 +1,14 @@
 # 质量与性能基线（审查 R11 第一阶段）
 
+## preview23 的 Windows 分段模式回归 · 2026-10-06
+
+默认工具继续旧staged配置；新增 `cargo run --release -p myswy-core --example quality_report --locked -- --incremental`
+测实际Windows立即分段配置。Win11 build26200/Ryzen9950X/Rust1.99，旧316d7f3快照与当前核心使用相同488条集、词库、flags与空个人历史。
+旧/新总体Top1/Top9/200页可达=92.0%/97.7%/98.8%；dev/test Top1=92.6%/91.4%；整词/单字首选100%。
+分类/分档/半集汇总一致；当前默认配置也与I03一致。日志 build/quality-preview22-incremental.txt、quality-preview23-incremental.txt、quality-preview23.txt。
+评测语料没有修改，用户本批输入和自造语法/错误预算用例作为独立回归，未填入test半集。
+该汇总是有限语料上的回归证据，不是所有自然输入的语义质量保证；D其余规则覆盖/性能优化继续。
+
 本文件是迭代 I03 的交付物：给共享核心建立**可复现的输入质量与微基准基线**。
 本阶段只建立基线，不优化词库、排序或算法；所有数字都是“当前状态”的测量值，不是达标声明。
 

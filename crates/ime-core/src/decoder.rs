@@ -72,6 +72,7 @@ struct Pair {
     allowed: bool,
     unsupported: bool,
     exact_only: bool,
+    terminal_only: bool,
 }
 impl Default for Pair {
     fn default() -> Self {
@@ -82,6 +83,7 @@ impl Default for Pair {
             allowed: true,
             unsupported: false,
             exact_only: false,
+            terminal_only: false,
         }
     }
 }
@@ -97,6 +99,7 @@ pub(crate) struct Decoder {
     pub full_coverage: bool,
     pub fast_ready: bool,
     protected_word: bool,
+    pub exact_prefix: bool,
 }
 impl Decoder {
     pub fn new() -> Self {
@@ -112,6 +115,7 @@ impl Decoder {
             full_coverage: false,
             fast_ready: false,
             protected_word: false,
+            exact_prefix: false,
         }
     }
     pub fn clear_cache(&mut self) {
@@ -141,7 +145,9 @@ impl Decoder {
         // Productive exact constructions, anchored by dictionary words on both
         // sides. A / 不A (or A不 / A) requires the same written A, not homophones.
         // 的 attaches to an attested multi-character word, never arbitrary singles.
+        let particle = !a_single && matches!(b, "吧" | "吗" | "呢" | "啊" | "呀");
         let grammar = (!a_single && b == "的")
+            || particle
             || b.strip_prefix('不') == Some(a)
             || a.strip_suffix('不') == Some(b);
         let frame = pronoun_frame || grammar;
@@ -160,6 +166,7 @@ impl Decoder {
             allowed,
             unsupported,
             exact_only: grammar && !lexical && !pronoun_frame,
+            terminal_only: particle && !lexical,
         };
         self.pairs[at] = pair;
         pair
@@ -240,6 +247,7 @@ impl Decoder {
                     let unsupported =
                         self.paths[end][rank].unsupported + u8::from(pair.unsupported);
                     if !pair.allowed
+                        || (pair.terminal_only && self.paths[end][rank].next as usize != size)
                         || (pair.exact_only
                             && (self.paths[end][rank].corrected
                                 || self.paths[end][rank].abbreviated
@@ -280,6 +288,7 @@ impl Decoder {
                     };
                     if !pair.allowed
                         || pair.exact_only
+                        || pair.terminal_only
                         || pair.unsupported
                         || self.paths[end][rank].unsupported != 0
                     {
@@ -322,6 +331,7 @@ impl Decoder {
                         };
                         if !pair.allowed
                             || pair.exact_only
+                            || pair.terminal_only
                             || pair.unsupported
                             || self.paths[end][rank].unsupported != 0
                         {
@@ -375,7 +385,7 @@ impl Decoder {
         self.primary_abbreviated = self.lengths[0] > 0 && self.paths[0][0].abbreviated;
         Ok(limited && self.primary_abbreviated)
     }
-    fn render(&mut self, d: &Dictionary, input: &str, base: usize) -> bool {
+    fn render(&mut self, d: &Dictionary, input: &str, base: usize, options: u32) -> bool {
         let mut limited = false;
         let size = input.len();
         self.count = base;
@@ -389,6 +399,10 @@ impl Decoder {
                 .iter()
                 .any(|p| p.unsupported == 0 && !p.corrected && !p.abbreviated && !p.predicted);
         let mut weak_rendered = self.sentences[..base].iter().any(|s| s.weak);
+        let exact_available = self.sentences[..base].iter().any(|s| s.exact)
+            || self.paths[0][..self.lengths[0] as usize]
+                .iter()
+                .any(|p| !p.corrected && !p.abbreviated && !p.predicted);
         let full_syllables = crate::syllables::count_spelling(input);
         for initial in 0..self.lengths[0] as usize {
             // Unknown phrase joins are an exact-input fallback only. Once a
@@ -442,10 +456,20 @@ impl Decoder {
             // Fully spelled input must not grow extra syllables through local
             // correction/initial expansion at each independent word boundary.
             if !sentence.exact
-                && (supported_exact
+                && (exact_available
+                    || self.exact_prefix
                     || full_syllables.is_some_and(|n| {
                         n <= 2 || usize::from(n) != sentence.pinyin().split('\'').count()
                     }))
+            {
+                continue;
+            }
+            // A word-local alignment budget must not reset at every sentence
+            // boundary. Synthesized corrections get one global cost budget;
+            // lexical fuzzy words keep the independent dictionary recall lane.
+            if sentence.corrected
+                && !crate::fuzzy::penalty(input, sentence.pinyin(), options)
+                    .is_some_and(|cost| cost <= 2)
             {
                 continue;
             }
@@ -468,20 +492,25 @@ impl Decoder {
         input: &str,
         context: &str,
         options: u32,
+        exact_prefix: bool,
     ) -> Result<bool, LookupError> {
         self.count = 0;
         self.segment_count = 0;
         self.fast_ready = false;
         self.full_coverage = false;
-        let mut limited = self.compute(d, input, context, false, options)?;
+        self.exact_prefix = exact_prefix;
+        // Protect an accurate multi-syllable lexical prefix before generating
+        // locally corrected paths that replace it. Whole-word recall is separate.
+        let graph_options = if exact_prefix { 0 } else { options };
+        let mut limited = self.compute(d, input, context, false, graph_options)?;
         self.full_coverage = self.paths[0][..self.lengths[0] as usize]
             .iter()
             .any(|p| !p.predicted);
         if self.lengths[0] == 0 && !input.is_empty() {
-            limited |= self.compute(d, input, context, true, options)?;
+            limited |= self.compute(d, input, context, true, graph_options)?;
             self.fast_ready = true;
         }
-        limited |= self.render(d, input, 0);
+        limited |= self.render(d, input, 0, options);
         if options != 0 {
             return Ok(limited);
         }
@@ -524,7 +553,9 @@ impl Decoder {
             return Ok(false);
         }
         let base = self.count;
-        let limited = self.compute(d, input, context, true, options)? | self.render(d, input, base);
+        let graph_options = if self.exact_prefix { 0 } else { options };
+        let limited = self.compute(d, input, context, true, graph_options)?
+            | self.render(d, input, base, options);
         self.fast_ready = true;
         Ok(limited)
     }

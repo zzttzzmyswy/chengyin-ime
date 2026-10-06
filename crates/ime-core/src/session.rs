@@ -105,6 +105,7 @@ pub struct Session {
     page: usize,
     selected: usize,
     lexical_matches: bool,
+    early_prefix_done: bool,
     sentence_index: usize,
     segment_index: usize,
     phase: u8,
@@ -154,6 +155,7 @@ impl Session {
             page: 0,
             selected: 0,
             lexical_matches: false,
+            early_prefix_done: false,
             sentence_index: 0,
             segment_index: 0,
             phase: 0,
@@ -850,7 +852,11 @@ impl Session {
                         self.word_line = true;
                         return Some(r);
                     }
-                    self.phase = 5;
+                    self.phase = if self.decoder.exact_prefix && !self.early_prefix_done {
+                        13
+                    } else {
+                        5
+                    };
                     self.sentence_index = 0;
                 }
                 5 => {
@@ -905,6 +911,11 @@ impl Session {
                         if let Some(prefix) = self.next_prefix() {
                             return Some(prefix);
                         }
+                    }
+                    if self.decoder.exact_prefix && !self.early_prefix_done {
+                        self.early_prefix_done = true;
+                        self.phase = 5;
+                        continue;
                     }
                     self.budget_limited |= self
                         .cursor
@@ -1019,9 +1030,31 @@ impl Session {
             .reset(&self.dictionary, &self.raw[self.offset..])
             .expect("validated input");
         self.lexical_matches = self.cursor.has_matches();
+        self.prefix_end = 0;
+        self.prefix_ends = 0;
+        self.early_prefix_done = false;
+        let input = &self.raw[self.offset..];
+        let complete = crate::syllables::count_spelling(input).is_some_and(|n| n >= 3);
+        let mut exact_prefix = false;
+        let mut prefix_limited = false;
+        if self.initials_count == 0 && self.incremental && !self.single_syllable {
+            prefix_limited = self
+                .dictionary
+                .matches(input, 0, 1, |id, end| {
+                    if end < input.len() {
+                        self.prefix_ends |= 1u64 << end;
+                        exact_prefix |= complete
+                            && self.dictionary.entry(id).pinyin.contains('\'')
+                            && self.dictionary.entry(id).text.chars().nth(1).is_some()
+                            && crate::syllables::count_spelling(&input[end..]).is_some();
+                    }
+                })
+                .is_err();
+        }
         if self.initials_count != 0 {
             self.decoder.count = 0;
             self.decoder.segment_count = 0;
+            self.decoder.exact_prefix = false;
             self.budget_limited = false;
         } else {
             match self.decoder.decode(
@@ -1033,6 +1066,7 @@ impl Session {
                     &self.completed
                 },
                 self.matching_options,
+                exact_prefix,
             ) {
                 Err(_) => {
                     // Full-input trie validation already passed; an unusually ambiguous
@@ -1041,24 +1075,8 @@ impl Session {
                     self.decoder.segment_count = 0;
                     self.budget_limited = true;
                 }
-                Ok(limited) => self.budget_limited = limited,
+                Ok(limited) => self.budget_limited = limited || prefix_limited,
             }
-        }
-        self.prefix_end = 0;
-        self.prefix_ends = 0;
-        if self.initials_count == 0
-            && self.incremental
-            && crate::syllables::count_spelling(&self.raw[self.offset..]) != Some(1)
-        {
-            let input = &self.raw[self.offset..];
-            self.budget_limited |= self
-                .dictionary
-                .matches(input, 0, 1, |_, end| {
-                    if end < input.len() {
-                        self.prefix_ends |= 1u64 << end;
-                    }
-                })
-                .is_err();
         }
         self.results.clear();
         self.page = 0;

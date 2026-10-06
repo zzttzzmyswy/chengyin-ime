@@ -925,6 +925,7 @@ void Settings::command(int id, int event) {
     }
     if (id == 607) {
         MessageBoxW(window_, MYSWY_VERSION L" · 2026-10-06\n\n"
+                    L"• 保护准确词组前缀，支持句末吧/吗/呢/啊/呀；整句纠错不再逐词叠加预算。\n"
                     L"• 鲸鱼娘主题更换为“Q 版大肥鱼”，采用首页正面全身形象。\n"
                     L"• 准确 A不A、词语＋的优先，抑制纠错生成句扩张。\n"
                     L"• 自定义皮肤收藏、导入导出、PNG 插画、配色、圆角与留白编辑。\n"

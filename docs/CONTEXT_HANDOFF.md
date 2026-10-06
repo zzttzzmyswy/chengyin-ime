@@ -1,5 +1,19 @@
 # 项目精简交接 · 2026-10-06
 
+## 当前追加：preview23 句末助词与准确前缀
+
+codex/exact-sentence-prefix 基于316d7f3。原问题xianzaikaishiba→想再开时报，来自逐词纠错预算累加、缺少句末语气词连接。
+多字词＋吧/吗/呢/啊/呀仅准确、仅终止位置；生成句整串align cost<=2；任何准确完整路径压制非准确生成句。
+Windows立即分段模式保护完整拼音的准确多音节词组前缀，完整字典模糊词仍先召回，前缀在猜测生成句前。
+首选现在开始吧，当前页现在开始消费13字节、ba重匹配。默认staged/C ABI行为不变，无平台IO，个人历史不参与测试。
+102RustRelease/fmt/Clippy/零按键分配64KiB/C ABI/8CTest38.61s通过，新增TSF host接受前缀+取消余拼音回归。
+quality_report --incremental覆盖实际Windows路径，旧/新488条总体/分类/半集汇总一致，Top1/Top9/可达92.0/97.7/98.8%。
+version.json23、头文件与模拟bump通过，CI包名自动派生；新CI待推送后确认。
+本机交付 chengyin-windows-x64-0.1.0-preview23-msvc.exe，5135063 bytes，SHA256 `628a33c65c765c74a11edd6c9870cb6ff3ca16c9068111f6b2fceeb58f44e126`。
+PE/7-Zip/全负载SHA/COM/生产字节一致/22项许可与插画署名CRC通过，已复制主目录。
+见WINDOWS_PREVIEW23_TASKLIST、PERFORMANCE、DEVELOPMENT与build/delivery-preview23.json。
+真实升级宿主/物理DPI未验证，D其余规则/性能与E兼容继续；不操作UAC，不改个人安装/设置/学习。
+
 ## 当前追加：preview22 全身 Q 版大肥鱼与准确结构组句
 
 分支 codex/q-dafeiyu-skin；本批 c08ac94 功能已与 main 0b2ae4b 的 B/C/D 基线合并。

@@ -1,6 +1,6 @@
 # 澄音输入法 · Windows x64 全拼
 
-当前版本：0.1.0-preview22。使用原生 TSF 和共享 Rust 核心，目标 Windows 10
+当前版本：0.1.0-preview23。使用原生 TSF 和共享 Rust 核心，目标 Windows 10
 2004（build 19041）及更新版本、Windows 11，Intel/AMD x64。
 
 候选皮肤：系统、白、黑、青瓷 · 雨后、夜航 · 星图、Q 版大肥鱼（网站首页的正面全身形象）。
@@ -39,7 +39,7 @@ PNG 最大 1024 × 1024 / 2 MiB，皮肤包最大 3 MiB；文字对比度需达�
 
 ## 单文件安装与卸载
 
-原生 Windows 构建交付一个离线 EXE：`chengyin-windows-x64-0.1.0-preview22-msvc.exe`。
+原生 Windows 构建交付一个离线 EXE：`chengyin-windows-x64-0.1.0-preview23-msvc.exe`。
 开发者的 MinGW 交叉构建文件以 `-gnu.exe` 结尾；同版不同工具链的负载不能相互修复覆盖。
 双击安装向导并接受 UAC；无需解压、PowerShell、Rust、额外运行库或联网下载。
 安装后的 DLL、说明和卸载程序由安装器管理，单文件指交付的安装包。

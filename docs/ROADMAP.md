@@ -26,6 +26,9 @@ M0 已有实现；M1 已有插件、自定义词典热切换和 Debian 测试包
 
 ## 最新 M2 / M4 切片
 
+2026-10-06：preview23 修复句末助词导致的局部纠错组句抢占，增加准确前缀保护与整句总预算。
+102 Rust、八原生检查与488条Windows分段模式质量对照通过；D后续/E实装继续，见 WINDOWS_PREVIEW23_TASKLIST。
+
 2026-10-06：preview22 完成 Q 版大肥鱼全身皮肤与准确 A不A/词语＋的组句，96 Rust 与八项原生检查通过；B/C/D 基线已合并，版本统一派生。
 后续推进 review D 优化与 E 升级实机验证，见 WINDOWS_PREVIEW22_TASKLIST。
 

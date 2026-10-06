@@ -1130,6 +1130,33 @@ void runServiceTests(myswy::ProcessorEx *service, ITfKeyEventSink *keys) {
     modern->flushChoice();
     require(modern->doc.text == chosen + L"我", "host abort cannot erase committed prefix");
     candidate.reset();
+    const auto sentenceBase = modern->doc.text;
+    type(keys, modern.get(), "xianzaikaishiba");
+    require(SUCCEEDED(query(manager->ui.get(), kCandidateBehavior, candidate)), "sentence particle host candidates");
+    BSTR sentenceText = nullptr;
+    require(candidate->GetString(0, &sentenceText) == S_OK, "exact sentence host string");
+    const bool exactSentence = std::wstring(sentenceText) == L"现在开始吧";
+    SysFreeString(sentenceText);
+    require(exactSentence, "exact sentence precedes speculative corrected combinations");
+    UINT sentenceCount = 0, phraseIndex = UINT_MAX;
+    require(candidate->GetCount(&sentenceCount) == S_OK, "sentence prefix candidate count");
+    for (UINT i = 0; i < sentenceCount; ++i) {
+        BSTR text = nullptr;
+        require(candidate->GetString(i, &text) == S_OK, "sentence prefix candidate text");
+        if (std::wstring(text) == L"现在开始") phraseIndex = i;
+        SysFreeString(text);
+    }
+    require(phraseIndex != UINT_MAX && candidate->SetSelection(phraseIndex) == S_OK
+            && candidate->Finalize() == S_OK, "queue exact phrase prefix");
+    modern->flushChoice();
+    require(modern->doc.text == sentenceBase + L"现在开始ba" && manager->ui,
+            "host accepts only accurate prefix and retains particle composition");
+    candidate.reset();
+    require(SUCCEEDED(query(manager->ui.get(), kCandidateBehavior, candidate))
+            && candidate->Abort() == S_OK, "cancel remaining particle");
+    modern->flushChoice();
+    require(modern->doc.text == sentenceBase + L"现在开始", "particle cancel preserves accepted phrase");
+    candidate.reset();
     require(service->Deactivate() == S_OK && manager->refs == 1
             && modern->refs == 1, "modern UI lifecycle releases contexts and manager");
     require(manager->begins == manager->ends, "all host UI elements retired");
