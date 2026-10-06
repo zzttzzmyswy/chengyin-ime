@@ -71,10 +71,14 @@ void releaseDictionary(MyswyDictionary *owned) {
 // Retries an unfulfilled custom vocabulary whose backoff elapsed. The caller only
 // republishes when a snapshot was actually admitted, so a still-locked file cannot
 // retire an active session's vocabulary (review R09).
+// The fixed-vocabulary fixture has no user file to retry, so the helper exists
+// only where a real custom vocabulary can fail (review R09).
+#ifndef MYSWY_FIXED_TEST_VOCABULARY
 bool retryDictionary() {
     const auto stamp = customDictionaryStamp();
     return dictionarySource().retry(stamp.exists, stamp);
 }
+#endif
 class EndEdit final : public ITfEditSession {
   public:
     explicit EndEdit(ITfComposition *composition) : composition_(composition) {}
@@ -403,7 +407,11 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
                         keep(this);
                         receiveConfiguration(std::move(snapshot));
                     }, kConfigurationEpoch, userFile(L"preferences.ini"), profileRevisionName(profilePath),
+#ifdef MYSWY_FIXED_TEST_VOCABULARY
+                       {});
+#else
                        [] { return retryDictionary(); });
+#endif
                 } catch (...) {
                     watcher_.reset();
                 }
@@ -442,11 +450,10 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         snapshot->preferencesValid = true;
         if (data) {
             snapshot->dictionary = myswy_dictionary_new_tsv(data, size);
-            if (snapshot->dictionary) {
-                AcquireSRWLockExclusive(&dictionaryLock);
-                ++dictionaryUsers;
-                ReleaseSRWLockExclusive(&dictionaryLock);
-            }
+            // The fixture's TSV dictionary is a consumer of the DLL-scoped source
+            // bookkeeping too, so it is counted here exactly like an acquired one.
+            if (snapshot->dictionary)
+                dictionarySource().adopt(snapshot->dictionary);
         } else
             snapshot->dictionary = acquireDictionary();
         snapshot->releaseDictionary = releaseDictionary;
