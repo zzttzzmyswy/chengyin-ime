@@ -155,9 +155,9 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
     // move. The final placement shows it again at the caret.
     bool needsShow = !visible;
     if (caretMonitor && (!visible || placementMonitor_ != caretMonitor)) {
-        MONITORINFO target{};
-        target.cbSize = sizeof(target);
-        if (GetMonitorInfoW(caretMonitor, &target)) {
+        MONITORINFO caretArea{};
+        caretArea.cbSize = sizeof(caretArea);
+        if (GetMonitorInfoW(caretMonitor, &caretArea)) {
             // A cross-monitor DPI change needs the popup on the target monitor
             // before querying it. Hide it for that one move so no frame lands on
             // the old monitor; either way the window is shown only once below.
@@ -166,7 +166,7 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
             needsShow = true;
             // Anywhere inside the target monitor works for the DPI probe; the
             // work-area corner stays off the caret so no frame lands beside it.
-            SetWindowPos(hwnd_, nullptr, target.rcWork.left, target.rcWork.top, 0, 0,
+            SetWindowPos(hwnd_, nullptr, caretArea.rcWork.left, caretArea.rcWork.top, 0, 0,
                          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
             placementMonitor_ = caretMonitor;
         }
