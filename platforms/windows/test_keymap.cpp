@@ -83,6 +83,91 @@ int main() {
     require(shift.up(VK_RSHIFT, right, 2, false), "both Shift setting supports right Shift");
     shift.down(VK_LSHIFT, left, 0, false);
     require(!shift.pending(), "disabled Shift shortcut");
+    // Candidate placement is window-free, so the flip rule and its hysteresis are
+    // checked without a desktop: below when it fits, above when it does not, and a
+    // stable side while one line wobbles at the work-area edge.
+    {
+        const RECT work{0, 0, 1000, 800};
+        const auto place = [work](RECT caret, int height, PlacementState &state) {
+            PlacementInput input;
+            input.caret = caret; input.work = work;
+            input.width = 200; input.height = height; input.gap = 4;
+            input.slack = 2; input.band = 30;
+            return placeCandidates(input, state);
+        };
+        const RECT roomy{100, 100, 101, 120};
+        PlacementState state;
+        PlacementResult placed = place(roomy, 200, state);
+        require(placed.side == Placement::below && placed.top == 124,
+                "room below places the popup under the caret");
+        require(placed.left == 100, "popup follows the caret horizontally");
+        const RECT low{100, 750, 101, 770};
+        placed = place(low, 200, state);
+        require(placed.side == Placement::above && placed.top == 546,
+                "no room below places the popup above the caret");
+        // Candidate count changes move the height by one row; the side stays up
+        // until the difference is large enough to have caused the flip.
+        placed = place(low, 170, state);
+        require(placed.side == Placement::above && placed.top == 576,
+                "a shorter popup at the same edge keeps the upper side");
+        placed = place(low, 230, state);
+        require(placed.side == Placement::above && placed.top == 516,
+                "a taller popup at the same edge keeps the upper side");
+        // The band is the real guard: a popup that now fits below stays above
+        // while the room is short of what the flip up had to recover.
+        PlacementState banded;
+        placed = place(RECT{100, 640, 101, 660}, 160, banded);
+        require(placed.side == Placement::above && placed.top == 476,
+                "a popup that does not fit below starts above");
+        placed = place(RECT{100, 640, 101, 660}, 130, banded);
+        require(placed.side == Placement::above,
+                "fitting below by less than one row does not drop the popup back");
+        placed = place(RECT{100, 640, 101, 660}, 100, banded);
+        require(placed.side == Placement::below && placed.top == 664,
+                "enough room below returns the popup under the caret");
+        // A new line decides again from the space alone.
+        placed = place(RECT{100, 750, 101, 770}, 200, banded);
+        require(placed.side == Placement::above && placed.top == 546,
+                "a new line near the work-area edge flips above");
+        PlacementState settled;
+        placed = place(RECT{100, 300, 101, 330}, 200, settled);
+        require(placed.side == Placement::below && placed.top == 334,
+                "a caret with room below places the popup under it");
+        placed = place(RECT{100, 300, 101, 331}, 220, settled);
+        require(placed.side == Placement::below && placed.top == 335,
+                "a one-pixel caret-height wobble keeps the side and only moves the top");
+        // A new composition starts without memory, so the first frame is decided
+        // by the space alone.
+        PlacementState fresh;
+        placed = place(RECT{100, 100, 101, 120}, 200, fresh);
+        require(placed.side == Placement::below, "a fresh composition starts below when it fits");
+        placed = place(RECT{100, 700, 101, 720}, 200, fresh);
+        require(placed.side == Placement::above, "a fresh composition flips up when it does not fit");
+        // A popup taller than the work area is pinned inside it, not off-screen.
+        placed = place(RECT{100, 790, 101, 799}, 900, fresh);
+        require(placed.top == 0 && placed.side == Placement::above,
+                "an oversized popup is clamped into the work area");
+        // A caret may sit on a second monitor whose work area starts at 2000; the
+        // popup follows that monitor instead of using the first one's origin.
+        PlacementState second;
+        PlacementInput other;
+        other.caret = RECT{2020, 760, 2021, 780};
+        other.work = RECT{2000, 0, 3000, 800};
+        other.width = 200; other.height = 200; other.gap = 4; other.slack = 2; other.band = 30;
+        placed = placeCandidates(other, second);
+        require(placed.left == 2020 && placed.top == 556 && placed.side == Placement::above,
+                "a caret near the bottom of the second monitor flips up inside that work area");
+        other.caret = RECT{2020, 100, 2021, 120};
+        placed = placeCandidates(other, second);
+        require(placed.left == 2020 && placed.top == 124 && placed.side == Placement::below,
+                "a caret with room on the second monitor places the popup under it");
+        // Clamping never leaves the caret's own work area: a caret at the right
+        // edge of the second monitor shifts the popup back inside it.
+        other.caret = RECT{2960, 100, 2961, 120};
+        placed = placeCandidates(other, second);
+        require(placed.left == 2800 && placed.top == 124,
+                "a popup at the right work-area edge is clamped inside that monitor");
+    }
     MyswySession *session = myswy_session_new();
     require(session != nullptr, "session");
     type(session, "nihao");
@@ -182,6 +267,29 @@ int main() {
         candidates.hide();
         SendMessageW(popup, WM_LBUTTONUP, 0, firstRow);
         require(clicks.count == 1 && GetCapture() != popup, "hidden candidate releases capture and cannot commit");
+        // Real popup geometry: it lands on the side the placement rule chose.
+        {
+            MONITORINFO monitor{}; monitor.cbSize = sizeof(monitor);
+            require(GetMonitorInfoW(MonitorFromWindow(popup, MONITOR_DEFAULTTONEAREST), &monitor), "popup monitor");
+            const RECT work = monitor.rcWork;
+            const LONG middle = (work.top + work.bottom) / 2;
+            const RECT high{100, work.bottom - 200, 101, work.bottom - 180};
+            candidates.show(session, owner, high, false, &clicks, clicked, 30, headerPrefs, true);
+            RECT above{}; GetWindowRect(popup, &above);
+            require(above.bottom <= high.top, "popup near the work-area bottom is placed above the caret");
+            // A one-pixel caret-height wobble must not move the popup: above, the
+            // top edge comes from the caret top, not from the caret height.
+            candidates.show(session, owner, RECT{100, work.bottom - 200, 101, work.bottom - 179},
+                            false, &clicks, clicked, 31, headerPrefs, true);
+            RECT wobble{}; GetWindowRect(popup, &wobble);
+            require(wobble.top == above.top && wobble.left == above.left,
+                    "a caret-height wobble does not move the popup");
+            // The drop back below happens on a caret move, not on a side flicker.
+            const RECT middleCaret{100, middle, 101, middle + 20};
+            candidates.show(session, owner, middleCaret, false, &clicks, clicked, 32, headerPrefs, true);
+            RECT lower{}; GetWindowRect(popup, &lower);
+            require(lower.top >= middleCaret.bottom, "a caret with room below is placed under it");
+        }
         for (int theme : {0,1,2,10,11,12}) {
             Preferences prefs; prefs.theme = theme; prefs.density = 0;
             for (int layout : {0, 1}) for (int size : {18, 36}) {
