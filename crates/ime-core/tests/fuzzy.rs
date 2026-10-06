@@ -58,10 +58,7 @@ fn keyboard_errors_are_bounded_and_marked_by_canonical_letter() {
         typed(&mut s, raw);
         let i = find(&mut s, text);
         assert_eq!(s.candidate(i).unwrap().pinyin, canonical);
-        println!(
-            "{raw} -> text={text} marked={:?} expected={letters}",
-            marked(&s, i)
-        );
+        assert_eq!(marked(&s, i), letters, "{raw}");
         assert!(!s.configure_matching(0));
         assert_eq!(s.preedit(), raw);
         s.process(Key::Select(i), Modifiers::default());
