@@ -47,7 +47,9 @@ fn complete_match_and_independent_prefix_choices_commit_and_rematch() {
         assert!(s.preedit().is_empty());
         assert_eq!(s.learning_key(), "biaodashi");
         assert!(s.learn_commit());
-        assert_eq!(s.profile().entry_count(), 2);
+        // Both segments plus the whole spelling/phrase pair they were committed
+        // as; see tests/phrase_learning.rs for the dedicated coverage.
+        assert_eq!(s.profile().entry_count(), 3);
     }
 }
 #[test]
