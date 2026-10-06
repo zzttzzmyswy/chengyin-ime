@@ -1,5 +1,5 @@
 {
   "_comment": "审查 R13 的单一版本源。Windows UI、更新器、安装包与 CI 元数据全部从此处生成；不要在其他文件重复维护版本字面量。",
   "version": "0.1.0",
-  "preview": 23
+  "preview": 24
 }

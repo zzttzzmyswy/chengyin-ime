@@ -375,7 +375,7 @@ void Settings::buildPage() {
     }
     case 3: {
         begin(L"当前词库");
-        paragraph(L"内置 87,540 条开源字词，来源为 Rime 与 jieba。");
+        paragraph(L"内置 184,173 条开源字词，来源为 Rime、jieba、THUOCL 与 phrase-pinyin-data。");
         paragraph(L"内置词库始终保留。每个导入文件为一个独立条目，可以手动启用、停用或删除。删除条目不会删除原始文件或学习数据。");
         end();
         begin(L"自定义词库列表");
