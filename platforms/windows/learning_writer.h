@@ -24,6 +24,11 @@ class LearningWriter {
     // snapshot is older than it, so a plain reload must not adopt that snapshot
     // over the choice the user already made.
     bool pending() const;
+    // True when a snapshot carrying `revision` predates this writer's own last
+    // successful save, or a save is still in flight. Adopting such a snapshot
+    // would roll the in-memory profile back behind a choice already persisted
+    // here; the next revision poll supersedes it instead.
+    bool supersedes(DWORD revision) const;
   private:
     void run();
     struct Event {
@@ -45,6 +50,9 @@ class LearningWriter {
     // Retry state for the head event, and counters that never hold input text.
     unsigned attempts_ = 0;
     ULONGLONG firstAttempt_ = 0;
+    // Highest revision this writer has published, so a stale snapshot can be
+    // recognised after the queue has already drained.
+    DWORD savedRevision_ = 0;
     mutable LearningWriterStats stats_{};
     std::thread thread_;
 };

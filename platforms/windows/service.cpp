@@ -1222,11 +1222,11 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         // another application's selections. Adopting it must not retire the active
         // session, so it never unbinds and never touches the dictionary.
         if (revisionOnly_) {
-            // While this service still has an unconfirmed selection queued, the
-            // on-disk snapshot is older than what the user already chose, so it
-            // must not overwrite the in-memory profile. The queued event publishes
-            // a revision that supersedes this snapshot once it saves.
-            if (writer_ && writer_->pending())
+            // The on-disk snapshot is older than a selection this service already
+            // made: either one is still queued, or this service itself published
+            // at least this revision. Adopting it would roll the in-memory profile
+            // back behind a confirmed choice, so it waits for the next revision.
+            if (writer_ && writer_->supersedes(pendingConfiguration_->learningRevision))
                 return;
             auto next = std::move(pendingConfiguration_);
             if (next->profile) {

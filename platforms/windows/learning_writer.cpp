@@ -48,6 +48,10 @@ bool LearningWriter::pending() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return count_ > 0;
 }
+bool LearningWriter::supersedes(DWORD revision) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return count_ > 0 || revision <= savedRevision_;
+}
 void LearningWriter::run() {
     for (;;) {
         Event event;
@@ -75,9 +79,14 @@ void LearningWriter::run() {
             --count_;
             attempts_ = 0;
             firstAttempt_ = 0;
-            if (outcome == ProfileUpdate::saved)
+            if (outcome == ProfileUpdate::saved) {
                 ++stats_.saved;
-            else
+                // Record what this save published so a snapshot the watcher
+                // loaded before it is recognised as stale afterwards.
+                LearningEpoch revision(profileRevisionName(path_).c_str());
+                if (revision.valid())
+                    savedRevision_ = revision.current();
+            } else
                 ++stats_.invalidated; // a clear/import generation moved under it
             continue;
         }

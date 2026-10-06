@@ -461,6 +461,15 @@ int main() {
             while (writer.stats().saved == 0 && GetTickCount64() < savedBy)
                 Sleep(5);
             require(writer.stats().saved == 1 && !writer.pending(), "the retained selection reaches disk");
+            // The writer remembers what it published, so a snapshot recorded
+            // before this save is still recognised as stale: adopting it would
+            // roll the in-memory profile back behind a persisted choice.
+            myswy::LearningEpoch revision(myswy::profileRevisionName(racePath).c_str());
+            const auto published = revision.current();
+            require(!writer.supersedes(published + 1),
+                    "a snapshot newer than this writer's own save is adoptable");
+            require(writer.supersedes(published),
+                    "a snapshot at this writer's own revision is stale");
         }
         if (held3 != INVALID_HANDLE_VALUE)
             CloseHandle(held3);
