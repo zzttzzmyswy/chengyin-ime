@@ -360,6 +360,35 @@ pub unsafe extern "C" fn myswy_dictionary_merge(
     }))
     .unwrap_or(ptr::null_mut())
 }
+/// One-shot merge of several immutable dictionaries, so a library of many
+/// vocabularies compiles once instead of rebuilding after every pair. NULL is
+/// returned unless every entry is live and the union validates.
+#[no_mangle]
+pub unsafe extern "C" fn myswy_dictionary_merge_all(
+    dictionaries: *const *const MyswyDictionary,
+    count: usize,
+) -> *mut MyswyDictionary {
+    if dictionaries.is_null() || count == 0 || count > 64 {
+        return ptr::null_mut();
+    }
+    catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: the caller supplies `count` live immutable handles.
+        let handles = unsafe { std::slice::from_raw_parts(dictionaries, count) };
+        let mut borrowed = Vec::with_capacity(count);
+        for &handle in handles {
+            match unsafe { handle.as_ref() } {
+                Some(dictionary) => borrowed.push(dictionary.0.as_ref()),
+                None => return ptr::null_mut(),
+            }
+        }
+        Dictionary::merge_all(borrowed)
+            .ok()
+            .map_or(ptr::null_mut(), |d| {
+                Box::into_raw(Box::new(MyswyDictionary(Arc::new(d))))
+            })
+    }))
+    .unwrap_or(ptr::null_mut())
+}
 #[no_mangle]
 pub unsafe extern "C" fn myswy_dictionary_entry_count(dictionary: *const MyswyDictionary) -> i32 {
     guard(|| {
