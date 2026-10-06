@@ -22,6 +22,42 @@ bool readText(MyswySession *session, uint32_t field, size_t index, WideText &out
                                      size - 1, out.data, static_cast<int>(std::size(out.data) - 1));
     return out.length > 0;
 }
+PlacementResult placeCandidates(const PlacementInput &input, PlacementState &state) {
+    const int below = static_cast<int>(input.caret.bottom) + input.gap;
+    const int belowRoom = static_cast<int>(input.work.bottom) - below;
+    const bool fitsBelow = belowRoom >= input.height;
+    // The side sticks while the caret top stays put, i.e. within one line of one
+    // composition. A caret-height wobble must not read as a move, hence the slack.
+    const int shift = static_cast<int>(input.caret.top) - static_cast<int>(state.caretTop);
+    const bool sticky = state.valid && shift <= input.slack && -shift <= input.slack;
+    Placement side = state.side;
+    if (!sticky) {
+        side = fitsBelow ? Placement::below : Placement::above;
+    } else if (side == Placement::above) {
+        // Returning below takes more room than flipping up did: a popup that
+        // wobbles by one candidate row at the work-area edge would otherwise
+        // bounce on every keystroke. One row of band absorbs exactly that.
+        side = belowRoom >= input.height + input.band ? Placement::below : Placement::above;
+    } else {
+        side = fitsBelow ? Placement::below : Placement::above;
+    }
+    PlacementResult result;
+    result.side = side;
+    // Above placement only depends on the caret top, never on the result of the
+    // below placement, so a caret-height wobble cannot move the popup.
+    result.top = side == Placement::below ? below
+                                          : static_cast<int>(input.caret.top) - input.height - input.gap;
+    const int leftmost = static_cast<int>(input.work.left);
+    const int rightmost = std::max(leftmost, static_cast<int>(input.work.right) - input.width);
+    result.left = std::clamp(static_cast<int>(input.caret.left), leftmost, rightmost);
+    const int topmost = static_cast<int>(input.work.top);
+    const int bottommost = std::max(topmost, static_cast<int>(input.work.bottom) - input.height);
+    result.top = std::clamp(result.top, topmost, bottommost);
+    state.side = side;
+    state.caretTop = input.caret.top;
+    state.valid = true;
+    return result;
+}
 CandidateWindow::~CandidateWindow() {
     if (hwnd_)
         DestroyWindow(hwnd_);
@@ -54,6 +90,9 @@ void CandidateWindow::hide() {
     hover_ = -1;
     choice_ = nullptr;
     target_ = nullptr;
+    // A new composition starts without a remembered side.
+    placement_ = {};
+    placementMonitor_ = nullptr;
     if (hwnd_) {
         if (GetCapture() == hwnd_)
             ReleaseCapture();
@@ -107,9 +146,31 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
     const bool sameOwner = reinterpret_cast<HWND>(GetWindowLongPtrW(hwnd_, GWLP_HWNDPARENT)) == owner;
     if (!sameOwner)
         SetWindowLongPtrW(hwnd_, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(owner));
-    // Move before querying DPI: the caret may be on a different monitor from
-    // the owner's top-level window. Windows scales the popup for that monitor.
-    SetWindowPos(hwnd_, nullptr, caret.left, caret.bottom, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+    // The popup must be created on the caret's monitor so Windows scales it for
+    // that monitor's DPI. A visible popup is never moved to the caret here:
+    // moving it before the size is known composites it once below the caret and
+    // once at its final place, which is the flicker this avoids.
+    const HMONITOR caretMonitor = MonitorFromRect(&caret, MONITOR_DEFAULTTONEAREST);
+    // Hidden for the DPI probe: never yet shown, or hidden for one cross-monitor
+    // move. The final placement shows it again at the caret.
+    bool needsShow = !visible;
+    if (caretMonitor && (!visible || placementMonitor_ != caretMonitor)) {
+        MONITORINFO caretArea{};
+        caretArea.cbSize = sizeof(caretArea);
+        if (GetMonitorInfoW(caretMonitor, &caretArea)) {
+            // A cross-monitor DPI change needs the popup on the target monitor
+            // before querying it. Hide it for that one move so no frame lands on
+            // the old monitor; either way the window is shown only once below.
+            if (visible)
+                ShowWindow(hwnd_, SW_HIDE);
+            needsShow = true;
+            // Anywhere inside the target monitor works for the DPI probe; the
+            // work-area corner stays off the caret so no frame lands beside it.
+            SetWindowPos(hwnd_, nullptr, caretArea.rcWork.left, caretArea.rcWork.top, 0, 0,
+                         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+            placementMonitor_ = caretMonitor;
+        }
+    }
     const UINT dpi = windowDpi(hwnd_);
     auto scale = [dpi](int n) {
         return MulDiv(n, static_cast<int>(dpi), 96);
@@ -287,12 +348,21 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         }
     }
     footerRect_ = {padding_, height - padding_ - footerHeight_, width - padding_ - rail_, height - padding_};
-    const int x = std::clamp(static_cast<int>(caret.left), static_cast<int>(work.left),
-                             static_cast<int>(work.right) - width);
-    int y = static_cast<int>(caret.bottom) + scale(4);
-    if (y + height > work.bottom)
-        y = static_cast<int>(caret.top) - height - scale(4);
-    y = std::clamp(y, static_cast<int>(work.top), static_cast<int>(work.bottom) - height);
+    // One window-free decision for the side (with hysteresis) and the coordinates,
+    // so the size correction above cannot flip the popup on its own.
+    PlacementInput placement;
+    placement.caret = caret;
+    placement.work = work;
+    placement.width = width;
+    placement.height = height;
+    placement.gap = scale(4);
+    // A caret-height wobble must not count as a move; the row height it can
+    // produce is a few pixels, so the threshold only has to absorb that.
+    placement.slack = std::max(1, scale(2));
+    // One row of band absorbs a single-line candidate-count change at the edge.
+    placement.band = rowHeight_;
+    const PlacementResult placed = placeCandidates(placement, placement_);
+    const int x = placed.left, y = placed.top;
     RECT before{};
     GetWindowRect(hwnd_, &before);
     UINT flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOREDRAW;
@@ -300,7 +370,7 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         flags |= SWP_NOMOVE;
     if (before.right - before.left == width && before.bottom - before.top == height)
         flags |= SWP_NOSIZE;
-    if (!visible)
+    if (needsShow)
         flags |= SWP_SHOWWINDOW;
     SetWindowPos(hwnd_, HWND_TOPMOST, x, y, width, height, flags);
     const int radius = skin ? scale(skin->radius) : themeRadius(visualTheme(preferences.theme), dpi);

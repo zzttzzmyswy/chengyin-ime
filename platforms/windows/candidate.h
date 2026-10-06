@@ -9,6 +9,28 @@ struct WideText {
     int length = 0;
 };
 bool readText(MyswySession *session, uint32_t field, size_t index, WideText &out);
+// Vertical side of the caret the popup is placed on.
+enum class Placement { below, above };
+struct PlacementInput {
+    RECT caret{};
+    RECT work{};
+    int width = 0, height = 0, gap = 0;
+    int slack = 0;  // caret-top movement that invalidates the sticky side
+    int band = 0;   // extra room below needed before leaving the upper side
+};
+// Memory for one composition: the side chosen so far together with the caret it
+// was chosen for.
+struct PlacementState {
+    Placement side = Placement::below;
+    LONG caretTop = 0;
+    bool valid = false;
+};
+struct PlacementResult {
+    int left = 0, top = 0;
+    Placement side = Placement::below;
+};
+// Window-free so the flip and hysteresis rules are unit testable.
+PlacementResult placeCandidates(const PlacementInput &input, PlacementState &state);
 class CandidateWindow {
   public:
     using Choice = void (*)(void *, uint64_t, int);
@@ -54,6 +76,8 @@ class CandidateWindow {
     int shapeWidth_ = 0, shapeHeight_ = 0, shapeRadius_ = -1;
     int numberWidth_ = 0, scrollOffset_ = 0, scrollMaximum_ = 0;
     bool inlineEditable_ = false, showPinyin_ = false;
+    PlacementState placement_{};
+    HMONITOR placementMonitor_ = nullptr;
     RECT requestedCaret_{};
     bool limited_ = false;
     void *target_ = nullptr;
