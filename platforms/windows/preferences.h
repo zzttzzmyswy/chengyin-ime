@@ -1,5 +1,6 @@
 #pragma once
 #include <windows.h>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include "myswy_ime.h"
@@ -53,12 +54,40 @@ class LearningEpoch {
     HANDLE mapping_ = nullptr;
     volatile LONG *value_ = nullptr;
 };
-// Normalize path spelling and isolate destructive invalidation to one profile.
+// Normalize path spelling and isolate both channels to one profile path.
+// The generation moves only on clear/import and means "discard everything".
+// The revision moves on every successful ordinary save and means "reload";
+// keeping them separate is what stops normal learning from invalidating the
+// queued events of another application.
 std::wstring profileEpochName(const std::wstring &path);
+std::wstring profileRevisionName(const std::wstring &path);
 std::wstring configurationEpochName();
 void notifyConfiguration();
-bool updateProfile(const std::wstring &, const uint8_t *, size_t, const uint8_t *, size_t,
-                   const DWORD *expectedEpoch = nullptr, uint32_t matchingFlags = 0);
+// Result of applying one queued learning event.
+enum class ProfileUpdate {
+    saved,       // persisted; the revision has advanced
+    invalidated, // a clear/import generation moved: intentional no-op
+    retry,       // storage failed; the event is intact and must be retried
+};
+ProfileUpdate updateProfile(const std::wstring &, const uint8_t *, size_t, const uint8_t *, size_t,
+                            const DWORD *expectedEpoch = nullptr, uint32_t matchingFlags = 0);
+// Bounded retry budget for one queued event: an event is abandoned as soon as
+// either bound is spent, so a permanently unavailable store cannot stall the
+// queue or the unload path indefinitely.
+struct LearningRetryPolicy {
+    unsigned attempts = 4;
+    ULONGLONG window = 30000;
+    unsigned backoff = 50; // doubling, starting from this many milliseconds
+};
+// Statistics deliberately carry no input content.
+struct LearningWriterStats {
+    std::uint64_t saved = 0,     // persisted
+        invalidated = 0,         // dropped because a clear/import generation moved
+        rejected = 0,            // never queued: full queue or malformed event
+        retried = 0,             // failed attempts on storage that was unavailable
+        exhausted = 0,           // retry budget spent on unavailable storage
+        abandoned = 0;           // still unsaved when shutdown arrived
+};
 struct Palette {
     COLORREF background, surface, text, muted, border, accent, selected, selectedText;
 };

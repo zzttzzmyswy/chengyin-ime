@@ -16,6 +16,10 @@ struct ConfigurationUpdate {
     void (*releaseDictionary)(MyswyDictionary *) = nullptr;
     MyswyProfile *profile = nullptr;
     DWORD learningGeneration = 0;
+    // Ordinary (non-destructive) learning revision. A newer revision replaces the
+    // in-memory snapshot without invalidating anything the service already queued.
+    DWORD learningRevision = 0;
+    bool hasRevision = false;
     ~ConfigurationUpdate() {
         if (dictionary && releaseDictionary)
             releaseDictionary(dictionary);
@@ -28,9 +32,13 @@ struct ConfigurationUpdate {
 class ConfigurationWatcher {
   public:
     using Snapshot = std::shared_ptr<ConfigurationUpdate>;
+    // `observed` is the configuration generation. `revision` optionally adds the
+    // profile's ordinary learning revision, so a plain selection made by another
+    // application reloads this service's snapshot without, unlike a destructive
+    // generation change, invalidating anything this service has queued.
     ConfigurationWatcher(DWORD observed, std::function<Snapshot()> load,
                          std::function<void(Snapshot)> apply, const wchar_t *name = nullptr,
-                         std::wstring preferencesPath = {});
+                         std::wstring preferencesPath = {}, std::wstring revisionName = {});
     ~ConfigurationWatcher();
     bool valid() const {
         return window_ && stop_ && worker_.joinable();
@@ -39,6 +47,7 @@ class ConfigurationWatcher {
     static LRESULT CALLBACK procedure(HWND, UINT, WPARAM, LPARAM);
     ModuleLifetime lifetime_;
     LearningEpoch epoch_;
+    LearningEpoch revision_;
     HWND window_ = nullptr;
     HANDLE stop_ = nullptr;
     std::thread worker_;
