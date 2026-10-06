@@ -20,9 +20,10 @@ FileStamp stamp(const std::wstring &path) {
 }
 ConfigurationWatcher::ConfigurationWatcher(DWORD observed, std::function<Snapshot()> load,
         std::function<void(Snapshot)> apply, const wchar_t *name, std::wstring preferencesPath,
-        std::wstring revisionName):
+        std::wstring revisionName, std::function<bool()> due):
         epoch_(name ? name : configurationEpochName().c_str()),
-        revision_(revisionName.empty() ? nullptr : revisionName.c_str()), apply_(std::move(apply)) {
+        revision_(revisionName.empty() ? nullptr : revisionName.c_str()), apply_(std::move(apply)),
+        due_(std::move(due)) {
     stop_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     window_ = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, module, nullptr);
     if (!window_ || !stop_ || (!epoch_.valid() && preferencesPath.empty()))
@@ -43,7 +44,11 @@ ConfigurationWatcher::ConfigurationWatcher(DWORD observed, std::function<Snapsho
                 // reload even when the configuration generation and the
                 // preference file are both unchanged.
                 const bool revised = nextRevision != observedRevision;
-                if ((!initial && next == observed && current == previous && !revised)
+                // A retry that is due must reload even though neither the file nor
+                // any generation changed; otherwise an unfulfilled vocabulary would
+                // wait for an unrelated event before it is ever retried (review R09).
+                const bool due = due_ && due_();
+                if ((!initial && next == observed && current == previous && !revised && !due)
                         || GetTickCount64() < retryAt)
                     continue;
                 try {
