@@ -136,7 +136,7 @@ fn binary_roundtrip_rejects_truncation_damage_and_invalid_structure() {
     let bytes = d.to_binary();
     assert_eq!(bytes, include_bytes!("../../../data/daily.mswydict"));
     let decoded = Dictionary::from_binary(&bytes).unwrap();
-    assert_eq!(decoded.entry_count(), 87540);
+    assert_eq!(decoded.entry_count(), d.entry_count());
     assert_eq!(decoded.to_binary(), bytes);
     for query in ["nihao", "zhongguo", "shuru", "nv'er", "xian", "shi", "ren"] {
         let a = d.lookup(query).unwrap();
@@ -170,7 +170,10 @@ fn binary_roundtrip_rejects_truncation_damage_and_invalid_structure() {
     }
     corrupt[32..36].copy_from_slice(&(!crc).to_le_bytes());
     assert!(Dictionary::from_binary(&corrupt).is_err());
-    assert!(d.estimated_heap_bytes() < 32 * 1024 * 1024);
+    // A per-entry budget, so the guard keeps its meaning as the lexicon grows:
+    // 384 bytes/entry is what the previous fixed 32 MiB bound allowed at 87,540
+    // entries.
+    assert!(d.estimated_heap_bytes() <= d.entry_count() * 384);
 }
 #[test]
 fn daily_vocabulary_composes_phrases_absent_from_the_source() {
@@ -331,4 +334,37 @@ fn unlocking_cannot_overflow_the_utf8_preedit_contract() {
     assert_eq!(s.preedit(), previous);
     assert_eq!(s.preedit_cursor(), cursor);
     assert!(s.preedit().len() <= MAX_TEXT_BYTES);
+}
+
+/// I05: the shipped lexicon must stay at least twice the I04 size, stay inside the
+/// v2 format limits, and actually cover words the previous lexicon lacked.
+#[test]
+fn shipped_lexicon_is_at_least_double_the_i04_size_and_covers_new_words() {
+    let d = Dictionary::from_tsv(include_str!("../../../data/daily.tsv")).unwrap();
+    assert!(
+        d.entry_count() >= 175_080,
+        "lexicon shrank below the I05 target: {}",
+        d.entry_count()
+    );
+    assert!(d.entry_count() < 250_000, "entry limit");
+    assert!(d.estimated_heap_bytes() < 64 * 1024 * 1024);
+    assert_eq!(
+        Dictionary::from_binary(include_bytes!("../../../data/daily.mswydict"))
+            .unwrap()
+            .entry_count(),
+        d.entry_count()
+    );
+    // Typed letters whose best candidate the I04 lexicon got wrong because it had
+    // no entry with that reading. Each now resolves to the real word.
+    let d = Arc::new(d);
+    for (typed, wanted) in [
+        ("alaboyu", "阿拉伯语"),
+        ("alishan", "阿里山"),
+        ("ajimide", "阿基米德"),
+        ("shujukuchaxun", "数据库查询"),
+    ] {
+        let mut s = Session::new(Arc::clone(&d));
+        input(&mut s, typed);
+        assert_eq!(s.candidate(0).unwrap().text, wanted, "{typed}");
+    }
 }
