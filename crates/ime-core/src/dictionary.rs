@@ -902,14 +902,25 @@ impl Dictionary {
             // Never interpret a one/two-letter initial as a keyboard mistake.
             if typing {
                 if flags & SWAP != 0 && pos + 1 < raw.len() && raw[pos] != raw[pos + 1] {
-                    if let Some(next) = self
-                        .child(s.node, raw[pos + 1])
-                        .and_then(|n| self.child(n, raw[pos]))
-                    {
+                    // A transposition routinely straddles a syllable boundary
+                    // (`guan'ai` typed as `guaani`), so either letter of the pair
+                    // may step over the separator the exact path also crosses.
+                    // Crossing restarts the within-syllable error budget.
+                    let mut crossed = false;
+                    let step =
+                        |node: u32, label: u8, crossed: &mut bool| match self.child(node, label) {
+                            Some(next) => Some(next),
+                            None => self
+                                .child(node, b'\'')
+                                .and_then(|next| self.child(next, label))
+                                .inspect(|_| *crossed = true),
+                        };
+                    let first = step(s.node, raw[pos + 1], &mut crossed);
+                    if let Some(next) = first.and_then(|n| step(n, raw[pos], &mut crossed)) {
                         put(State {
                             node: next,
                             pos: s.pos + 2,
-                            depth: s.depth + 2,
+                            depth: if crossed { 1 } else { s.depth + 2 },
                             typo: 1,
                             total: s.total + 1,
                             cost: s.cost + 2,
