@@ -87,6 +87,71 @@ struct Boundary {
     text: u16,
 }
 
+/// Accumulates what one composition was committed in, segment by segment, so the
+/// whole "spelling -> phrase" pair can be learned next to the per-segment rows.
+/// Only the incremental adapter needs it: the staged adapter holds the complete
+/// spelling in `raw` until its single final commit, so its `learning_key` is
+/// already the whole phrase.
+///
+/// A composition boundary resets the buffer (`process` drops it whenever it is
+/// entered with no composition open), so cancelled or abandoned segments cannot
+/// leak into the next composition. A pair whose final segment did commit stays
+/// `pending` until `learn_commit` consumes it, since the host acknowledges the
+/// write after `process` returns.
+struct PhraseBuffer {
+    key: String,
+    text: String,
+    segments: u8,
+    pending: bool,
+    overflow: bool,
+}
+impl PhraseBuffer {
+    fn new() -> Self {
+        Self {
+            key: String::with_capacity(MAX_INPUT_BYTES),
+            text: String::with_capacity(MAX_TEXT_BYTES),
+            segments: 0,
+            pending: false,
+            overflow: false,
+        }
+    }
+    fn clear(&mut self) {
+        self.key.clear();
+        self.text.clear();
+        self.segments = 0;
+        self.pending = false;
+        self.overflow = false;
+    }
+    /// One committed segment. Buffers are sized to the profile's own key/text
+    /// limits and the pushes are guarded, so an over-long or non-Chinese phrase
+    /// is abandoned whole rather than truncated into a mismatched key/text pair.
+    fn push(&mut self, key: &str, text: &str) {
+        // A finished pair belongs to the composition that produced it. Pushing on
+        // top means the host never consumed it, so start the new composition clean.
+        if self.pending {
+            self.clear();
+        }
+        self.segments = self.segments.saturating_add(1);
+        if !crate::profile::chinese(text)
+            || self.key.len() + key.len() > MAX_INPUT_BYTES
+            || self.text.len() + text.len() > MAX_TEXT_BYTES
+        {
+            self.overflow = true;
+            return;
+        }
+        self.key.push_str(key);
+        self.text.push_str(text);
+    }
+    /// The composition reached a clean final segment; hold the pair until the
+    /// host acknowledges the write with `learn_commit`.
+    fn finish(&mut self) {
+        self.pending = true;
+    }
+    fn learnable(&self) -> bool {
+        self.pending && !self.overflow && self.segments >= 2
+    }
+}
+
 /// One mutable session per input context. Cursor/beam/output buffers are reserved
 /// once. Pages are produced lazily, preserving the complete terminal lists.
 pub struct Session {
@@ -117,6 +182,7 @@ pub struct Session {
     profile: Arc<crate::Profile>,
     history_cache: crate::profile_cache::HistoryCache,
     learning_key: String,
+    phrase: PhraseBuffer,
     page_size: usize,
     learning_enabled: bool,
     associations_enabled: bool,
@@ -167,6 +233,7 @@ impl Session {
             profile: Arc::new(crate::Profile::default()),
             history_cache: crate::profile_cache::HistoryCache::default(),
             learning_key: String::with_capacity(MAX_INPUT_BYTES),
+            phrase: PhraseBuffer::new(),
             page_size: MAX_CANDIDATES,
             learning_enabled: true,
             associations_enabled: true,
@@ -397,6 +464,8 @@ impl Session {
             + self.completed.capacity()
             + self.context.capacity()
             + self.learning_key.capacity()
+            + self.phrase.key.capacity()
+            + self.phrase.text.capacity()
             + self.results.capacity() * std::mem::size_of::<ResultRef>()
     }
     pub fn set_dictionary(&mut self, dictionary: Arc<Dictionary>) -> bool {
@@ -435,6 +504,7 @@ impl Session {
         self.clear_composition();
         self.commit.clear();
         self.learning_key.clear();
+        self.phrase.clear();
         self.context.clear();
         self.recent_len = 0;
         self.decoder.clear_cache();
@@ -1238,6 +1308,7 @@ impl Session {
         self.associations_enabled = associations;
         if !learning {
             self.recent_len = 0;
+            self.phrase.clear();
         }
         true
     }
@@ -1261,18 +1332,31 @@ impl Session {
     }
     /// Call exactly once after a successful host text write. Allocates; deliberately
     /// separate from process(), so rejected edits cannot train the input method.
+    /// A composition that was committed in several segments also trains its whole
+    /// spelling/phrase pair here, alongside the final segment's own row.
     pub fn learn_commit(&mut self) -> bool {
-        let success = self.learning_enabled
-            && !self.learning_key.is_empty()
+        let acknowledged = self.learning_enabled && !self.learning_key.is_empty();
+        let segment = acknowledged
             && Arc::make_mut(&mut self.profile).record_selection(
                 &self.learning_key,
                 &self.commit,
                 self.matching_options,
             );
-        if success {
+        let phrase = acknowledged && self.phrase.learnable();
+        let whole = phrase
+            && Arc::make_mut(&mut self.profile).record_selection(
+                &self.phrase.key,
+                &self.phrase.text,
+                self.matching_options,
+            );
+        if segment || whole {
             self.history_cache.invalidate();
         }
         self.learning_key.clear();
+        if phrase {
+            self.phrase.clear();
+        }
+        let success = segment || whole;
         if success && self.incremental && !self.raw.is_empty() {
             self.refresh();
         }
@@ -1522,6 +1606,39 @@ impl Session {
             });
         }
     }
+    /// Record one segment of the composition in progress. The segment that closes
+    /// the whole input also makes the accumulated pair learnable, so the host's
+    /// acknowledgement can train the whole spelling/phrase pair next to the
+    /// per-segment rows.
+    ///
+    /// Only the incremental adapter needs this: the staged adapter keeps the
+    /// complete spelling in `raw` until its single final commit, so its
+    /// `learning_key` is already the whole phrase. A segment outside the typed
+    /// remainder, a non-Chinese one, or a pair past the profile's limits drops the
+    /// whole phrase rather than learning a mismatched pair.
+    fn record_phrase_segment(&mut self, item: ResultRef) {
+        if !self.incremental || !self.learning_enabled || item.association() {
+            return;
+        }
+        let text = if item.id() & LEARNED != 0 {
+            self.profile.rows[(item.id() & !LEARNED) as usize]
+                .text
+                .as_ref()
+        } else if item.sentence() {
+            self.decoder.sentences[item.id() as usize].text()
+        } else {
+            self.dictionary.entry(item.id()).text
+        };
+        let end = self.offset + item.consumed() as usize;
+        if end > self.raw.len() {
+            return;
+        }
+        let key = self.raw[self.offset..end].trim_end_matches('\'');
+        self.phrase.push(key, text);
+        if end == self.raw.len() {
+            self.phrase.finish();
+        }
+    }
     fn choose(&mut self, index: usize, force: bool) {
         if index >= self.candidate_count() {
             self.commit.push_str(&self.preedit);
@@ -1544,6 +1661,7 @@ impl Session {
             self.commit.push_str(&self.completed);
             self.commit
                 .push_str(&self.profile.rows[(item.id() & !LEARNED) as usize].text);
+            self.record_phrase_segment(item);
             self.after_commit(None);
             return;
         }
@@ -1551,6 +1669,7 @@ impl Session {
             if self.incremental {
                 let consumed = item.consumed() as usize;
                 self.commit.push_str(self.dictionary.entry(item.id()).text);
+                self.record_phrase_segment(item);
                 if self.learning_enabled {
                     self.learning_key
                         .push_str(self.raw[..consumed].trim_end_matches('\''));
@@ -1588,6 +1707,7 @@ impl Session {
         }
         self.commit
             .push_str(&self.raw[self.offset + item.consumed() as usize..]);
+        self.record_phrase_segment(item);
         self.after_commit((!item.sentence()).then_some(item.id()));
     }
     fn edit(&mut self, key: Key) -> bool {
@@ -1641,6 +1761,13 @@ impl Session {
     pub fn process(&mut self, key: Key, modifiers: Modifiers) -> ProcessResult {
         self.commit.clear();
         self.learning_key.clear();
+        // A pair is only ever consumed by the `learn_commit` that follows the
+        // write it describes, so any buffer still held once no composition is open
+        // belongs to a composition the host abandoned. Segment accumulation itself
+        // survives here: mid-composition the preedit is non-empty.
+        if self.preedit.is_empty() {
+            self.phrase.clear();
+        }
         if modifiers.control || modifiers.alt || modifiers.super_key {
             if self.preedit.is_empty() {
                 self.clear_composition();

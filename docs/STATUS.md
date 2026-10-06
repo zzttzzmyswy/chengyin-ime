@@ -1,5 +1,13 @@
 # 项目状态
 
+## 长拼音分段输入学习完整词组 · 2026-10-06
+
+`crates/ime-core/src/session.rs` 增量模式原先每段上屏后 `learn_commit()` 即清空 `learning_key`，只学到单段，长拼音经分段选词后不会学到合并后的完整词组。
+现新增 `PhraseBuffer` 累计同一次组合内各段的拼音与文本；组合在最后一段完成上屏时标记 `pending`，宿主确认写入后 `learn_commit()` 在同一次调用内额外 `record_selection(完整拼音, 完整词组)`，返回值语义不变（仍表示是否有学习成功）。
+取消 / Esc / 中途清空 / 非汉字上屏 / `learning_enabled=false` 均不学习；超过 `MAX_INPUT_BYTES`、`MAX_TEXT_BYTES` 或非汉字时整句放弃，不截断出错配键值；内存仍计入 64 KiB 上限。
+被学习行也可作为收尾分段（第二次及以后输入走该路径），同样累计。非增量（分段暂存）模式原路径已通过测试确认会学到完整词组，仅补回归。
+新增 `crates/ime-core/tests/phrase_learning.rs` 7 项；`scripts/check.sh` 全绿（fmt、Clippy -D warnings、全工作区测试、Release、C ABI smoke、CLI）。
+
 ## preview23 准确整句与前缀保护 · 2026-10-06
 
 见 WINDOWS_PREVIEW23_TASKLIST。用户输入 xianzaikaishiba 在键盘纠错开启时被“想再开时报”等多词局部纠错组合抢占。
