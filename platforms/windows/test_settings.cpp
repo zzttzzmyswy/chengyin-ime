@@ -1,4 +1,5 @@
 #include "settings.h"
+#include "dictionary_source.h"
 #include "preferences.h"
 #include "learning_writer.h"
 #include "configuration.h"
@@ -635,12 +636,107 @@ int main() {
     write(library, "CYLIB\x01");
     require(!myswy::readDictionaryLibrary(library, entries) && !myswy::addDictionaryLibrary(source, library),
             "damaged library is preserved for recovery");
+    // R09: a custom vocabulary that fails once must be reloaded after the lock is
+    // released even though its size and timestamp never change. The accepted stamp
+    // may only advance after a successful load.
+    {
+        const auto retryTarget = folder + L"\\reload.custom";
+        write(source, "ni\tstale\t10\n");
+        require(myswy::installCustomDictionary(source, retryTarget), "seed a custom vocabulary to reload");
+        const auto stamp = myswy::readDictionaryStamp(retryTarget);
+        require(stamp.exists, "the seeded vocabulary has an identity to compare");
+
+        bool locked = false;
+        unsigned attempts = 0;
+        myswy::DictionarySource reload(
+            [&]() -> MyswyDictionary * {
+                ++attempts;
+                // The first load fails exactly like a temporarily locked file. The
+                // second succeeds while the identity stays byte-for-byte the same.
+                return locked ? nullptr : myswy_dictionary_new_demo();
+            },
+            []() -> MyswyDictionary * { return myswy_dictionary_new_demo(); },
+            myswy::DictionaryRetryPolicy{2, 400, 20});
+        locked = true;
+        bool renewed = false;
+        // Seed the built-in snapshot first, so the failed custom load has a valid
+        // previous vocabulary to keep rather than needing the first-use fallback.
+        MyswyDictionary *seeded = reload.acquire(false, myswy::DictionaryStamp{}, &renewed);
+        require(seeded != nullptr && renewed, "the built-in base is admitted first");
+        myswy_dictionary_free(seeded);
+        const auto loadedBefore = reload.stats().loaded;
+
+        MyswyDictionary *first = reload.acquire(true, stamp, &renewed);
+        require(first != nullptr, "a failed custom load still yields a usable vocabulary");
+        require(!renewed, "a failed load never admits a new snapshot");
+        require(reload.pending(), "the failed target stays pending for a retry");
+        require(reload.stats().transient == 1, "the failure is counted");
+        myswy_dictionary_free(first);
+
+        // An identical stamp must not be treated as already loaded: that is the
+        // defect this regression exists for. The service polls `retry` from its
+        // configuration watcher, so the retry is driven the same way here.
+        locked = false;
+        const auto released = GetTickCount64() + 3000;
+        while (reload.pending() && GetTickCount64() < released) {
+            reload.retry(true, stamp);
+            Sleep(5);
+        }
+        require(attempts >= 2, "the unchanged file is retried after the lock is released");
+        require(reload.stats().loaded == loadedBefore + 1, "the retry admits the newly readable vocabulary");
+        require(!reload.pending(), "a successful retry clears the pending target");
+        MyswyDictionary *second = reload.acquire(true, stamp, &renewed);
+        require(second != nullptr && !renewed, "the accepted stamp is not re-read while unchanged");
+        myswy_dictionary_free(second);
+        DeleteFileW(retryTarget.c_str());
+    }
+    // R09: a corrupt vocabulary keeps the last good snapshot while the failure is
+    // retried, so a transient parse/access error never leaves input without a
+    // vocabulary. Only the successful load may replace what is in use.
+    {
+        const auto badTarget = folder + L"\\corrupt.custom";
+        write(source, "ni\tfirst\t10\n");
+        require(myswy::installCustomDictionary(source, badTarget), "seed a good vocabulary");
+        const auto badStamp = myswy::readDictionaryStamp(badTarget);
+        bool corrupt = true;
+        unsigned badAttempts = 0;
+        myswy::DictionarySource corruptSource(
+            [&]() -> MyswyDictionary * {
+                ++badAttempts;
+                return corrupt ? nullptr : myswy_dictionary_new_demo();
+            },
+            []() -> MyswyDictionary * { return myswy_dictionary_new_demo(); },
+            myswy::DictionaryRetryPolicy{2, 300, 20});
+        bool badRenewed = false;
+        // Adopt the good snapshot first so the failure has something to preserve.
+        MyswyDictionary *seed = corruptSource.acquire(false, myswy::DictionaryStamp{}, &badRenewed);
+        require(seed != nullptr && badRenewed, "the good snapshot is admitted first");
+        myswy_dictionary_free(seed);
+        const auto goodLoaded = corruptSource.stats().loaded;
+
+        MyswyDictionary *kept = corruptSource.acquire(true, badStamp, &badRenewed);
+        require(kept != nullptr, "a corrupt custom load still returns a usable vocabulary");
+        require(!badRenewed, "a corrupt load never replaces the good snapshot");
+        require(corruptSource.pending(), "the corrupt target is retried rather than accepted");
+        require(corruptSource.stats().transient >= 1, "the corrupt load is counted");
+        myswy_dictionary_free(kept);
+
+        corrupt = false;
+        const auto healed = GetTickCount64() + 3000;
+        while (corruptSource.pending() && GetTickCount64() < healed) {
+            corruptSource.retry(true, badStamp);
+            Sleep(5);
+        }
+        require(badAttempts >= 2, "the corrupt target is retried until it parses");
+        require(corruptSource.stats().loaded == goodLoaded + 1, "the repaired vocabulary is admitted");
+        DeleteFileW(badTarget.c_str());
+    }
     DeleteFileW(library.c_str());
     DeleteFileW(profilePath.c_str());
     DeleteFileW(scelPath.c_str());
     DeleteFileW(source.c_str());
     DeleteFileW(target.c_str());
     require(RemoveDirectoryW(folder.c_str()) != FALSE, "temporary files cleaned");
-    std::puts("PASS: validated atomic vocabulary import, invalid/failure recovery and ownership.");
+    std::puts("PASS: validated atomic vocabulary import, invalid/failure recovery, reload retry and ownership.");
     return 0;
 }

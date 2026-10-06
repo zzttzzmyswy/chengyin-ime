@@ -20,6 +20,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - run: python scripts/version.py --check
+      - run: python scripts/version.py --verify-bump
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --locked
@@ -66,7 +68,7 @@ jobs:
         run: ./platforms/windows/Build.ps1
       - name: Install, upgrade, rollback and uninstall in this isolated runner
         shell: powershell
-        run: python scripts/test_windows_installer.py --package build/packages/chengyin-windows-x64-0.1.0-preview21-msvc.exe --build-dir build/windows-msvc --makensis (Get-Content -LiteralPath build/nsis-compiler-path.txt -Raw).Trim()
+        run: python scripts/test_windows_installer.py --package "build/packages/$(python scripts/version.py --print package-name --toolchain msvc)" --build-dir build/windows-msvc --makensis (Get-Content -LiteralPath build/nsis-compiler-path.txt -Raw).Trim()
       - uses: actions/upload-artifact@v4
         with:
           name: chengyin-windows-x64-msvc-preview

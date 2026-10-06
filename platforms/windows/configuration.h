@@ -35,10 +35,14 @@ class ConfigurationWatcher {
     // `observed` is the configuration generation. `revision` optionally adds the
     // profile's ordinary learning revision, so a plain selection made by another
     // application reloads this service's snapshot without, unlike a destructive
-    // generation change, invalidating anything this service has queued.
+    // generation change, invalidating anything this service has queued. `due`,
+    // when given, is polled so work that no file or generation change announces is
+    // still noticed: an unfulfilled custom vocabulary waiting out its retry
+    // backoff is reloaded without any further edit to the file (review R09).
     ConfigurationWatcher(DWORD observed, std::function<Snapshot()> load,
                          std::function<void(Snapshot)> apply, const wchar_t *name = nullptr,
-                         std::wstring preferencesPath = {}, std::wstring revisionName = {});
+                         std::wstring preferencesPath = {}, std::wstring revisionName = {},
+                         std::function<bool()> due = {});
     ~ConfigurationWatcher();
     bool valid() const {
         return window_ && stop_ && worker_.joinable();
@@ -54,5 +58,6 @@ class ConfigurationWatcher {
     std::mutex mutex_;
     Snapshot pending_;
     std::function<void(Snapshot)> apply_;
+    std::function<bool()> due_;
 };
 }

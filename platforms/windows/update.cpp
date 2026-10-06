@@ -134,7 +134,7 @@ bool fetch(const std::wstring &url, std::vector<uint8_t> &out, size_t maximum) {
     std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
     std::wstring path(parts.lpszUrlPath, parts.dwUrlPathLength);
     if (parts.dwExtraInfoLength) path.append(parts.lpszExtraInfo, parts.dwExtraInfoLength);
-    Internet session{WinHttpOpen(L"Chengyin/0.1.0-preview21", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, nullptr, nullptr, 0)};
+    Internet session{WinHttpOpen(L"Chengyin/" MYSWY_VERSION, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, nullptr, nullptr, 0)};
     if (!session.h) return false;
     WinHttpSetTimeouts(session.h, 5000, 5000, 10000, 10000);
     Internet connection{WinHttpConnect(session.h, host.c_str(), parts.nPort, 0)};
@@ -178,7 +178,7 @@ bool parseReleases(const std::vector<uint8_t> &bytes, ReleaseUpdate &out) {
     MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, reinterpret_cast<const char *>(bytes.data()), static_cast<int>(bytes.size()), text.data(), size);
     Json root;
     if (!Parser(text).parse(root) || root.kind != L'[') return false;
-    Version current{}, newest{}; version(kVersion, current); newest = current;
+    Version current{}, newest{}; version(MYSWY_VERSION, current); newest = current;
     for (const auto &release : root.array) {
         Version next{};
         if (release.kind != L'{' || release.get(L"draft").kind != L'f'

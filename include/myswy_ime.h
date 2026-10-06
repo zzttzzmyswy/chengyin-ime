@@ -70,6 +70,11 @@ MyswyDictionary *myswy_dictionary_new_binary(const uint8_t *data, size_t length)
  */
 MyswyDictionary *myswy_dictionary_new_import(const uint8_t *data, size_t length);
 MyswyDictionary *myswy_dictionary_merge(const MyswyDictionary *base, const MyswyDictionary *extra);
+/* Additive API (ABI v1): one-shot union of `count` live immutable handles.
+ * Compiles the union once instead of rebuilding after every pair, keeping the
+ * peak bounded when a library holds many vocabularies. `count` is 1..=64; NULL
+ * is returned unless every handle is live and the union validates. Allocates. */
+MyswyDictionary *myswy_dictionary_merge_all(const MyswyDictionary *const *dictionaries, size_t count);
 int32_t myswy_dictionary_entry_count(const MyswyDictionary *dictionary);
 /* Required binary size (no NUL), or negative error. NULL/small output writes
  * nothing. Copies a deterministic v2 binary when capacity suffices. Allocates. */

@@ -109,10 +109,18 @@ impl Dictionary {
     /// Duplicate pronunciation/text pairs keep the greater weight. Both inputs
     /// remain immutable; limits and full structure validation also apply here.
     pub fn merge(&self, extra: &Self) -> Result<Self, DictionaryError> {
+        Self::merge_all(std::iter::once(self).chain(std::iter::once(extra)))
+    }
+    /// One-shot merge of any number of dictionaries. Merging is a flat union of
+    /// rows, so building it once from every source avoids the repeated rebuild
+    /// (and repeated peak) of merging pair by pair (review R12).
+    pub fn merge_all<'a>(
+        dictionaries: impl IntoIterator<Item = &'a Self>,
+    ) -> Result<Self, DictionaryError> {
         let mut rows = BTreeMap::new();
-        for d in [self, extra] {
-            for id in 0..d.entry_count() {
-                let e = d.entry(id as u32);
+        for dictionary in dictionaries {
+            for id in 0..dictionary.entry_count() {
+                let e = dictionary.entry(id as u32);
                 rows.entry((e.pinyin.to_owned(), e.text.to_owned()))
                     .and_modify(|f: &mut u32| *f = (*f).max(e.frequency))
                     .or_insert(e.frequency);
@@ -120,6 +128,9 @@ impl Dictionary {
                     return Err(fail("merged dictionary exceeds 250000 entries"));
                 }
             }
+        }
+        if rows.is_empty() {
+            return Err(fail("merged dictionary is empty"));
         }
         Self::from_rows(rows)
     }
