@@ -19,7 +19,7 @@ PE、7-Zip、全负载 SHA-256、COM、三二进制逐字节一致、测试通�
 证据 `build/native-test-preview21.txt`、`tests-release-preview21.txt`、`abi-test-preview21.txt`、
 `ui-preview21/`、`skin-paint-bench-preview21.txt`、`package-verify-preview21.txt`、`delivery-preview21.json`。
 远程 CI/隔离安装生命周期单独追踪，未把本机离线打包校验算作安装完成。
-没有修改个人安装/学习记录。旧 Explorer 升级验证、物理混合 DPI、review D–E 保持待办（B、C 已于 2026-10-06 合并，见 REVIEW_REPAIR_PLAN）。
+没有修改个人安装/学习记录。旧 Explorer 升级验证、物理混合 DPI、review D 优化阶段与 E 保持待办（B、C、D 基线已于 2026-10-06 合并，见 REVIEW_REPAIR_PLAN、QUALITY_BASELINE）。
 
 ## 最新：preview20 单音节与受限 TSF 激活 · 2026-10-05
 
