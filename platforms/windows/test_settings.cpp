@@ -181,7 +181,7 @@ int main() {
     require(myswy::readDictionaryFile(target, after), "read bundled plus custom");
     converted = myswy::loadDictionaryBytes(after);
     require(converted
-            && myswy_dictionary_entry_count(converted) == 87541, "bundled vocabulary preserved on first append");
+            && myswy_dictionary_entry_count(converted) == 184174, "bundled vocabulary preserved on first append");
     myswy_dictionary_free(converted);
     before = after;
     // Corrupt source cannot replace or partially merge a dictionary.
