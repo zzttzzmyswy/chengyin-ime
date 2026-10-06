@@ -14,7 +14,8 @@ version.json 单版本源 preview22，CI 安装包名动态派生，模拟 bump 
 本机安装包5104648 bytes，SHA256 110e733b16b1a7a1ef77de40abde114988a66d52ba93b118e6491e2242a6786c，主目录副本一致。
 包PE/全负载SHA/COM/生产字节一致/22项许可与插画署名CRC通过；见 preview22 tasklist 和 build/delivery-preview22.json。
 合并前未交付的旧preview22构建已移到 build/archive/preview22-before-integration；不能与最终包混淆。
-推送/本批CI结果须以实际记录为准。真实升级宿主与物理混合DPI待集中验证，不自动操作UAC。
+源码 `40fec9d` 的 [Actions 37445555758](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37445555758) 六作业全部成功，含 Windows 隔离安装、升级、回滚、卸载。
+真实升级宿主与物理混合DPI待集中验证，不自动操作UAC。
 
 ## 当前追加：候选皮肤 · preview21
 

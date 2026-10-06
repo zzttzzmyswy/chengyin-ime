@@ -37,3 +37,5 @@ preview19 a55c97c 的远程 CI 六作业和隔离安装生命周期通过（Acti
 真实应用矩阵、物理混合 DPI 多屏不能用模拟宿主测试代替。
 历史云环境、NSIS 固定来源及历次工具链详见 [环境归档](history/ENVIRONMENT_THROUGH_PREVIEW16.md)。
 清理保留项及本地分支状态见 [结项记录](WINDOWS_PHASE_WRAPUP.md)。
+
+preview22 源码 `40fec9d` 的 [Actions 37445555758](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37445555758) 六作业全部成功，含 Windows 隔离安装、升级、回滚、卸载。

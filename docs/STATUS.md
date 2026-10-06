@@ -22,7 +22,7 @@
 `110e733b16b1a7a1ef77de40abde114988a66d52ba93b118e6491e2242a6786c`，已复制至主工作目录。
 PE、7-Zip、全部负载 SHA-256/COM、三生产二进制一致、22 项运行时许可 CRC 与插画署名包校验通过。
 证据见 tasklist。个人安装/设置/学习未改；真实升级宿主、物理混合 DPI 和 review D 优化与 E 继续保留；B/C/D 基线已合并。
-远程 CI/安装生命周期待本批推送后记录。
+源码 `40fec9d` 的 [Actions 37445555758](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37445555758) 六作业全部成功，含 Windows 隔离安装、升级、回滚、卸载。
 
 ## preview21 候选皮肤系统 · 2026-10-06
 

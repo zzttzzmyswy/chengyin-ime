@@ -53,5 +53,5 @@
 - 2026-10-06：B 合并（迭代 I01，PR #1）：独立 revision 通道、有界重试与不含内容的计数；CI 六作业含 windows-tsf 通过。
 - 2026-10-06：C 合并（迭代 I02，PR #3）：R09 词库加载 stamp 仅成功前移+退避重试、R12 多库一次性合并与首字母索引全读音（截断可报告）、R13 `version.json` 单一版本源；CI 全部作业含 windows-tsf 通过。遗留：版本仍为 preview21（凭据无 workflow scope，bump 与 CI 包名派生待补）。
 - 2026-10-06：D 第一阶段合并（迭代 I03，PR #4）：R11 独立标注集（488 条，dev/test 各 244，自动检查无重叠）、评测工具与基线报告 `docs/QUALITY_BASELINE.md`；全部 CI 作业含 windows-tsf 通过。仅基线、未优化；发现项（模糊音规则差异、typo omit/swap、深层候选排序、全规则长串 P99 25.5 ms）留待优化迭代。
-- 2026-10-06：preview22 合并 B/C/D 基线；补齐 version.json bump 与 CI 包名派生，模拟 bump/96 Rust/8 CTest/包检查通过；488 条质量报告与 I03 基线一致。本批新 CI 与隔离生命周期仍待推送后记录。
+- 2026-10-06：preview22 合并 B/C/D 基线；补齐 version.json bump 与 CI 包名派生，模拟 bump/96 Rust/8 CTest/包检查通过；488 条质量报告与 I03 基线一致。源码 `40fec9d` 的 [Actions 37445555758](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37445555758) 六作业全部成功，含 Windows 隔离安装、升级、回滚、卸载。
 - D 优化阶段与 E 尚未实现或验收。没有建立定时自动运行任务，也没有依赖用户逐个测试小演示版本。

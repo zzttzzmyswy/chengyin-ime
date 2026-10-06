@@ -38,5 +38,5 @@ PE、7-Zip、全部负载 SHA-256、COM、三生产二进制逐字节一致、�
 旧 preview21 在实际测试进程的 CoUninitialize 中调用 GdiplusShutdown，等工作线程退出形成卸载停滞；
 调用栈见 `build/ui-shutdown-stack-preview22.txt`，此缺陷已从新源码的资源生命周期消除。
 自动 fixture 不等于个人升级后的实机验证。个人安装、设置与学习未改；
-新版已安装宿主、物理混合 DPI 仍待集中验证。远程 CI/安装生命周期在推送后单独记录。
+新版已安装宿主、物理混合 DPI 仍待集中验证。源码 `40fec9d` 的 [Actions 37445555758](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37445555758) 六作业全部成功，含 Windows 隔离安装、升级、回滚、卸载。
 本次同步保留主分支 B/C/D 基线修复；后续 D 优化与 E 继续按 REVIEW_REPAIR_PLAN 排期。
