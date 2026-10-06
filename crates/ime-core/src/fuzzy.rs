@@ -42,6 +42,9 @@ struct Cell {
     cost: u8,
     typo: bool,
     errors: u8,
+    /// This syllable's first letter was already consumed by a transposition that
+    /// crossed the separator in front of it (`guan'ai` typed as `guaani`).
+    skip: bool,
     marks: [u64; 4],
 }
 impl Cell {
@@ -49,6 +52,7 @@ impl Cell {
         cost: u8::MAX,
         typo: false,
         errors: 0,
+        skip: false,
         marks: [0; 4],
     };
     fn marked(mut self, start: usize, end: usize, cost: u8) -> Self {
@@ -84,15 +88,22 @@ fn align(input: &str, canonical: &str, flags: u32, completion: bool) -> Option<C
         cost: 0,
         typo: false,
         errors: 0,
+        skip: false,
         marks: [0; 4],
     };
     let mut result = Cell::EMPTY;
     let mut at = 0;
-    for syllable in canonical.split('\'') {
+    let mut syllables = canonical.split('\'').peekable();
+    while let Some(syllable) = syllables.next() {
         let word = syllable.as_bytes();
         if word.len() > 6 || word.is_empty() {
             return None;
         }
+        // The first canonical letter of the following syllable, if the two are
+        // separated. A transposition may exchange it with this syllable's last.
+        let next_letter = syllables
+            .peek()
+            .and_then(|next| next.as_bytes().first().copied());
         let mut next = [Cell::EMPTY; 64];
         for (start, state) in states.iter().enumerate().take(raw.len() + 1) {
             if state.cost == u8::MAX {
@@ -120,7 +131,14 @@ fn align(input: &str, canonical: &str, flags: u32, completion: bool) -> Option<C
                 .count()
                 .min(8);
             let mut dp = [[Cell::EMPTY; 7]; 9];
-            dp[0][0] = base;
+            // A crossing transposition in the previous syllable already matched
+            // this syllable's first letter, so matching resumes at the second.
+            if base.skip {
+                base.skip = false;
+                dp[0][1] = base;
+            } else {
+                dp[0][0] = base;
+            }
             for i in 0..=max {
                 for j in 0..=word.len() {
                     let cell = dp[i][j];
@@ -147,6 +165,26 @@ fn align(input: &str, canonical: &str, flags: u32, completion: bool) -> Option<C
                         && word[j] != word[j + 1]
                     {
                         put(i + 2, j + 2, cell.marked(at + j, at + j + 2, 2));
+                    }
+                    // A transposition may straddle the separator: the user types
+                    // this syllable's last letter and the next syllable's first in
+                    // the wrong order (`guan'ai` -> `guaani`). Match both here and
+                    // tell the next syllable its first letter is already consumed.
+                    if typo_enabled
+                        && i + 1 < max
+                        && j + 1 == word.len()
+                        && flags & SWAP != 0
+                        && word[j] != next_letter.unwrap_or(word[j])
+                        && raw[start + i] == next_letter.unwrap_or(0)
+                        && raw[start + i + 1] == word[j]
+                    {
+                        // One error, two letters: this syllable's last and the
+                        // next syllable's first, both in canonical positions.
+                        let mut value = cell.marked(at + j, at + j + 1, 2);
+                        value.marks[(at + word.len() + 1) / 64] |=
+                            1 << ((at + word.len() + 1) % 64);
+                        value.skip = true;
+                        put(i + 2, j + 1, value);
                     }
                     if typo_enabled && j < word.len() && flags & OMIT != 0 {
                         put(i, j + 1, cell.marked(at + j, at + j + 1, 2));

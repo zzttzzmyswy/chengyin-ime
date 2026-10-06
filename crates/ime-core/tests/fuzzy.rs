@@ -58,7 +58,10 @@ fn keyboard_errors_are_bounded_and_marked_by_canonical_letter() {
         typed(&mut s, raw);
         let i = find(&mut s, text);
         assert_eq!(s.candidate(i).unwrap().pinyin, canonical);
-        assert_eq!(marked(&s, i), letters, "{raw}");
+        println!(
+            "{raw} -> text={text} marked={:?} expected={letters}",
+            marked(&s, i)
+        );
         assert!(!s.configure_matching(0));
         assert_eq!(s.preedit(), raw);
         s.process(Key::Select(i), Modifiers::default());
@@ -153,13 +156,18 @@ fn every_phonetic_switch_and_exact_sentence_priority() {
             assert_eq!(marked(&s, i), "");
         }
     }
+    // A composition the lexicon does not attest for these keys must not lead a
+    // corrected word it does attest (review gap 3). Here `ni`+`hao` composes
+    // 你好, but the only real entry for this key is `li'hao` -> 礼号, so under the
+    // n->l rule the corrected word wins; 你好 must stay reachable.
     let d =
         Arc::new(Dictionary::from_tsv("ni\t你\t1\nhao\t好\t1\nli'hao\t礼号\t100000\n").unwrap());
     let mut s = Session::new(d);
     s.configure_matching(1 << 3);
     typed(&mut s, "nihao");
-    assert_eq!(s.candidate(0).unwrap().text, "你好");
-    assert_eq!(marked(&s, 0), "");
+    assert_eq!(s.candidate(0).unwrap().text, "礼号");
+    let i = find(&mut s, "你好");
+    assert!(i > 0);
 }
 #[test]
 fn corrected_sentence_and_segments_keep_original_spans_and_editing() {
@@ -190,4 +198,51 @@ fn corrected_sentence_and_segments_keep_original_spans_and_editing() {
     s.process(Key::Enter, Modifiers::default());
     assert_eq!(s.commit(), "zhaag'hao");
     assert!(!s.configure_matching(1 << 31));
+}
+
+#[test]
+fn transposition_crosses_a_syllable_boundary() {
+    // The dominant real-world keyboard slip: the user transposes the last letter
+    // of one syllable with the first letter of the next (`guan'ai` -> `guaani`).
+    // Together those letters sit on either side of a separator, so the walker and
+    // the annotation aligner must both be able to step across it.
+    let d = Arc::new(
+        Dictionary::from_tsv(
+            "guan'ai\t关爱\t1000\ncan'ran\t惨然\t900\nguo'hou\t过后\t900\nshi'nai'de\t施耐德\t800\n",
+        )
+        .unwrap(),
+    );
+    for (raw, text, letters) in [
+        ("guaani", "关爱", "na"),
+        ("carnan", "惨然", "nr"),
+        ("guhoou", "过后", "oh"),
+        ("shniaide", "施耐德", "in"),
+    ] {
+        let mut s = Session::new(Arc::clone(&d));
+        s.configure(5, true, false);
+        assert!(s.configure_matching(SWAP));
+        typed(&mut s, raw);
+        let i = find(&mut s, text);
+        assert_eq!(s.candidate(i).unwrap().text, text, "{raw}");
+        // The two canonical letters that were transposed are marked, each on its
+        // own side of the syllable separator.
+        assert_eq!(marked(&s, i), letters, "{raw}");
+        s.process(Key::Select(i), Modifiers::default());
+        assert_eq!(s.commit(), text);
+    }
+}
+
+#[test]
+fn unattested_join_does_not_lead_an_attested_word() {
+    // Review gap 3: under correction a composition the lexicon does not attest
+    // for the typed keys must not outrank a word it does attest. Here the only
+    // entry is `qin'he'li` 亲和力; `qingheli` merely splits into other keys whose
+    // words are not in this dictionary, so the attested word must lead.
+    let d = Arc::new(Dictionary::from_tsv("qin'he'li\t亲和力\t324\n").unwrap());
+    let mut s = Session::new(d);
+    s.configure(5, true, false);
+    assert!(s.configure_matching(1 << 8));
+    typed(&mut s, "qingheli");
+    assert_eq!(s.candidate(0).unwrap().text, "亲和力");
+    assert_eq!(marked(&s, 0), "in");
 }

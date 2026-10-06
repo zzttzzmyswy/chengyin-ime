@@ -1344,7 +1344,7 @@ impl Session {
         } else {
             &self.completed
         };
-        let mut ranked = [(ResultRef::default(), 0.0f32, 0u8); 64];
+        let mut ranked = [(ResultRef::default(), 0.0f32, 0u8, 0u8); 64];
         let size = self.results.len();
         debug_assert!(size <= 64);
         for (i, &r) in self.results.iter().enumerate() {
@@ -1411,15 +1411,31 @@ impl Session {
                     single
                 })
             };
-            ranked[i] = (r, cost, single);
+            // A composition the lexicon attests for these very keys (`你好` from
+            // `ni`+`hao`) is lexical evidence, so it keeps its leading rank. An
+            // ad-hoc join spelling nothing (`清河里`) — or spelling a word under a
+            // reading the user did not type (`落后` from `laohou`) — has no such
+            // evidence and must not outrank a word or character the lexicon
+            // attests here (review gap 3). Sorted ahead of the origin class below.
+            let unsupported_join = u8::from(
+                r.sentence()
+                    && self.matching_options != 0
+                    && !self.dictionary.attests(
+                        self.decoder.sentences[r.id() as usize].text(),
+                        &self.raw[self.offset..],
+                        self.matching_options,
+                    ),
+            );
+            ranked[i] = (r, cost, single, unsupported_join);
         }
         ranked[..size].sort_unstable_by(|a, b| {
             a.2.cmp(&b.2)
+                .then(a.3.cmp(&b.3))
                 .then(a.0.class().cmp(&b.0.class()))
                 .then(a.1.total_cmp(&b.1))
                 .then(a.0.id().cmp(&b.0.id()))
         });
-        for (target, &(item, _, _)) in self.results.iter_mut().zip(&ranked[..size]) {
+        for (target, &(item, _, _, _)) in self.results.iter_mut().zip(&ranked[..size]) {
             *target = item;
         }
     }
