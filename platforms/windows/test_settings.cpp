@@ -329,10 +329,10 @@ int main() {
             // A clear/import is destructive: it advances the generation, so a queued
             // event captured before it must be dropped rather than retried.
             myswy::LearningEpoch generation(myswy::profileEpochName(revisionPath).c_str());
-            const DWORD before = generation.current();
+            const DWORD clearedFrom = generation.current();
             require(myswy::clearProfile(revisionPath), "clear advances the destructive generation");
-            require(generation.current() != before, "clear moves the generation other applications observe");
-            require(myswy::updateProfile(revisionPath, bytes("hao"), 3, bytes("好"), 3, &before)
+            require(generation.current() != clearedFrom, "clear moves the generation other applications observe");
+            require(myswy::updateProfile(revisionPath, bytes("hao"), 3, bytes("好"), 3, &clearedFrom)
                     == myswy::ProfileUpdate::invalidated,
                     "an event captured before a clear is dropped instead of retried");
         }
@@ -363,8 +363,8 @@ int main() {
         myswy_profile_free(emptyRetry);
         require(myswy::updateProfile(retryPath, bytes("hao"), 3, bytes("好"), 3)
                 == myswy::ProfileUpdate::saved, "reference single save");
-        std::vector<uint8_t> reference;
-        require(myswy::readSmallFile(retryPath, reference, 2 * 1024 * 1024), "reference bytes");
+        std::vector<uint8_t> singleSave;
+        require(myswy::readSmallFile(retryPath, singleSave, 2 * 1024 * 1024), "reference bytes");
         auto *reset = myswy_profile_new(nullptr, 0);
         require(reset && myswy::saveProfile(retryPath, reset), "reset retry fixture");
         myswy_profile_free(reset);
@@ -398,7 +398,7 @@ int main() {
             CloseHandle(locked);
         std::vector<uint8_t> recovered;
         require(myswy::readSmallFile(retryPath, recovered, 2 * 1024 * 1024)
-                && recovered == reference, "recovery learns the selection exactly once");
+                && recovered == singleSave, "recovery learns the selection exactly once");
         DeleteFileW(retryPath.c_str());
     }
     {
