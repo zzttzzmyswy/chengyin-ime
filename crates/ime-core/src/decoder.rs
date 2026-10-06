@@ -71,6 +71,7 @@ struct Pair {
     bonus: f32,
     allowed: bool,
     unsupported: bool,
+    exact_only: bool,
 }
 impl Default for Pair {
     fn default() -> Self {
@@ -80,6 +81,7 @@ impl Default for Pair {
             bonus: 0.0,
             allowed: true,
             unsupported: false,
+            exact_only: false,
         }
     }
 }
@@ -135,7 +137,14 @@ impl Decoder {
                 "我" | "你" | "他" | "她" | "它" | "我们" | "你们" | "他们" | "她们" | "它们"
             )
         };
-        let frame = (pronoun(a) && !b_single) || (!a_single && pronoun(b));
+        let pronoun_frame = (pronoun(a) && !b_single) || (!a_single && pronoun(b));
+        // Productive exact constructions, anchored by dictionary words on both
+        // sides. A / 不A (or A不 / A) requires the same written A, not homophones.
+        // 的 attaches to an attested multi-character word, never arbitrary singles.
+        let grammar = (!a_single && b == "的")
+            || b.strip_prefix('不') == Some(a)
+            || a.strip_suffix('不') == Some(b);
+        let frame = pronoun_frame || grammar;
         let unsupported = !lexical && !frame;
         let allowed = !unsupported || (!a_single && !b_single);
         let pair = Pair {
@@ -150,6 +159,7 @@ impl Decoder {
             },
             allowed,
             unsupported,
+            exact_only: grammar && !lexical && !pronoun_frame,
         };
         self.pairs[at] = pair;
         pair
@@ -230,6 +240,10 @@ impl Decoder {
                     let unsupported =
                         self.paths[end][rank].unsupported + u8::from(pair.unsupported);
                     if !pair.allowed
+                        || (pair.exact_only
+                            && (self.paths[end][rank].corrected
+                                || self.paths[end][rank].abbreviated
+                                || self.paths[end][rank].predicted))
                         || unsupported > 1
                         || (unsupported != 0
                             && (self.paths[end][rank].corrected
@@ -264,7 +278,11 @@ impl Decoder {
                     } else {
                         Pair::default()
                     };
-                    if !pair.allowed || pair.unsupported || self.paths[end][rank].unsupported != 0 {
+                    if !pair.allowed
+                        || pair.exact_only
+                        || pair.unsupported
+                        || self.paths[end][rank].unsupported != 0
+                    {
                         continue;
                     }
                     self.insert(
@@ -303,6 +321,7 @@ impl Decoder {
                             Pair::default()
                         };
                         if !pair.allowed
+                            || pair.exact_only
                             || pair.unsupported
                             || self.paths[end][rank].unsupported != 0
                         {
@@ -370,6 +389,7 @@ impl Decoder {
                 .iter()
                 .any(|p| p.unsupported == 0 && !p.corrected && !p.abbreviated && !p.predicted);
         let mut weak_rendered = self.sentences[..base].iter().any(|s| s.weak);
+        let full_syllables = crate::syllables::count_spelling(input);
         for initial in 0..self.lengths[0] as usize {
             // Unknown phrase joins are an exact-input fallback only. Once a
             // completely witnessed parse exists, do not fill pages with them.
@@ -417,7 +437,16 @@ impl Decoder {
             }
             // A one/two-syllable word query must not expand into a generated
             // phrase through arbitrary initials or corrected character edges.
-            if !sentence.exact && crate::syllables::count_spelling(input).is_some_and(|n| n <= 2) {
+            // A reliable exact composition suppresses speculative generated sentences;
+            // lexical fuzzy words still have their independent recall lane.
+            // Fully spelled input must not grow extra syllables through local
+            // correction/initial expansion at each independent word boundary.
+            if !sentence.exact
+                && (supported_exact
+                    || full_syllables.is_some_and(|n| {
+                        n <= 2 || usize::from(n) != sentence.pinyin().split('\'').count()
+                    }))
+            {
                 continue;
             }
             if pos == size

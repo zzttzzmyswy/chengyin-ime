@@ -27,6 +27,7 @@ void type(MyswySession *session, const char *text) {
 }
 }
 int main() {
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     using namespace myswy;
     module = GetModuleHandleW(nullptr);
     require(planKey('N', 'n', false, false, false).action == Action::core, "start composition");
@@ -185,6 +186,10 @@ int main() {
             Preferences prefs; prefs.theme = theme; prefs.density = 0;
             for (int layout : {0, 1}) for (int size : {18, 36}) {
                 prefs.layout = layout; prefs.fontSize = size;
+                prefs.skinDecorations=false;
+                candidates.show(session, owner, RECT{100,100,101,120}, false, &clicks, clicked, 3, prefs, true);
+                RECT plain{};GetClientRect(popup,&plain);
+                prefs.skinDecorations=true;
                 candidates.show(session, owner, RECT{100,100,101,120}, false, &clicks, clicked, 3, prefs, true);
                 require(GetFocus() == focus, "theme/size/layout changes never acquire host focus");
                 const UINT dpi = windowDpi(popup);
@@ -198,10 +203,11 @@ int main() {
                 SendMessageW(popup, WM_LBUTTONUP, 0, MAKELPARAM(20,y));
                 require(clicks.count == before + 1 && clicks.index == 0 && GetFocus() == focus,
                         "themed inline first candidate hit area follows actual font height");
-                if(theme>=10) {
-                    RECT rect{};GetClientRect(popup,&rect);
+                RECT rect{};GetClientRect(popup,&rect);
+                if(theme>=10 && rect.right>plain.right) {
                     SendMessageW(popup,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(rect.right-10,y));
                     SendMessageW(popup,WM_LBUTTONUP,0,MAKELPARAM(rect.right-10,y));
+                    if(clicks.count!=before+1) std::printf("rail failure: theme=%d layout=%d size=%d dpi=%u width=%ld plain=%ld y=%d\n",theme,layout,size,dpi,rect.right,plain.right,y);
                     require(clicks.count==before+1,"ornament rail never selects a candidate");
                 }
                 HRGN region = CreateRectRgn(0,0,0,0);

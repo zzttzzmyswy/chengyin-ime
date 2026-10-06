@@ -6,6 +6,8 @@
 #include "candidate.h"
 #include "theme_art.h"
 #include <cstdio>
+#include <psapi.h>
+#include <imm.h>
 #include <cstdlib>
 #include <cstring>
 #include <cwchar>
@@ -23,6 +25,24 @@ void require(bool ok, const char *why) {
         std::fprintf(stderr, "UI FAIL: %s\n", why);
         std::exit(1);
     }
+}
+// Process/apartment-local COM binding; no registry or personal installation edits.
+// Windows can auto-activate a TIP for Edit/RichEdit even after NOACTIVATETIP.
+HMODULE bindFixtureTip(DWORD &cookie) {
+    wchar_t executable[32768]{};
+    require(GetModuleFileNameW(nullptr,executable,32768)!=0,"fixture module location");
+    std::wstring path=executable;
+    path=path.substr(0,path.find_last_of(L'\\')+1)+L"myswy_tsf_fixture.dll";
+    HMODULE module=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
+    require(module!=nullptr,"load isolated TSF implementation");
+    using GetClass=HRESULT(WINAPI *)(REFCLSID,REFIID,void **);
+    auto getClass=myswy::procedureAddress<GetClass>(module,"DllGetClassObject");
+    require(getClass!=nullptr,"fixture class factory export");
+    myswy::Ptr<IClassFactory> factory;
+    require(SUCCEEDED(getClass(myswy::kService,IID_IClassFactory,reinterpret_cast<void **>(factory.put()))),"fixture class factory");
+    require(SUCCEEDED(CoRegisterClassObject(myswy::kService,factory.get(),CLSCTX_INPROC_SERVER,
+                        REGCLS_MULTIPLEUSE,&cookie)),"process-local fixture COM binding");
+    return module;
 }
 void capture(HWND window, const wchar_t *name) {
     RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
@@ -244,13 +264,12 @@ void inspectTestpad() {
     wchar_t executable[32768] {};
     require(GetModuleFileNameW(nullptr, executable, 32768) != 0, "locate testpad executable");
     std::wstring path = executable;
-    path = path.substr(0, path.find_last_of(L'\\') + 1) + L"myswy_settings.exe";
-    std::wstring command = L"\"" + path + L"\" --input-test";
+    std::wstring command = L"\"" + path + L"\" --input-test-fixture";
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION process{};
     require(CreateProcessW(path.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr,
-                           &startup, &process) != FALSE, "start native TSF input test application");
+                           &startup, &process) != FALSE, "start isolated settings input pane");
     struct Search {
         DWORD process;
         HWND window = nullptr;
@@ -280,7 +299,12 @@ void inspectTestpad() {
         capture(search.window, L"settings-process-input-test");
     if (search.window)
         PostMessageW(search.window, WM_CLOSE, 0, 0);
-    const bool exited = WaitForSingleObject(process.hProcess, 5000) == WAIT_OBJECT_0;
+    // Keep this STA responsive while child COM/TSF teardown dispatches calls.
+    // A plain process wait can deadlock shutdown across the two apartments.
+    DWORD completed=0;
+    const bool exited = SUCCEEDED(CoWaitForMultipleHandles(
+        COWAIT_DISPATCH_CALLS | COWAIT_DISPATCH_WINDOW_MESSAGES,5000,1,&process.hProcess,&completed))
+        && completed==0;
     DWORD exitCode = STILL_ACTIVE;
     GetExitCodeProcess(process.hProcess, &exitCode);
     if (!valid || !exited || exitCode != 0)
@@ -288,23 +312,63 @@ void inspectTestpad() {
                      search.window, search.window ? IsWindowVisible(search.window) : 0,
                      valid, exited, static_cast<unsigned long>(exitCode));
     if (!exited) {
+        HMODULE modules[256]{};DWORD needed=0;
+        if(K32EnumProcessModules(process.hProcess,modules,sizeof(modules),&needed)) {
+            for(DWORD i=0;i<std::min<DWORD>(needed/sizeof(HMODULE),256);++i) {
+                wchar_t modulePath[32768]{};
+                if(K32GetModuleFileNameExW(process.hProcess,modules[i],modulePath,32768)
+                    && std::wcsstr(modulePath,L"myswy_tsf"))
+                {
+                    char utf8[98304]{};WideCharToMultiByte(CP_UTF8,0,modulePath,-1,utf8,sizeof(utf8),nullptr,nullptr);
+                    std::fprintf(stderr,"Unexpected installed TIP in UI fixture: %s\n",utf8);
+                }
+            }
+        }
         TerminateProcess(process.hProcess, 1);
         WaitForSingleObject(process.hProcess, 1000);
     }
     CloseHandle(process.hThread);
     CloseHandle(process.hProcess);
     require(valid && exited && exitCode == 0,
-            "new testpad name, Edit/RichEdit/password controls and clean TSF process exit");
+            "isolated input pane, Edit/RichEdit/password controls and clean process exit");
 }
 
 }
 int wmain(int argc, wchar_t **argv) {
+    // UI geometry fixtures do not route physical input through installed IMEs.
+    ImmDisableIME(static_cast<DWORD>(-1));
     myswy::module = GetModuleHandleW(nullptr);
+    // Run the same settings pane in an isolated child, without activating the
+    // user's registered input method or reading personal settings/history.
+    // Real installed TSF input remains desktop validation, not this UI fixture.
+    if (argc == 2 && std::wcscmp(argv[1], L"--input-test-fixture") == 0) {
+        require(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)), "child UI COM initialization");
+        DWORD fixtureCookie=0;HMODULE fixtureModule=bindFixtureTip(fixtureCookie);
+        myswy::Ptr<myswy::ThreadManagerEx> manager;
+        require(SUCCEEDED(CoCreateInstance(CLSID_TF_ThreadMgr,nullptr,CLSCTX_INPROC_SERVER,myswy::kThreadManagerEx,
+                        reinterpret_cast<void **>(manager.put()))),"child isolated thread manager");
+        TfClientId client=TF_CLIENTID_NULL;
+        require(SUCCEEDED(manager->ActivateEx(&client,1 /* TF_TMAE_NOACTIVATETIP */)),"child isolated activation");
+        HMODULE richEdit = LoadLibraryW(L"Msftedit.dll");
+        int result = myswy::runSettings(myswy::module, SW_SHOW, nullptr, nullptr, 5, false);
+        manager->Deactivate();manager.reset();
+        CoRevokeClassObject(fixtureCookie);
+        CoUninitialize();
+        if (richEdit) FreeLibrary(richEdit);
+        FreeLibrary(fixtureModule);
+        return result;
+    }
     if (argc == 2) {
         captureDirectory = argv[1];
         CreateDirectoryW(argv[1], nullptr);
     }
     require(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)), "UI COM initialization");
+    DWORD fixtureCookie=0;HMODULE fixtureModule=bindFixtureTip(fixtureCookie);
+    myswy::Ptr<myswy::ThreadManagerEx> isolatedManager;
+    require(SUCCEEDED(CoCreateInstance(CLSID_TF_ThreadMgr,nullptr,CLSCTX_INPROC_SERVER,myswy::kThreadManagerEx,
+                    reinterpret_cast<void **>(isolatedManager.put()))),"UI isolated thread manager");
+    TfClientId isolatedClient=TF_CLIENTID_NULL;
+    require(SUCCEEDED(isolatedManager->ActivateEx(&isolatedClient,1 /* TF_TMAE_NOACTIVATETIP */)),"UI isolated activation");
     // Vector-art DPI simulation is separate from physical monitor validation.
     for (UINT dpi : {96u,120u,144u,192u,288u}) for (int theme : {0,1,2,10,11,12}) {
         auto scale = [dpi](int value) { return MulDiv(value,static_cast<int>(dpi),96); };
@@ -583,7 +647,10 @@ int wmain(int argc, wchar_t **argv) {
     inspectTestpad();
     if (richEdit)
         FreeLibrary(richEdit);
+    isolatedManager->Deactivate();isolatedManager.reset();
+    CoRevokeClassObject(fixtureCookie);
     CoUninitialize();
+    FreeLibrary(fixtureModule);
     require(myswy::objects == 0, "UI lifetimes released");
     std::puts("PASS: eight tabs, live fonts after hover/theme recreation, 96/120/144/192/288 DPI, narrow viewport/scroll, six candidate themes, letter correction marks, compact geometry and embedded test lifetime; no user settings written.");
     return 0;

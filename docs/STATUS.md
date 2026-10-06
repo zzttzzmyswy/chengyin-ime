@@ -1,5 +1,25 @@
 # 项目状态
 
+## preview22 Q 版大肥鱼与准确结构组句 · 2026-10-06
+
+见 [本批清单](WINDOWS_PREVIEW22_TASKLIST.md)。用户授权本地裁切、去背景后，已替换为指定设定图正面全身形象；
+主题 ID 12 保持，插画来源与权利说明随安装包保留。
+准确 A/不A、A不/A 和多字词＋“的”得到词典锚定的组句支持；
+`kaibukai / diannaode / shoujide` 空历史、关闭/全开匹配时首选分别为“开不开 / 电脑的 / 手机的”。
+准确句可用时抑制猜测生成句；完整拼音的纠错/缩写组句不扩张音节数，词库模糊词及分段选词仍保留。
+
+89 Rust Release、fmt/Clippy、零按键分配/64 KiB、MSVC /W4 /WX C ABI、8/8 原生 CTest（24.71 s）通过。
+全身插画横纵候选和五档 DPI fixture 已核对。旧 preview21 GDI+ 全局退出停滞由实际线程栈证实；
+新图片资源仅存 RGBA 与有界 DIB，GDI+ 在调用内结束。200% DPI fixture 坐标与测试进程 TIP 隔离也已修正。
+五条结构输入、全部匹配规则、4100 个逐键＋可见标注样本，核心 P50/P95/P99 = 270.7/4874.4/6981.7 µs；
+192 DPI 全身皮肤暖重绘为 841.1/1095.5/1347.9 µs，GDI 对象 15→15。口径见 PERFORMANCE。
+
+交付 `chengyin-windows-x64-0.1.0-preview22-msvc.exe`，5119436 bytes，SHA-256
+`a366fe798e282aff58f6e087e0a1567db9422b133ba85902f983446bf9840626`，已复制至主工作目录。
+PE、7-Zip、全部负载 SHA-256/COM、三生产二进制一致、22 项运行时许可 CRC 与插画署名包校验通过。
+证据见 tasklist。个人安装/设置/学习未改；真实升级宿主、物理混合 DPI 和 review B–E 继续保留。
+远程 CI/安装生命周期待本批推送后记录。
+
 ## preview21 候选皮肤系统 · 2026-10-06
 
 按用户新需求重新开启主题开发，分支 `codex/theme-skins`；见 [任务清单](WINDOWS_PREVIEW21_TASKLIST.md)、[皮肤指南](SKINS.md)。
@@ -18,7 +38,7 @@
 PE、7-Zip、全负载 SHA-256、COM、三二进制逐字节一致、测试通知隔离与 21 项运行时许可 CRC 校验通过。
 证据 `build/native-test-preview21.txt`、`tests-release-preview21.txt`、`abi-test-preview21.txt`、
 `ui-preview21/`、`skin-paint-bench-preview21.txt`、`package-verify-preview21.txt`、`delivery-preview21.json`。
-远程 CI/隔离安装生命周期单独追踪，未把本机离线打包校验算作安装完成。
+preview21 源码 9a005e5 的 [远程 CI 37386348117](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37386348117) 已完成且成功；个人实机升级仍单独验收。
 没有修改个人安装/学习记录。旧 Explorer 升级验证、物理混合 DPI、review B–E 保持待办。
 
 ## 最新：preview20 单音节与受限 TSF 激活 · 2026-10-05

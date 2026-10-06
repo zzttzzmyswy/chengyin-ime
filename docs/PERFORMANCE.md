@@ -1,5 +1,21 @@
 # 性能预算与复现
 
+## preview22 结构组句与全身皮肤 · 2026-10-06
+
+Win11 build26200 / Ryzen 9 9950X 16C/32T / Rust MSVC Release 与 MSVC 19.44 Release。
+内置 87540 条词库、空历史，`kaibukai/diannaode/shoujide/haobuhao/kanbukan`，全部模糊/纠错规则，
+10 轮预热、100 轮记录，共 4100 个逐键＋全部可见候选标注样本。
+核心 P50/P95/P99 = **270.7/4874.4/6981.7 µs**；不含 TSF、磁盘、窗口或 compositor。
+原始数据 `build/grammar-bench-preview22.txt`，新增三条结构输入的零按键分配/64 KiB 回归通过。
+此范围与既有长串基准不同；准确召回修复不表示性能预算整体达标，独立质量/性能批次继续保留。
+
+192 DPI、三个 nihao fixture 候选、全身 Q 版大肥鱼，先预热 20 次，
+再记录 300 次 RedrawWindow + GdiFlush，窗口 380 × 180 px。
+暖重绘 P50/P95/P99 = **841.1/1095.5/1347.9 µs**，GDI 对象 15→15。
+原始数据 `build/skin-paint-bench-preview22.txt`；高质量首次缩放在调用内进行，缓存为最多四项原生 DIB。
+不含 TSF/核心/最终呈现延迟，不能与 preview21 的 96 DPI 数值直接比较。
+真实升级宿主与物理混合 DPI 继续单独验证。
+
 ## preview21 皮肤绘制 · 2026-10-06
 
 Win11 build26200、Ryzen 9 9950X 16C/32T、MSVC Release；96 DPI、三个 nihao fixture 候选，

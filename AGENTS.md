@@ -27,7 +27,7 @@ Windows, Linux X11, Linux Wayland, and Android.
   docs/WINDOWS_TASKLIST.md and docs/DEVELOPMENT.md for historical preview7: classic native
   tabs, embedded input tests, configuration notifications, language-bar mode and
   Chinese punctuation. Keep the standalone test app removed. The settings
-  executable is myswy_settings.exe; package scripts use preview21; read docs/WINDOWS_PREVIEW21_TASKLIST.md. Environment
+  executable is myswy_settings.exe; package scripts use preview22; read docs/WINDOWS_PREVIEW21_TASKLIST.md. Environment
   reproduction is in docs/ENVIRONMENT.md.
 - Previous delivery: preview7 MSVC installer from commit b14116e, GitHub Actions run
   37212769471. All six jobs passed, including six native Windows CTests and the
@@ -36,7 +36,16 @@ Windows, Linux X11, Linux Wayland, and Android.
 - This Windows preview8–16 phase is closed as of 2026-10-05. Read
   docs/WINDOWS_PHASE_WRAPUP.md for final delivery, local integration and retained
   validation gaps; start a new codex/ branch for new feature work.
-- Current slice: preview21 adds self-contained custom candidate skins, six presets,
+- Current slice: preview22 uses the user-authorized transparent front full-body
+  Q-version cutout from the TreapGoGo reference sheet (not the preview21 avatar).
+  Exact A/bu-A, A-bu/A and lexical-word + de frames precede speculative sentence
+  expansions; fuzzy lexical recall and prefix commits remain. GDI+ lives only
+  within decode/resampling calls; caches hold RGBA/DIB. UI fixtures bind the
+  fixture TIP in-process, never the personal installation. 89 Rust Release,
+  zero-key-allocation/64 KiB, C ABI, eight native CTests and package checks pass.
+  Read docs/WINDOWS_PREVIEW22_TASKLIST.md. Installed hosts, physical mixed-DPI
+  and ordinary profile review B–E remain separate pending validation/work.
+- Previous slice: preview21 adds self-contained custom candidate skins, six presets,
   PNG/color/radius/padding/motif editing, immutable configuration snapshots and
   bounded scaled-art caches. The user explicitly reopened character themes;
   final whale art is the unchanged transparent Q-version avatar from the user's

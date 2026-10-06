@@ -6,6 +6,7 @@ namespace myswy { HINSTANCE module=nullptr; LONG objects=0; }
 static void require(bool ok,const char *message) {if(!ok){std::fprintf(stderr,"FAIL: %s\n",message);std::exit(1);}}
 int main() {
     using namespace myswy;
+    require(builtinSkin(12)->name==L"Q 版大肥鱼","existing theme ID now exposes the requested Q-version name");
     for(int id:{10,11,12}) {
         auto skin=builtinSkin(id);require(skin && validSkin(*skin),"built-in skin contrast and bounds");
         auto bytes=encodeSkin(*skin);Skin copy;

@@ -14,7 +14,7 @@ import tomllib
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-REVISION = 21
+REVISION = 22
 BINARIES = {"myswy_tsf.dll": True, "myswy_probe.exe": False, "myswy_settings.exe": False}
 
 
@@ -47,6 +47,7 @@ def make_runtime_licenses(stage: Path, sysroot: Path, notices: list[Path], maken
             for name in ("LICENSE", "README.md", "SOURCE.json"):
                 archive.write(vocabulary / name, f"vocabulary/{source}/{name}")
         archive.write(ROOT / "data/README.md", "vocabulary/README.md")
+        archive.write(ROOT / "assets/skins/README.md", "artwork/TreapGoGo-README.md")
         for index, notice in enumerate(notices):
             if not notice.is_file():
                 raise ValueError(f"Missing runtime notice: {notice}")

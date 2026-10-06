@@ -26,6 +26,9 @@ M0 已有实现；M1 已有插件、自定义词典热切换和 Debian 测试包
 
 ## 最新 M2 / M4 切片
 
+2026-10-06：preview22 完成 Q 版大肥鱼全身皮肤与准确 A不A/词语＋的组句，89 Rust 与八项原生检查通过。
+保留既有 review B–E 与升级实机验证顺序，见 WINDOWS_PREVIEW22_TASKLIST。
+
 2026-10-06：按用户明确新需求重新开启 M4 皮肤开发，增加可导入/导出/编辑的自包含皮肤与青瓷、夜航、Q 版鲸鱼娘。
 不改变解码/学习优先级规则，review B–E 与 Explorer 新版实机验证继续保留，见 WINDOWS_PREVIEW21_TASKLIST。
 

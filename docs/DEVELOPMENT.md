@@ -3,6 +3,17 @@
 preview8–16 阶段已结项；开发与交付定位见 [结项记录](WINDOWS_PHASE_WRAPUP.md)。
 preview8–15 的实现细节见 [历史归档](history/DEVELOPMENT_PREVIEW8_15.md)。
 
+## preview22 结构组句与图片生命周期
+
+Decoder 的 Pair 缓存额外标识仅准确输入可用的语法边界：A/不A、A不/A 要求书写相同的 A，
+多字词＋“的”要求词库边；没有放开任意单字拼接。可靠准确句存在时，生成句不再通过模糊/纠错抢占页面，
+独立词库召回仍保留。完整全拼生成句的音节数不得被局部纠错/缩写扩张。
+
+图片仅持有预乘 RGBA 与四项 DIB；PNG 解码/首次重采样的 GDI+ Runtime 为调用内局部对象。
+Bitmap/stream 在 Runtime 关闭前释放；静态 Skin 销毁不再等待 GDI+ 工作线程。
+UI fixture 在进程内注册本批 fixture 类工厂，不写系统注册表；控件自动激活也不会引用旧安装 TIP。
+子进程退出使用 COM 消息等待。文件 probe 默认 NOACTIVATETIP，--registered 生命周期仍检验真实安装。
+
 ## preview21 皮肤系统
 
 `skin.cpp` 实现有界 UTF-8 自包含 .cyskin、PNG 预检/解码、对比度与不可变配置快照。

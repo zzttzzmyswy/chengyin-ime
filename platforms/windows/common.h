@@ -30,6 +30,12 @@ inline constexpr wchar_t kClsidPath[] = L"Software\\Classes\\CLSID\\{65C32A54-21
 struct ProcessorEx : ITfTextInputProcessor {
     virtual HRESULT STDMETHODCALLTYPE ActivateEx(ITfThreadMgr *, TfClientId, DWORD) = 0;
 };
+// SDK-compatible ITfThreadMgrEx for older MinGW headers used by fixture probes.
+inline constexpr GUID kThreadManagerEx = {0x3e90ade3,0x7594,0x4cb0,{0xbb,0x58,0x69,0x62,0x8f,0x5f,0x45,0x8c}};
+struct ThreadManagerEx : ITfThreadMgr {
+    virtual HRESULT STDMETHODCALLTYPE ActivateEx(TfClientId *, DWORD) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetActiveFlags(DWORD *) = 0;
+};
 // Same vtable and enum ABI as ITfTextLayoutSink (not present in older MinGW).
 enum class LayoutCode { create = 0, change = 1, destroy = 2 };
 struct LayoutSink : IUnknown {

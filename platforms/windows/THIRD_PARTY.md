@@ -26,9 +26,10 @@ Copyright (c) 2013 Sun Junyi。筛选频率至少 30 的 2–6 字词，仅使�
 许可证、来源哈希及原 README 位于 RUNTIME_LICENSES.zip/vocabulary/jieba/。
 搜狗格式解析器及自写联想搭配为本项目代码/数据；安装包不附带搜狗词库。
 
-皮肤插画：按用户指定的 TreapGoGo 鲸鱼娘资产库，直接采用网站透明 Q 版头像，未重绘或改色。
-来源：https://treapgogo.github.io/deepseek-whale-girl/assets/whale-girl-logo-dynamic.png
-维护来源：TreapGoGo/deepseek-whale-girl；获取日期 2026-10-06。哈希与说明见源码 assets/skins/README.md。
-上游将图片授权与网站 MIT 代码许可分开；读取的头像位置没有独立图像许可声明，不把网站代码许可套用为图片许可。
+皮肤插画：按用户指定的 TreapGoGo 鲸鱼娘资产库，采用首页 Q 版大肥鱼正面全身形象。
+来源：https://treapgogo.github.io/deepseek-whale-girl/assets/dafeiyu-chibi-character-sheet.png
+维护来源：TreapGoGo/deepseek-whale-girl；获取日期 2026-10-06。用户明确授权本地裁切、去背景；未重新设计角色。
+原图与透明部署资源哈希、处理说明见源码 assets/skins/README.md。
+上游将图片授权与网站 MIT 代码许可分开；读取的设定图位置没有独立图像许可声明，不把网站代码许可套用为图片许可。
 本项目保留来源署名，不主张原始素材权利。DeepSeek 为社区二创形象，非官方认可；第三方名称/商标不适用项目代码许可。
 青瓷枝叶、夜航星图及波纹由项目代码绘制。搜狗官方说明仅作为皮肤系统设计参考，不包含搜狗资源。

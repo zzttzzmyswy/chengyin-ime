@@ -12,6 +12,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 namespace myswy {
 namespace {
 struct Runtime {
@@ -19,7 +20,8 @@ struct Runtime {
     Runtime() { Gdiplus::GdiplusStartupInput input; Gdiplus::GdiplusStartup(&token,&input,nullptr); }
     ~Runtime() { if (token) Gdiplus::GdiplusShutdown(token); }
 };
-bool runtime() { static Runtime value; return value.token != 0; }
+// GDI+ must finish before returning to the host, never in DLL static destruction.
+struct Stream { IStream *value=nullptr; ~Stream() { if(value) value->Release(); } };
 double luminance(COLORREF c) {
     auto linear=[](BYTE b) { double x=b/255.0; return x<=0.04045 ? x/12.92 : std::pow((x+0.055)/1.055,2.4); };
     return .2126*linear(GetRValue(c))+.7152*linear(GetGValue(c))+.0722*linear(GetBValue(c));
@@ -30,12 +32,12 @@ bool contrast(COLORREF a,COLORREF b) {
 }
 struct SkinImage {
     std::mutex mutex;
-    IStream *stream = nullptr;
-    std::unique_ptr<Gdiplus::Bitmap> bitmap;
-    struct Scaled { int width=0,height=0;std::unique_ptr<Gdiplus::Bitmap> bitmap; };
-    std::array<Scaled,4> scaled;
+    int width=0,height=0;
+    std::vector<unsigned char> pixels;
+    struct Scaled { int width=0,height=0;HBITMAP bitmap=nullptr; };
+    std::array<Scaled,4> scaled{};
     size_t next=0;
-    ~SkinImage() { bitmap.reset(); if (stream) stream->Release(); }
+    ~SkinImage() { for(auto &item:scaled) if(item.bitmap) DeleteObject(item.bitmap); }
 };
 static std::shared_ptr<SkinImage> decode(const std::vector<unsigned char> &bytes) {
     if (bytes.empty()) return {};
@@ -44,15 +46,26 @@ static std::shared_ptr<SkinImage> decode(const std::vector<unsigned char> &bytes
     if (bytes.size()<33 || bytes.size()>2*1024*1024 || !std::equal(std::begin(signature),std::end(signature),bytes.begin())
         || bytes[12]!='I' || bytes[13]!='H' || bytes[14]!='D' || bytes[15]!='R') return {};
     auto dimension=[&](size_t at) { return (uint32_t(bytes[at])<<24)|(uint32_t(bytes[at+1])<<16)|(uint32_t(bytes[at+2])<<8)|bytes[at+3]; };
-    if (!dimension(16) || !dimension(20) || dimension(16)>1024 || dimension(20)>1024 || !runtime()) return {};
-    auto image=std::make_shared<SkinImage>();
-    if (FAILED(CreateStreamOnHGlobal(nullptr,TRUE,&image->stream))) return {};
+    if (!dimension(16) || !dimension(20) || dimension(16)>1024 || dimension(20)>1024) return {};
+    Runtime runtime;
+    if(!runtime.token) return {};
+    Stream stream;
+    if (FAILED(CreateStreamOnHGlobal(nullptr,TRUE,&stream.value))) return {};
     ULONG written=0;
-    if (FAILED(image->stream->Write(bytes.data(),static_cast<ULONG>(bytes.size()),&written)) || written!=bytes.size()) return {};
-    LARGE_INTEGER zero{}; image->stream->Seek(zero,STREAM_SEEK_SET,nullptr);
-    image->bitmap.reset(Gdiplus::Bitmap::FromStream(image->stream,FALSE));
-    if (!image->bitmap || image->bitmap->GetLastStatus()!=Gdiplus::Ok || image->bitmap->GetWidth()!=dimension(16)
-        || image->bitmap->GetHeight()!=dimension(20)) return {};
+    if (FAILED(stream.value->Write(bytes.data(),static_cast<ULONG>(bytes.size()),&written)) || written!=bytes.size()) return {};
+    LARGE_INTEGER zero{}; stream.value->Seek(zero,STREAM_SEEK_SET,nullptr);
+    std::unique_ptr<Gdiplus::Bitmap> bitmap(Gdiplus::Bitmap::FromStream(stream.value,FALSE));
+    if (!bitmap || bitmap->GetLastStatus()!=Gdiplus::Ok || bitmap->GetWidth()!=dimension(16)
+        || bitmap->GetHeight()!=dimension(20)) return {};
+    auto image=std::make_shared<SkinImage>();
+    image->width=static_cast<int>(bitmap->GetWidth());image->height=static_cast<int>(bitmap->GetHeight());
+    image->pixels.resize(static_cast<size_t>(image->width)*image->height*4);
+    Gdiplus::Rect rect(0,0,image->width,image->height);Gdiplus::BitmapData locked{};
+    if(bitmap->LockBits(&rect,Gdiplus::ImageLockModeRead,PixelFormat32bppPARGB,&locked)!=Gdiplus::Ok) return {};
+    for(int y=0;y<image->height;++y)
+        std::memcpy(image->pixels.data()+static_cast<size_t>(y)*image->width*4,
+                    static_cast<unsigned char *>(locked.Scan0)+static_cast<ptrdiff_t>(y)*locked.Stride,image->width*4);
+    bitmap->UnlockBits(&locked);
     return image;
 }
 bool validSkin(const Skin &s) {
@@ -157,10 +170,10 @@ static std::shared_ptr<const Skin> makeBuiltinSkin(int theme) {
         s->selected=RGB(61,79,103);s->selectedText=RGB(255,246,224);s->ornament=2;s->radius=8;
     }
     if(theme==12) {
-        s->name=L"深蓝来信 · 鲸鱼娘";s->background=RGB(224,237,253);s->surface=RGB(247,251,255);s->text=RGB(28,49,88);
+        s->name=L"Q 版大肥鱼";s->background=RGB(224,237,253);s->surface=RGB(247,251,255);s->text=RGB(28,49,88);
         s->muted=RGB(71,96,132);s->border=RGB(169,193,225);s->accent=RGB(53,97,182);s->selected=RGB(44,83,154);
         s->selectedText=RGB(255,255,255);s->ornament=3;s->radius=16;
-        // Generated PNG is linked as an immutable byte array, available even in restricted hosts.
+        // User-authorized cutout is linked as immutable bytes, with provenance in assets/skins.
         extern const unsigned char whalePng[]; extern const size_t whalePngSize;
         s->png.assign(whalePng,whalePng+whalePngSize);s->image=decode(s->png);
     }
@@ -174,21 +187,37 @@ std::shared_ptr<const Skin> builtinSkin(int theme) {
 void drawSkinImage(HDC dc,const RECT &r,const Skin &s) {
     if(!s.image) return;
     std::lock_guard<std::mutex> lock(s.image->mutex);
-    auto *bitmap=s.image->bitmap.get();
+    auto &image=*s.image;
     if(r.right<=r.left || r.bottom<=r.top) return;
-    const float scale=std::min({float(r.right-r.left)/bitmap->GetWidth(),float(r.bottom-r.top)/bitmap->GetHeight(),512.0f/std::max(bitmap->GetWidth(),bitmap->GetHeight())});
-    int w=std::max(1,static_cast<int>(bitmap->GetWidth()*scale)),h=std::max(1,static_cast<int>(bitmap->GetHeight()*scale));
+    const float scale=std::min({float(r.right-r.left)/image.width,float(r.bottom-r.top)/image.height,512.0f/std::max(image.width,image.height)});
+    int w=std::max(1,static_cast<int>(image.width*scale)),h=std::max(1,static_cast<int>(image.height*scale));
     SkinImage::Scaled *cached=nullptr;
-    for(auto &item:s.image->scaled) if(item.bitmap && item.width==w && item.height==h) {cached=&item;break;}
+    for(auto &item:image.scaled) if(item.bitmap && item.width==w && item.height==h) {cached=&item;break;}
     if(!cached) {
-        auto resized=std::make_unique<Gdiplus::Bitmap>(w,h,PixelFormat32bppPARGB);
-        if(resized->GetLastStatus()!=Gdiplus::Ok) return;
-        { Gdiplus::Graphics resample(resized.get());resample.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-          if(resample.DrawImage(bitmap,Gdiplus::Rect(0,0,w,h))!=Gdiplus::Ok) return; }
-        cached=&s.image->scaled[s.image->next++%s.image->scaled.size()];
-        cached->width=w;cached->height=h;cached->bitmap=std::move(resized);
+        Runtime runtime;
+        if(!runtime.token) return;
+        Gdiplus::Bitmap original(image.width,image.height,image.width*4,PixelFormat32bppPARGB,image.pixels.data());
+        Gdiplus::Bitmap resized(w,h,PixelFormat32bppPARGB);
+        if(resized.GetLastStatus()!=Gdiplus::Ok) return;
+        { Gdiplus::Graphics resample(&resized);resample.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+          if(resample.DrawImage(&original,Gdiplus::Rect(0,0,w,h))!=Gdiplus::Ok) return; }
+        BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=w;
+        info.bmiHeader.biHeight=-h;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;info.bmiHeader.biCompression=BI_RGB;
+        void *pixels=nullptr;HBITMAP dib=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&pixels,nullptr,0);
+        if(!dib) return;
+        Gdiplus::Rect rect(0,0,w,h);Gdiplus::BitmapData locked{};
+        if(resized.LockBits(&rect,Gdiplus::ImageLockModeRead,PixelFormat32bppPARGB,&locked)!=Gdiplus::Ok) {DeleteObject(dib);return;}
+        for(int y=0;y<h;++y) std::memcpy(static_cast<unsigned char *>(pixels)+static_cast<size_t>(y)*w*4,
+            static_cast<unsigned char *>(locked.Scan0)+static_cast<ptrdiff_t>(y)*locked.Stride,w*4);
+        resized.UnlockBits(&locked);
+        cached=&image.scaled[image.next++%image.scaled.size()];
+        if(cached->bitmap) DeleteObject(cached->bitmap);
+        cached->width=w;cached->height=h;cached->bitmap=dib;
     }
-    Gdiplus::Graphics g(dc);
-    g.DrawImage(cached->bitmap.get(),r.left+(r.right-r.left-w)/2,r.top+(r.bottom-r.top-h)/2,w,h);
+    HDC source=CreateCompatibleDC(dc);
+    if(!source) return;
+    auto old=SelectObject(source,cached->bitmap);
+    AlphaBlend(dc,r.left+(r.right-r.left-w)/2,r.top+(r.bottom-r.top-h)/2,w,h,source,0,0,w,h,{AC_SRC_OVER,0,255,AC_SRC_ALPHA});
+    SelectObject(source,old);DeleteDC(source);
 }
 }

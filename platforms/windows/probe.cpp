@@ -167,7 +167,15 @@ int wmain(int argc, wchar_t **argv) {
         check(CoCreateInstance(CLSID_TF_ThreadMgr, nullptr, CLSCTX_INPROC_SERVER, IID_ITfThreadMgr,
                                reinterpret_cast<void **>(manager.put())), S_OK, "thread manager");
         TfClientId client = TF_CLIENTID_NULL;
-        check(manager->Activate(&client), S_OK, "thread activation");
+        // File/fixture probes must not activate the user's installed TIP. That
+        // would test another DLL and access personal profile state. Registered
+        // lifecycle validation intentionally retains the installed activation.
+        myswy::Ptr<myswy::ThreadManagerEx> isolated;
+        if(registered) check(manager->Activate(&client), S_OK, "installed thread activation");
+        else {
+            check(myswy::query(manager.get(),myswy::kThreadManagerEx,isolated),S_OK,"isolated thread manager");
+            check(isolated->ActivateEx(&client,1 /* TF_TMAE_NOACTIVATETIP */),S_OK,"isolated thread activation");
+        }
         // Application client IDs are not service IDs. The OS activates installed TIPs.
         if (editTests)
             runServiceTests(service.get(), keys.get());
