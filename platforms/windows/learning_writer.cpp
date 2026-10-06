@@ -1,5 +1,6 @@
 #include "learning_writer.h"
 #include "preferences.h"
+#include <algorithm>
 #include <chrono>
 namespace myswy {
 LearningWriter::LearningWriter(std::wstring path, LearningRetryPolicy policy) : path_(std::move(path)),
@@ -101,8 +102,11 @@ void LearningWriter::run() {
             count_ = 0;
             return;
         }
-        // Back off outside the lock; input keeps queueing while we wait.
-        const auto backoff = std::min<ULONGLONG>(policy_.window, static_cast<ULONGLONG>(policy_.backoff) << (attempts_ - 1));
+        // Back off outside the lock; input keeps queueing while we wait. The shift
+        // is capped so a large injected attempt budget cannot shift out of range.
+        const unsigned shift = std::min(attempts_ - 1, 16u);
+        const auto backoff = std::min<ULONGLONG>(policy_.window,
+                                                 static_cast<ULONGLONG>(policy_.backoff) << shift);
         wake_.wait_for(lock, std::chrono::milliseconds(backoff), [this] {return stop_;});
     }
 }
