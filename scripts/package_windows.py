@@ -9,6 +9,7 @@ from pathlib import Path
 import platform
 import struct
 import subprocess
+import sys
 import tempfile
 import tomllib
 import zipfile
