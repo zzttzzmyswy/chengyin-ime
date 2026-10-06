@@ -42,7 +42,7 @@ Windows, Linux X11, Linux Wayland, and Android.
   configurations yield 现在开始吧 for xianzaikaishiba; selecting 现在开始 leaves ba.
   102 Rust Release, zero-key-allocation/64 KiB, C ABI and eight native CTests pass;
   488-row incremental old/new quality is unchanged. Read the preview23 tasklist.
-  Packaging/remote CI are recorded there; real hosts/mixed DPI and review D/E remain.
+  Package checks and six CI jobs including installer lifecycle pass; real hosts/mixed DPI and review D/E remain.
 - Previous slice: preview22 uses the user-authorized transparent front full-body
   Q-version cutout from the TreapGoGo reference sheet (not the preview21 avatar).
   Exact A/bu-A, A-bu/A and lexical-word + de frames precede speculative sentence

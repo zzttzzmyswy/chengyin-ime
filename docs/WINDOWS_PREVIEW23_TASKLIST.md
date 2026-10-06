@@ -16,7 +16,8 @@
   该集整体首选/首页/可达不退化；不修改评测语料，不将本批修复例子混入独立test半集。
 - [x] version.json preview23，生成头文件、模拟bump与动态CI包名通过。
 - [x] 本机安装包与全负载校验。
-- [ ] 推送、远程CI与隔离安装生命周期。
+- [x] 推送、远程CI与隔离安装生命周期。
+  源码 `2fc0fa3` 的 [Actions 37453639077](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37453639077) 六作业成功，含 Windows 隔离安装、升级、回滚、卸载。
 
 ## 交付
 

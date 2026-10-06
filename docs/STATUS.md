@@ -12,7 +12,8 @@
 评测集保持不变。
 本机交付 chengyin-windows-x64-0.1.0-preview23-msvc.exe，5135063 bytes，SHA256 `628a33c65c765c74a11edd6c9870cb6ff3ca16c9068111f6b2fceeb58f44e126`。
 PE/7-Zip/全负载SHA/COM/生产字节一致/22项许可与插画署名CRC通过，已复制主目录。
-新CI待推送后记录；个人安装/设置/学习未改，真实宿主/混合DPI仍待E，D其余优化继续。
+源码 `2fc0fa3` 的 [Actions 37453639077](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37453639077) 六作业成功，含 Windows 隔离安装、升级、回滚、卸载。
+个人安装/设置/学习未改，真实宿主/混合DPI仍待E，D其余优化继续。
 
 ## preview22 Q 版大肥鱼与准确结构组句 · 2026-10-06
 
