@@ -8,6 +8,14 @@
 被学习行也可作为收尾分段（第二次及以后输入走该路径），同样累计。非增量（分段暂存）模式原路径已通过测试确认会学到完整词组，仅补回归。
 新增 `crates/ime-core/tests/phrase_learning.rs` 7 项；`scripts/check.sh` 全绿（fmt、Clippy -D warnings、全工作区测试、Release、C ABI smoke、CLI）。
 
+## 质量优化 I04（未发版） · 2026-10-06
+
+PR #7：跨音节换位（`guan'ai` 敲成 `guaani`）召回恢复；词库未按所敲键收录的合成组合不再抢首位。
+同命令 `quality_report` 复测（全部 488 / test 244）：全部 Top-1 92.0%→93.4%、Top-9 97.7%→98.6%；
+fuzzy Top-1 76.1%→79.5%、错误组合率 3.4%→0.0%；typo Top-1 83.8%→88.8%、可达 93.8%→98.8%；
+test Top-1 91.4%→93.4%；其余类别不变。标注集未改。`fuzzy` 基线中约 18/21 条 miss 为“所敲串本身有常用词”，
+并非排序缺陷（见 I04 评审）。延迟仅做同机同轮 A/B，未声称尾延迟达标；本项为自动化结果，非实机兼容验收。
+
 ## preview23 准确整句与前缀保护 · 2026-10-06
 
 见 WINDOWS_PREVIEW23_TASKLIST。用户输入 xianzaikaishiba 在键盘纠错开启时被“想再开时报”等多词局部纠错组合抢占。
