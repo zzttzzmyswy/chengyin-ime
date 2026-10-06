@@ -25,7 +25,7 @@ commit 属于刚处理的事件，getter 不清空。适配器每次 process 后
 
 ## 词库、游标和整句图
 
-87,540 条字词固定来源 Rime pinyin-simp/Apache-2.0 与 jieba/MIT，原始文件、完整许可和哈希在 data/sources/。离线 Python 转换产生 daily.tsv，CLI 编译为 daily.mswydict；回归比较已提交二进制与重建结果，阻止源码/负载不同步。示例词典继续用于历史回归。
+184,173 条字词固定来源 Rime pinyin-simp/Apache-2.0、jieba/MIT、THUOCL/MIT 与 phrase-pinyin-data/MIT，原始文件、完整许可和哈希在 data/sources/。离线 Python 转换产生 daily.tsv，CLI 编译为 daily.mswydict；回归比较已提交二进制与重建结果，阻止源码/负载不同步。示例词典继续用于历史回归。
 
 字词按频率降序、文字/拼音字典序排列，ID 同时表示词典排名。字符串存于一个 UTF-8 池，节点和边为连续数组，terminal 保留全部同音词。节点仅缓存最佳后代 ID。游标先遍历完整匹配，再用优先堆按最优后代展开前缀候选；去重和分页在 Session 中进行，没有每键全词库扫描，也不再将全体候选裁成 top-9。
 

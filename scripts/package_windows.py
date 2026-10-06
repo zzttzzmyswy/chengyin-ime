@@ -49,7 +49,7 @@ def make_runtime_licenses(stage: Path, sysroot: Path, notices: list[Path], maken
         archive.write(rust_copyright, "rust/COPYRIGHT-library.html")
         for license_file in licenses:
             archive.write(license_file, f"rust/licenses/{license_file.name}")
-        for source in ("rime-pinyin-simp", "jieba"):
+        for source in ("rime-pinyin-simp", "jieba", "thuocl", "phrase-pinyin-data"):
             vocabulary = ROOT / "data/sources" / source
             for name in ("LICENSE", "README.md", "SOURCE.json"):
                 archive.write(vocabulary / name, f"vocabulary/{source}/{name}")

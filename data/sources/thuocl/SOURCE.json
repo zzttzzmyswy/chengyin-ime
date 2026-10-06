@@ -1,0 +1,59 @@
+{
+  "files": {
+    "LICENSE": {
+      "bytes": 1063,
+      "sha256": "db4b8cca414db4cf487b933d07a0514f77caf44f9f3d392f2bc9d7ba0d511c58"
+    },
+    "README.md": {
+      "bytes": 7104,
+      "sha256": "388f9d0351d511bcd2a5ecf714b762d822aabc375ece710aae98687eb0d5bcc3"
+    },
+    "data/THUOCL_IT.txt": {
+      "bytes": 308187,
+      "sha256": "e8cd42c9f5559735fa3bfb91515cbe051f991efd4a803038a1d5c0da85af3526"
+    },
+    "data/THUOCL_animal.txt": {
+      "bytes": 320553,
+      "sha256": "bcdc95a32fe713d4bc32957ae26174e3b464908e318e821c9abb295e90249145"
+    },
+    "data/THUOCL_caijing.txt": {
+      "bytes": 62296,
+      "sha256": "68e63d2009e59c6f388eeaa789d19b6a681657de3e8e56cc3479b21cd8548542"
+    },
+    "data/THUOCL_car.txt": {
+      "bytes": 32492,
+      "sha256": "58ffd756b89e8574852bc72c254276a1d7fa8821342eb3cbf3be73ca33ab921c"
+    },
+    "data/THUOCL_chengyu.txt": {
+      "bytes": 166549,
+      "sha256": "c339d5d6e37d4f8ecdcb82f2a02b7fdfc66796f0a5215155f2aff8a77e89a7eb"
+    },
+    "data/THUOCL_diming.txt": {
+      "bytes": 640673,
+      "sha256": "ca5574399da5750a2c36dc373f36e31a66ed1f8a4b21646df6ca44ec0b888d89"
+    },
+    "data/THUOCL_food.txt": {
+      "bytes": 144749,
+      "sha256": "084caa96ad4f976720003e9420097ba7cb5ddbb17f9f8c8f76bc4b8e0cc777fd"
+    },
+    "data/THUOCL_law.txt": {
+      "bytes": 277745,
+      "sha256": "8ef1a5f41052ac95dedde88b167c5031a43b3e0211bf128b6125736cc76ef7b2"
+    },
+    "data/THUOCL_lishimingren.txt": {
+      "bytes": 163136,
+      "sha256": "d0e5094016e6db8c55d363dc022f48f7b1753cf6d07e216f63cf522ce8e53605"
+    },
+    "data/THUOCL_medical.txt": {
+      "bytes": 308805,
+      "sha256": "a01f39f1677af0b6a620bbc68bf293e8e436f06248b74adb625cd61d9ad7bbcd"
+    },
+    "data/THUOCL_poem.txt": {
+      "bytes": 294695,
+      "sha256": "f7045571f57114a3a70d2eaaeec8f991897d536be808f93161709f1289c8108c"
+    }
+  },
+  "license": "MIT",
+  "repository": "https://github.com/thunlp/THUOCL",
+  "revision": "a30ce79d895d01ab5132a5c74c29703ff7efb4cc"
+}

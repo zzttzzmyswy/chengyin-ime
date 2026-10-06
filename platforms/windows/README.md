@@ -142,8 +142,9 @@ PgUp/PgDn 继续切换核心候选页。陈旧/重复提交在写锁中校验并
 
 ## 词库与导入
 
-内置 87,540 条字词：Rime pinyin-simp 的 65,125 条基础词（Apache-2.0），
-以及从 jieba 筛选的 22,415 条常用词（MIT）。固定修订、原始许可证与转换
+内置 184,173 条字词：Rime pinyin-simp 的 65,125 条基础词（Apache-2.0）、
+从 jieba 筛选的 22,415 条常用词（MIT）、THUOCL 的 70,276 条领域词与
+phrase-pinyin-data 的 26,357 条带读音词（均为 MIT）。固定修订、原始许可证与转换
 记录位于 RUNTIME_LICENSES.zip 的 vocabulary/；无需额外词库下载。
 新增词只使用源词库里读音唯一的汉字，不猜多音字。独立语料首选率仍待评测。
 
