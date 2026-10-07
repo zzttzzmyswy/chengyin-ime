@@ -7,7 +7,7 @@
 定位复用候选窗的光标矩形来源（组合锚点 → 系统光标 → 输入视图角）与 `placeCandidates` 的翻边规则，越界时翻到光标上方并保证完全落在工作区内；尺寸随 DPI 缩放，取色沿用 `palette()`/`drawThemeSurface`。
 新增 `Preferences::modeHint`（默认 true，`preferences.ini` 读写、`validPreferences`、设置页「切换中/英文时在光标附近显示提示」复选框）；旧 `preferences.ini` 缺该键按默认 true 加载，不重写用户文件。
 新增原生 CTest `windows_mode_hint_test`（第 9 项）覆盖提示文字与目标模式一致、计时到期隐藏与再次切换重置、`modeHint=false` 不显示、旧配置缺键迁移、不可激活与不改前台、屏幕边缘翻边；`chengyin_probe --edits` 增加三条触发路径与"组合/失焦立即隐藏"的服务级断言。
-验证：`scripts/check.sh` 全绿；本地 MinGW/Wine 下通过 `windows_mode_hint_test`（新增）、`windows_ui_test`、`windows_settings_test`、`windows_update_test`、`windows_com_probe`、`chengyin_probe --edits`（含新增服务级断言）。三项与本次改动无关的既有本地环境差异（改动前后表现一致，均已实测确认）：`windows_key_test` 的 skin 图元断言与 `windows_skin_test` 的 `self-contained skin round trip` 在 Wine/GDI+ 下失败，`windows_live_test` 的跨进程子进程断言在 Wine 下失败。三项均以仓库 GitHub Actions（Windows 2022 + MSVC）为准，MSVC CI 结果另行更新。均为自动化结果；真实应用（记事本、浏览器、Office、多屏、高 DPI）的显示位置需 MYSWY 实机验收，未声称已兼容。
+验证：`scripts/check.sh` 全绿；PR #18 的 CI 6/6 通过（Actions 37635951601），`windows-tsf` 原生 CTest 9/9（含新增 `windows_mode_hint_test` 3.05 s，总 65.17 s）与隔离安装生命周期（安装/升级/回滚/卸载）通过。本地 MinGW/Wine 下通过 `windows_mode_hint_test`（新增）、`windows_ui_test`、`windows_settings_test`、`windows_update_test`、`windows_com_probe`、`chengyin_probe --edits`（含新增服务级断言）。三项与本次改动无关的既有本地环境差异（改动前后表现一致，均已实测确认）：`windows_key_test` 的 skin 图元断言与 `windows_skin_test` 的 `self-contained skin round trip` 在 Wine/GDI+ 下失败，`windows_live_test` 的跨进程子进程断言在 Wine 下失败。三项均以仓库 GitHub Actions（Windows 2022 + MSVC，已全绿）为准。均为自动化结果；真实应用（记事本、浏览器、Office、多屏、高 DPI）的显示位置需 MYSWY 实机验收，未声称已兼容。
 
 ## 项目标识改名 I10（preview25）· 2026-10-07
 
