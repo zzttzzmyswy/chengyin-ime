@@ -955,10 +955,10 @@ class Compartment final : public ITfCompartment, public ITfSource {
         value = in->lVal;
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE AdviseSink(REFIID iid, IUnknown *value, DWORD *cookie) override {
+    HRESULT STDMETHODCALLTYPE AdviseSink(REFIID iid, IUnknown *sinkValue, DWORD *cookie) override {
         require(iid == IID_ITfCompartmentEventSink && !sink, "one compartment sink per compartment");
         *cookie = 99;
-        return query(value, IID_ITfCompartmentEventSink, sink);
+        return query(sinkValue, IID_ITfCompartmentEventSink, sink);
     }
     HRESULT STDMETHODCALLTYPE UnadviseSink(DWORD cookie) override {
         require(cookie == 99 && sink, "compartment sink released once");
