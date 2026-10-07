@@ -1,7 +1,7 @@
 #pragma once
 #include "candidate.h"
 #include <oleauto.h>
-namespace myswy {
+namespace chengyin {
 inline constexpr GUID kCandidateUI = {0xea1ea138, 0x19df, 0x11d7, {0xa6, 0xd2, 0x00, 0x06, 0x5b, 0x84, 0x43, 0x5c}};
 inline constexpr GUID kCandidateBehavior = {0x85fad185, 0x58ce, 0x497a, {0x94, 0x60, 0x35, 0x53, 0x66, 0xb6, 0x4b, 0x9a}};
 // SDK-compatible vtable also available with older MinGW headers.
@@ -24,7 +24,7 @@ class CandidateElement final: public CandidateBehavior {
   public:
     using Callback = void(*)(void *, uint64_t, int, bool);
     CandidateElement(void *target, Callback callback): target_(target), callback_(callback) {}
-    void update(MyswySession *, ITfContext *, uint64_t);
+    void update(ChengyinSession *, ITfContext *, uint64_t);
     void detach() {
         target_ = nullptr;
         callback_ = nullptr;

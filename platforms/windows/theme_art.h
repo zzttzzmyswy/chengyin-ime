@@ -1,6 +1,6 @@
 #pragma once
 #include "preferences.h"
-namespace myswy {
+namespace chengyin {
 // Candidate theme drawing, shared by the actual popup and settings preview.
 int visualTheme(int requested);
 int themeRadius(int theme, UINT dpi);

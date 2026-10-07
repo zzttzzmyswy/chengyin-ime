@@ -1,4 +1,4 @@
-use myswy_core::{demo_dictionary, Key, Modifiers, Profile, Session};
+use chengyin_core::{demo_dictionary, Key, Modifiers, Profile, Session};
 use std::sync::Arc;
 
 fn type_keys(s: &mut Session, text: &str) {
@@ -28,7 +28,7 @@ fn cache_reuses_queries_and_invalidates_snapshot_flags_and_capacity_budget() {
     type_keys(&mut s, "nihao");
     assert_eq!(s.candidate(0).unwrap().text, "你好");
     s.reset();
-    s.configure_matching(myswy_core::fuzzy::OPTIONS_MASK);
+    s.configure_matching(chengyin_core::fuzzy::OPTIONS_MASK);
     let before = s.history_cache_stats();
     type_keys(&mut s, "nihao");
     assert!(s.history_cache_stats().misses > before.misses);
@@ -68,7 +68,7 @@ fn cache_capacity_adapts_to_reused_working_set_and_remains_bounded() {
 
 #[test]
 fn dictionary_replacement_invalidates_history_attestation() {
-    use myswy_core::Dictionary;
+    use chengyin_core::Dictionary;
     let mut p = Profile::default();
     p.record("nihao", "拟好");
     let mut s = Session::new(demo_dictionary());

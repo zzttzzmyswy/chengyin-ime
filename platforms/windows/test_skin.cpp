@@ -2,10 +2,10 @@
 #include "preferences.h"
 #include <cstdio>
 #include <cstdlib>
-namespace myswy { HINSTANCE module=nullptr; LONG objects=0; }
+namespace chengyin { HINSTANCE module=nullptr; LONG objects=0; }
 static void require(bool ok,const char *message) {if(!ok){std::fprintf(stderr,"FAIL: %s\n",message);std::exit(1);}}
 int main() {
-    using namespace myswy;
+    using namespace chengyin;
     require(builtinSkin(12)->name==L"Q 版大肥鱼","existing theme ID now exposes the requested Q-version name");
     for(int id:{10,11,12}) {
         auto skin=builtinSkin(id);require(skin && validSkin(*skin),"built-in skin contrast and bounds");
@@ -28,7 +28,7 @@ int main() {
     require(!parseSkin(encodeSkin(bomb),prior),"oversized decoded dimensions rejected before decoder allocation");
     require(!parseSkin(std::vector<unsigned char>(3*1024*1024+1,'a'),prior),"skin package size bounded");
     wchar_t temp[MAX_PATH]{};GetTempPathW(MAX_PATH,temp);
-    auto dir=std::wstring(temp)+L"MyswySkin-"+std::to_wstring(GetCurrentProcessId());
+    auto dir=std::wstring(temp)+L"ChengyinSkin-"+std::to_wstring(GetCurrentProcessId());
     require(CreateDirectoryW(dir.c_str(),nullptr)!=0,"isolated skin fixture directory");
     const auto file=dir+L"\\skin-test.cyskin",settings=dir+L"\\preferences.ini";
     require(atomicWrite(file,encodeSkin(*builtinSkin(12))),"write isolated image package");

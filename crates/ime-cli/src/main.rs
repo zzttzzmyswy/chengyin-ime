@@ -1,4 +1,4 @@
-use myswy_core::{demo_dictionary, Dictionary, Key, Modifiers, Session, MAX_DICTIONARY_BYTES};
+use chengyin_core::{demo_dictionary, Dictionary, Key, Modifiers, Session, MAX_DICTIONARY_BYTES};
 use std::io::{self, BufRead, Read, Write};
 use std::sync::Arc;
 
@@ -41,7 +41,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             "--query" => query = Some(args.next().ok_or("--query 需要拼音")?),
             "-h" | "--help" => {
-                println!("澄音输入法 / Chengyin IME 全拼 / 首拼\n  myswy [--dict 词典文件] [--query nihao]\n--import 词库.scel 输出.mswydict：离线转换。\n不带 --query 进入逐行演示。/quit 退出；输入 nihao 后回车展示候选。");
+                println!("澄音输入法 / Chengyin IME 全拼 / 首拼\n  chengyin [--dict 词典文件] [--query nihao]\n--import 词库.scel 输出.mswydict：离线转换。\n不带 --query 进入逐行演示。/quit 退出；输入 nihao 后回车展示候选。");
                 return Ok(());
             }
             _ => return Err(format!("未知参数：{arg}").into()),

@@ -1,8 +1,8 @@
 //! Versioned C ABI. Pointer validity, exclusivity and lifetime are caller contracts.
 #![deny(unsafe_op_in_unsafe_fn)]
-#![allow(clippy::missing_safety_doc)] // The complete caller contract is in include/myswy_ime.h.
+#![allow(clippy::missing_safety_doc)] // The complete caller contract is in include/chengyin_ime.h.
 
-use myswy_core::{
+use chengyin_core::{
     demo_dictionary, Dictionary, Key, Modifiers, Profile, Session, MAX_DICTIONARY_BYTES,
     MAX_PROFILE_BYTES,
 };
@@ -10,23 +10,28 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::sync::Arc;
 
-pub struct MyswyDictionary(Arc<Dictionary>);
-pub struct MyswySession(Session);
-pub struct MyswyProfile(Arc<Profile>);
+pub struct ChengyinDictionary(Arc<Dictionary>);
+pub struct ChengyinSession(Session);
+pub struct ChengyinProfile(Arc<Profile>);
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_profile(session: *const MyswySession) -> *mut MyswyProfile {
+pub unsafe extern "C" fn chengyin_session_profile(
+    session: *const ChengyinSession,
+) -> *mut ChengyinProfile {
     catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: caller retains the session and serializes all access.
         unsafe { session.as_ref() }.map_or(ptr::null_mut(), |s| {
-            Box::into_raw(Box::new(MyswyProfile(s.0.profile())))
+            Box::into_raw(Box::new(ChengyinProfile(s.0.profile())))
         })
     }))
     .unwrap_or(ptr::null_mut())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_profile_new(data: *const u8, length: usize) -> *mut MyswyProfile {
+pub unsafe extern "C" fn chengyin_profile_new(
+    data: *const u8,
+    length: usize,
+) -> *mut ChengyinProfile {
     if length > MAX_PROFILE_BYTES || (length > 0 && data.is_null()) {
         return ptr::null_mut();
     }
@@ -38,21 +43,21 @@ pub unsafe extern "C" fn myswy_profile_new(data: *const u8, length: usize) -> *m
             Profile::from_binary(unsafe { std::slice::from_raw_parts(data, length) })
         };
         profile.map_or(ptr::null_mut(), |p| {
-            Box::into_raw(Box::new(MyswyProfile(Arc::new(p))))
+            Box::into_raw(Box::new(ChengyinProfile(Arc::new(p))))
         })
     })
     .unwrap_or(ptr::null_mut())
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_profile_free(profile: *mut MyswyProfile) {
+pub unsafe extern "C" fn chengyin_profile_free(profile: *mut ChengyinProfile) {
     if !profile.is_null() {
         // SAFETY: caller transfers a live uniquely owned handle, once.
         drop(unsafe { Box::from_raw(profile) });
     }
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_profile_record(
-    profile: *mut MyswyProfile,
+pub unsafe extern "C" fn chengyin_profile_record(
+    profile: *mut ChengyinProfile,
     key: *const u8,
     key_len: usize,
     text: *const u8,
@@ -81,8 +86,8 @@ pub unsafe extern "C" fn myswy_profile_record(
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_profile_record_selection(
-    profile: *mut MyswyProfile,
+pub unsafe extern "C" fn chengyin_profile_record_selection(
+    profile: *mut ChengyinProfile,
     key: *const u8,
     key_len: usize,
     text: *const u8,
@@ -95,7 +100,7 @@ pub unsafe extern "C" fn myswy_profile_record_selection(
             || text.is_null()
             || key_len > 63
             || text_len > 256
-            || flags & !myswy_core::fuzzy::OPTIONS_MASK != 0
+            || flags & !chengyin_core::fuzzy::OPTIONS_MASK != 0
         {
             return INVALID;
         }
@@ -118,12 +123,12 @@ pub unsafe extern "C" fn myswy_profile_record_selection(
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_profile_count(profile: *const MyswyProfile) -> i32 {
+pub unsafe extern "C" fn chengyin_profile_count(profile: *const ChengyinProfile) -> i32 {
     guard(|| unsafe { profile.as_ref() }.map_or(INVALID, |p| p.0.entry_count() as i32))
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_profile_binary(
-    profile: *const MyswyProfile,
+pub unsafe extern "C" fn chengyin_profile_binary(
+    profile: *const ChengyinProfile,
     output: *mut u8,
     capacity: usize,
 ) -> i32 {
@@ -143,9 +148,9 @@ pub unsafe extern "C" fn myswy_profile_binary(
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_set_profile(
-    session: *mut MyswySession,
-    profile: *const MyswyProfile,
+pub unsafe extern "C" fn chengyin_session_set_profile(
+    session: *mut ChengyinSession,
+    profile: *const ChengyinProfile,
 ) -> i32 {
     guard(|| {
         // SAFETY: live exclusive session and retained immutable profile.
@@ -162,8 +167,8 @@ pub unsafe extern "C" fn myswy_session_set_profile(
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_configure(
-    session: *mut MyswySession,
+pub unsafe extern "C" fn chengyin_session_configure(
+    session: *mut ChengyinSession,
     page_size: u32,
     flags: u32,
 ) -> i32 {
@@ -186,7 +191,7 @@ pub unsafe extern "C" fn myswy_session_configure(
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_learn_commit(session: *mut MyswySession) -> i32 {
+pub unsafe extern "C" fn chengyin_session_learn_commit(session: *mut ChengyinSession) -> i32 {
     guard(|| {
         // SAFETY: live exclusive session; host has already accepted its commit.
         unsafe { session.as_mut() }.map_or(INVALID, |s| i32::from(s.0.learn_commit()))
@@ -198,12 +203,12 @@ const PANIC: i32 = -2;
 const BUSY: i32 = -3;
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_configure_matching(
-    session: *mut MyswySession,
+pub unsafe extern "C" fn chengyin_session_configure_matching(
+    session: *mut ChengyinSession,
     flags: u32,
 ) -> i32 {
     guard(|| {
-        if flags & !myswy_core::fuzzy::OPTIONS_MASK != 0 {
+        if flags & !chengyin_core::fuzzy::OPTIONS_MASK != 0 {
             return INVALID;
         }
         // SAFETY: exclusive access to a live session, or null.
@@ -222,8 +227,8 @@ pub unsafe extern "C" fn myswy_session_configure_matching(
 /// # Safety
 /// `session` must be null or exclusively borrowed from a live session handle.
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_configure_incremental(
-    session: *mut MyswySession,
+pub unsafe extern "C" fn chengyin_session_configure_incremental(
+    session: *mut ChengyinSession,
     enabled: u32,
 ) -> i32 {
     guard(|| {
@@ -242,8 +247,8 @@ pub unsafe extern "C" fn myswy_session_configure_incremental(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_candidate_marks(
-    session: *const MyswySession,
+pub unsafe extern "C" fn chengyin_session_candidate_marks(
+    session: *const ChengyinSession,
     index: usize,
     buffer: *mut u8,
     capacity: usize,
@@ -274,21 +279,21 @@ fn guard(action: impl FnOnce() -> i32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn myswy_ime_abi_version() -> u32 {
+pub extern "C" fn chengyin_ime_abi_version() -> u32 {
     1
 }
 
 #[no_mangle]
-pub extern "C" fn myswy_dictionary_new_demo() -> *mut MyswyDictionary {
-    catch_unwind(|| Box::into_raw(Box::new(MyswyDictionary(demo_dictionary()))))
+pub extern "C" fn chengyin_dictionary_new_demo() -> *mut ChengyinDictionary {
+    catch_unwind(|| Box::into_raw(Box::new(ChengyinDictionary(demo_dictionary()))))
         .unwrap_or(ptr::null_mut())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_dictionary_new_tsv(
+pub unsafe extern "C" fn chengyin_dictionary_new_tsv(
     data: *const u8,
     length: usize,
-) -> *mut MyswyDictionary {
+) -> *mut ChengyinDictionary {
     if data.is_null() || length == 0 || length > MAX_DICTIONARY_BYTES {
         return ptr::null_mut();
     }
@@ -299,17 +304,17 @@ pub unsafe extern "C" fn myswy_dictionary_new_tsv(
             .ok()
             .and_then(|s| Dictionary::from_tsv(s).ok());
         dictionary.map_or(ptr::null_mut(), |d| {
-            Box::into_raw(Box::new(MyswyDictionary(Arc::new(d))))
+            Box::into_raw(Box::new(ChengyinDictionary(Arc::new(d))))
         })
     })
     .unwrap_or(ptr::null_mut())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_dictionary_new_binary(
+pub unsafe extern "C" fn chengyin_dictionary_new_binary(
     data: *const u8,
     length: usize,
-) -> *mut MyswyDictionary {
+) -> *mut ChengyinDictionary {
     if data.is_null() || length == 0 || length > MAX_DICTIONARY_BYTES {
         return ptr::null_mut();
     }
@@ -319,7 +324,7 @@ pub unsafe extern "C" fn myswy_dictionary_new_binary(
         Dictionary::from_binary(bytes)
             .ok()
             .map_or(ptr::null_mut(), |d| {
-                Box::into_raw(Box::new(MyswyDictionary(Arc::new(d))))
+                Box::into_raw(Box::new(ChengyinDictionary(Arc::new(d))))
             })
     })
     .unwrap_or(ptr::null_mut())
@@ -327,10 +332,10 @@ pub unsafe extern "C" fn myswy_dictionary_new_binary(
 
 /// Settings/CLI path only: bounded auto-detection and complete validation.
 #[no_mangle]
-pub unsafe extern "C" fn myswy_dictionary_new_import(
+pub unsafe extern "C" fn chengyin_dictionary_new_import(
     data: *const u8,
     length: usize,
-) -> *mut MyswyDictionary {
+) -> *mut ChengyinDictionary {
     if data.is_null() || length == 0 || length > MAX_DICTIONARY_BYTES {
         return ptr::null_mut();
     }
@@ -338,16 +343,16 @@ pub unsafe extern "C" fn myswy_dictionary_new_import(
         // SAFETY: caller supplies a readable initialized byte buffer of length.
         let bytes = unsafe { std::slice::from_raw_parts(data, length) };
         Dictionary::import(bytes).ok().map_or(ptr::null_mut(), |d| {
-            Box::into_raw(Box::new(MyswyDictionary(Arc::new(d))))
+            Box::into_raw(Box::new(ChengyinDictionary(Arc::new(d))))
         })
     })
     .unwrap_or(ptr::null_mut())
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_dictionary_merge(
-    base: *const MyswyDictionary,
-    extra: *const MyswyDictionary,
-) -> *mut MyswyDictionary {
+pub unsafe extern "C" fn chengyin_dictionary_merge(
+    base: *const ChengyinDictionary,
+    extra: *const ChengyinDictionary,
+) -> *mut ChengyinDictionary {
     if base.is_null() || extra.is_null() {
         return ptr::null_mut();
     }
@@ -355,7 +360,7 @@ pub unsafe extern "C" fn myswy_dictionary_merge(
         // SAFETY: caller retains both immutable live handles for this call.
         let (base, extra) = unsafe { (&*base, &*extra) };
         base.0.merge(&extra.0).ok().map_or(ptr::null_mut(), |d| {
-            Box::into_raw(Box::new(MyswyDictionary(Arc::new(d))))
+            Box::into_raw(Box::new(ChengyinDictionary(Arc::new(d))))
         })
     }))
     .unwrap_or(ptr::null_mut())
@@ -364,10 +369,10 @@ pub unsafe extern "C" fn myswy_dictionary_merge(
 /// vocabularies compiles once instead of rebuilding after every pair. NULL is
 /// returned unless every entry is live and the union validates.
 #[no_mangle]
-pub unsafe extern "C" fn myswy_dictionary_merge_all(
-    dictionaries: *const *const MyswyDictionary,
+pub unsafe extern "C" fn chengyin_dictionary_merge_all(
+    dictionaries: *const *const ChengyinDictionary,
     count: usize,
-) -> *mut MyswyDictionary {
+) -> *mut ChengyinDictionary {
     if dictionaries.is_null() || count == 0 || count > 64 {
         return ptr::null_mut();
     }
@@ -384,13 +389,15 @@ pub unsafe extern "C" fn myswy_dictionary_merge_all(
         Dictionary::merge_all(borrowed)
             .ok()
             .map_or(ptr::null_mut(), |d| {
-                Box::into_raw(Box::new(MyswyDictionary(Arc::new(d))))
+                Box::into_raw(Box::new(ChengyinDictionary(Arc::new(d))))
             })
     }))
     .unwrap_or(ptr::null_mut())
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_dictionary_entry_count(dictionary: *const MyswyDictionary) -> i32 {
+pub unsafe extern "C" fn chengyin_dictionary_entry_count(
+    dictionary: *const ChengyinDictionary,
+) -> i32 {
     guard(|| {
         // SAFETY: immutable live handle or null, externally retained.
         unsafe { dictionary.as_ref() }.map_or(INVALID, |d| d.0.entry_count() as i32)
@@ -398,8 +405,8 @@ pub unsafe extern "C" fn myswy_dictionary_entry_count(dictionary: *const MyswyDi
 }
 /// This exporter allocates; never call it from the key path.
 #[no_mangle]
-pub unsafe extern "C" fn myswy_dictionary_binary(
-    dictionary: *const MyswyDictionary,
+pub unsafe extern "C" fn chengyin_dictionary_binary(
+    dictionary: *const ChengyinDictionary,
     buffer: *mut u8,
     capacity: usize,
 ) -> i32 {
@@ -423,7 +430,7 @@ pub unsafe extern "C" fn myswy_dictionary_binary(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_dictionary_free(dictionary: *mut MyswyDictionary) {
+pub unsafe extern "C" fn chengyin_dictionary_free(dictionary: *mut ChengyinDictionary) {
     if !dictionary.is_null() {
         let _ = catch_unwind(AssertUnwindSafe(|| {
             // SAFETY: caller transfers a live handle from new_tsv exactly once.
@@ -433,22 +440,22 @@ pub unsafe extern "C" fn myswy_dictionary_free(dictionary: *mut MyswyDictionary)
 }
 
 #[no_mangle]
-pub extern "C" fn myswy_session_new() -> *mut MyswySession {
-    catch_unwind(|| Box::into_raw(Box::new(MyswySession(Session::new(demo_dictionary())))))
+pub extern "C" fn chengyin_session_new() -> *mut ChengyinSession {
+    catch_unwind(|| Box::into_raw(Box::new(ChengyinSession(Session::new(demo_dictionary())))))
         .unwrap_or(ptr::null_mut())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_new_with_dictionary(
-    dictionary: *const MyswyDictionary,
-) -> *mut MyswySession {
+pub unsafe extern "C" fn chengyin_session_new_with_dictionary(
+    dictionary: *const ChengyinDictionary,
+) -> *mut ChengyinSession {
     if dictionary.is_null() {
         return ptr::null_mut();
     }
     catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: live immutable dictionary handle, not concurrently freed.
         let dictionary = unsafe { &*dictionary };
-        Box::into_raw(Box::new(MyswySession(Session::new(Arc::clone(
+        Box::into_raw(Box::new(ChengyinSession(Session::new(Arc::clone(
             &dictionary.0,
         )))))
     }))
@@ -456,7 +463,7 @@ pub unsafe extern "C" fn myswy_session_new_with_dictionary(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_free(session: *mut MyswySession) {
+pub unsafe extern "C" fn chengyin_session_free(session: *mut ChengyinSession) {
     if !session.is_null() {
         let _ = catch_unwind(AssertUnwindSafe(|| {
             // SAFETY: caller transfers a live session exactly once, without aliases.
@@ -466,9 +473,9 @@ pub unsafe extern "C" fn myswy_session_free(session: *mut MyswySession) {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_set_dictionary(
-    session: *mut MyswySession,
-    dictionary: *const MyswyDictionary,
+pub unsafe extern "C" fn chengyin_session_set_dictionary(
+    session: *mut ChengyinSession,
+    dictionary: *const ChengyinDictionary,
 ) -> i32 {
     guard(|| {
         // SAFETY: caller provides exclusive session and live immutable dictionary,
@@ -488,7 +495,7 @@ pub unsafe extern "C" fn myswy_session_set_dictionary(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_reset(session: *mut MyswySession) -> i32 {
+pub unsafe extern "C" fn chengyin_session_reset(session: *mut ChengyinSession) -> i32 {
     guard(|| {
         // SAFETY: caller provides exclusive access to a live handle or null.
         let Some(session) = (unsafe { session.as_mut() }) else {
@@ -500,8 +507,8 @@ pub unsafe extern "C" fn myswy_session_reset(session: *mut MyswySession) -> i32 
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_process(
-    session: *mut MyswySession,
+pub unsafe extern "C" fn chengyin_session_process(
+    session: *mut ChengyinSession,
     key: u32,
     modifiers: u32,
 ) -> i32 {
@@ -543,7 +550,7 @@ pub unsafe extern "C" fn myswy_session_process(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_is_association(session: *const MyswySession) -> i32 {
+pub unsafe extern "C" fn chengyin_session_is_association(session: *const ChengyinSession) -> i32 {
     guard(|| {
         // SAFETY: caller retains a live session with external serialization.
         unsafe { session.as_ref() }.map_or(INVALID, |s| i32::from(s.0.is_association()))
@@ -551,7 +558,7 @@ pub unsafe extern "C" fn myswy_session_is_association(session: *const MyswySessi
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_candidate_count(session: *const MyswySession) -> i32 {
+pub unsafe extern "C" fn chengyin_session_candidate_count(session: *const ChengyinSession) -> i32 {
     guard(|| {
         // SAFETY: caller provides a live handle with no concurrent mutation, or null.
         unsafe { session.as_ref() }.map_or(INVALID, |s| s.0.candidate_count() as i32)
@@ -559,7 +566,7 @@ pub unsafe extern "C" fn myswy_session_candidate_count(session: *const MyswySess
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_selected(session: *const MyswySession) -> i32 {
+pub unsafe extern "C" fn chengyin_session_selected(session: *const ChengyinSession) -> i32 {
     guard(|| {
         // SAFETY: caller provides a live handle with no concurrent mutation, or null.
         unsafe { session.as_ref() }.map_or(INVALID, |s| {
@@ -573,8 +580,8 @@ pub unsafe extern "C" fn myswy_session_selected(session: *const MyswySession) ->
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_text(
-    session: *const MyswySession,
+pub unsafe extern "C" fn chengyin_session_text(
+    session: *const ChengyinSession,
     field: u32,
     index: usize,
     buffer: *mut u8,
@@ -585,7 +592,7 @@ pub unsafe extern "C" fn myswy_session_text(
         let Some(session) = (unsafe { session.as_ref() }) else {
             return INVALID;
         };
-        let mut display = [0u8; myswy_core::MAX_TEXT_BYTES + myswy_core::MAX_INPUT_BYTES];
+        let mut display = [0u8; chengyin_core::MAX_TEXT_BYTES + chengyin_core::MAX_INPUT_BYTES];
         let value = match field {
             0 => session.0.preedit(),
             1 => session.0.commit(),
@@ -618,29 +625,29 @@ pub unsafe extern "C" fn myswy_session_text(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_page(session: *const MyswySession) -> i32 {
+pub unsafe extern "C" fn chengyin_session_page(session: *const ChengyinSession) -> i32 {
     guard(|| {
         // SAFETY: caller provides a live serialized handle or null.
         unsafe { session.as_ref() }.map_or(INVALID, |s| s.0.page() as i32)
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_has_next_page(session: *const MyswySession) -> i32 {
+pub unsafe extern "C" fn chengyin_session_has_next_page(session: *const ChengyinSession) -> i32 {
     guard(|| {
         // SAFETY: caller provides a live serialized handle or null.
         unsafe { session.as_ref() }.map_or(INVALID, |s| i32::from(s.0.has_next_page()))
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_preedit_cursor(session: *const MyswySession) -> i32 {
+pub unsafe extern "C" fn chengyin_session_preedit_cursor(session: *const ChengyinSession) -> i32 {
     guard(|| {
         // SAFETY: caller provides a live serialized handle or null.
         unsafe { session.as_ref() }.map_or(INVALID, |s| s.0.preedit_cursor() as i32)
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_candidate_consumed(
-    session: *const MyswySession,
+pub unsafe extern "C" fn chengyin_session_candidate_consumed(
+    session: *const ChengyinSession,
     index: usize,
 ) -> i32 {
     guard(|| {
@@ -651,7 +658,7 @@ pub unsafe extern "C" fn myswy_session_candidate_consumed(
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_budget_limited(session: *const MyswySession) -> i32 {
+pub unsafe extern "C" fn chengyin_session_budget_limited(session: *const ChengyinSession) -> i32 {
     guard(|| {
         // SAFETY: caller provides a live serialized handle or null.
         unsafe { session.as_ref() }.map_or(INVALID, |s| i32::from(s.0.budget_limited()))
@@ -659,8 +666,8 @@ pub unsafe extern "C" fn myswy_session_budget_limited(session: *const MyswySessi
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn myswy_session_set_selected(
-    session: *mut MyswySession,
+pub unsafe extern "C" fn chengyin_session_set_selected(
+    session: *mut ChengyinSession,
     index: usize,
 ) -> i32 {
     guard(|| {
@@ -676,13 +683,13 @@ pub unsafe extern "C" fn myswy_session_set_selected(
     })
 }
 #[no_mangle]
-pub unsafe extern "C" fn myswy_dictionary_clone(
-    dictionary: *const MyswyDictionary,
-) -> *mut MyswyDictionary {
+pub unsafe extern "C" fn chengyin_dictionary_clone(
+    dictionary: *const ChengyinDictionary,
+) -> *mut ChengyinDictionary {
     catch_unwind(|| {
         // SAFETY: caller supplies a live immutable dictionary or null.
         unsafe { dictionary.as_ref() }.map_or(ptr::null_mut(), |d| {
-            Box::into_raw(Box::new(MyswyDictionary(Arc::clone(&d.0))))
+            Box::into_raw(Box::new(ChengyinDictionary(Arc::clone(&d.0))))
         })
     })
     .unwrap_or(ptr::null_mut())

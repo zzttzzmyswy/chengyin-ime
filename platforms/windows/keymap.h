@@ -1,8 +1,8 @@
 #pragma once
 #include <cstdint>
-#include "myswy_ime.h"
+#include "chengyin_ime.h"
 
-namespace myswy {
+namespace chengyin {
 enum class Action { pass, core, finish, toggle, punctuation };
 struct KeyPlan {
     Action action = Action::pass;
@@ -77,60 +77,60 @@ inline KeyPlan planKey(uint32_t vk, char ascii, bool shortcut, bool caps, bool a
     if (association) {
         switch (vk) {
         case 0x09:
-            return {Action::core, MYSWY_KEY_TAB, 0};
+            return {Action::core, CHENGYIN_KEY_TAB, 0};
         case 0x1b:
-            return {Action::core, MYSWY_KEY_ESCAPE, 0};
+            return {Action::core, CHENGYIN_KEY_ESCAPE, 0};
         case 0x26:
-            return {Action::core, MYSWY_KEY_UP, 0};
+            return {Action::core, CHENGYIN_KEY_UP, 0};
         case 0x28:
-            return {Action::core, MYSWY_KEY_DOWN, 0};
+            return {Action::core, CHENGYIN_KEY_DOWN, 0};
         case 0x21:
-            return {Action::core, MYSWY_KEY_PAGE_UP, 0};
+            return {Action::core, CHENGYIN_KEY_PAGE_UP, 0};
         case 0x22:
-            return {Action::core, MYSWY_KEY_PAGE_DOWN, 0};
+            return {Action::core, CHENGYIN_KEY_PAGE_DOWN, 0};
         default:
             break;
         }
         if (ascii == '-')
-            return {Action::core, MYSWY_KEY_PAGE_UP, 0};
+            return {Action::core, CHENGYIN_KEY_PAGE_UP, 0};
         if (ascii == '=')
-            return {Action::core, MYSWY_KEY_PAGE_DOWN, 0};
+            return {Action::core, CHENGYIN_KEY_PAGE_DOWN, 0};
         return {Action::finish, 0, 0};
     }
     switch (vk) {
     case 0x20:
-        return {Action::core, MYSWY_KEY_ENTER, 0};
+        return {Action::core, CHENGYIN_KEY_ENTER, 0};
     case 0x08:
-        return {Action::core, MYSWY_KEY_BACKSPACE, 0};
+        return {Action::core, CHENGYIN_KEY_BACKSPACE, 0};
     case 0x1b:
-        return {Action::core, MYSWY_KEY_ESCAPE, 0};
+        return {Action::core, CHENGYIN_KEY_ESCAPE, 0};
     case 0x0d:
-        return {Action::core, MYSWY_KEY_ENTER, 0};
+        return {Action::core, CHENGYIN_KEY_ENTER, 0};
     case 0x26:
-        return {Action::core, MYSWY_KEY_UP, 0};
+        return {Action::core, CHENGYIN_KEY_UP, 0};
     case 0x28:
-        return {Action::core, MYSWY_KEY_DOWN, 0};
+        return {Action::core, CHENGYIN_KEY_DOWN, 0};
     case 0x25:
-        return {Action::core, MYSWY_KEY_LEFT, 0};
+        return {Action::core, CHENGYIN_KEY_LEFT, 0};
     case 0x27:
-        return {Action::core, MYSWY_KEY_RIGHT, 0};
+        return {Action::core, CHENGYIN_KEY_RIGHT, 0};
     case 0x24:
-        return {Action::core, MYSWY_KEY_HOME, 0};
+        return {Action::core, CHENGYIN_KEY_HOME, 0};
     case 0x23:
-        return {Action::core, MYSWY_KEY_END, 0};
+        return {Action::core, CHENGYIN_KEY_END, 0};
     case 0x2e:
-        return {Action::core, MYSWY_KEY_DELETE, 0};
+        return {Action::core, CHENGYIN_KEY_DELETE, 0};
     case 0x21:
-        return {Action::core, MYSWY_KEY_PAGE_UP, 0};
+        return {Action::core, CHENGYIN_KEY_PAGE_UP, 0};
     case 0x22:
-        return {Action::core, MYSWY_KEY_PAGE_DOWN, 0};
+        return {Action::core, CHENGYIN_KEY_PAGE_DOWN, 0};
     default:
         break;
     }
     if (ascii == '-')
-        return {Action::core, MYSWY_KEY_PAGE_UP, 0};
+        return {Action::core, CHENGYIN_KEY_PAGE_UP, 0};
     if (ascii == '=')
-        return {Action::core, MYSWY_KEY_PAGE_DOWN, 0};
+        return {Action::core, CHENGYIN_KEY_PAGE_DOWN, 0};
     if ((ascii >= '1' && ascii <= '9') || ascii == '\'')
         return {Action::core, static_cast<uint32_t>(ascii), 0};
     if (ascii >= 0x21 && ascii <= 0x7e)

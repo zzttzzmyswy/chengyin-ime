@@ -40,7 +40,7 @@ try {
     $previousFlags = $env:RUSTFLAGS
     try {
         $env:RUSTFLAGS = '-C target-feature=+crt-static'
-        & cargo build --release -p myswy-ffi --target x86_64-pc-windows-msvc --locked
+        & cargo build --release -p chengyin-ffi --target x86_64-pc-windows-msvc --locked
         if ($LASTEXITCODE -ne 0) { throw 'Rust build failed' }
     } finally { $env:RUSTFLAGS = $previousFlags }
     & cmake -S platforms/windows -B build/windows-msvc -G 'Visual Studio 17 2022' -A x64

@@ -2,7 +2,7 @@
 #include "common.h"
 #include <ctfutb.h>
 #include <functional>
-namespace myswy {
+namespace chengyin {
 // SDK-compatible declarations for interfaces absent from older MinGW ctfutb.h.
 inline constexpr GUID kLanguageButton = {0x28c7f1d0, 0xde25, 0x11d2, {0xaf, 0xdd, 0x00, 0x10, 0x5a, 0x27, 0x99, 0xb5}};
 inline constexpr GUID kInputModeButton = {0x2c77a81e, 0x41cc, 0x4178, {0xa3, 0xa7, 0x5f, 0x8a, 0x98, 0x75, 0x68, 0xe6}};

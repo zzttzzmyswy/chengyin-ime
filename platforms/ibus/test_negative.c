@@ -6,7 +6,7 @@
  * wrong reason, so this file runs the same scenario twice against the real C
  * ABI:
  *
- *   arm A (buggy)   reads COMMIT only when the core reported MYSWY_HANDLED
+ *   arm A (buggy)   reads COMMIT only when the core reported CHENGYIN_HANDLED
  *   arm B (control) reads COMMIT after every process call
  *
  * Arm A must lose the character and arm B must receive it. The real engine is
@@ -17,30 +17,30 @@
 #include <stdio.h>
 #include <string.h>
 #include "engine.h"
-#include "myswy_ime.h"
+#include "chengyin_ime.h"
 
 /* Returns 1 when a commit was observed. `unconditional` selects the arm. */
 static int punctuate(int unconditional, char *out, size_t capacity) {
-    MyswySession *session = myswy_session_new();
+    ChengyinSession *session = chengyin_session_new();
     assert(session);
-    assert(myswy_session_configure(session, 9, 1) == 0);
-    myswy_session_process(session, 'n', 0);
-    myswy_session_process(session, 'i', 0);
+    assert(chengyin_session_configure(session, 9, 1) == 0);
+    chengyin_session_process(session, 'n', 0);
+    chengyin_session_process(session, 'i', 0);
 
     /* ',' commits the pending candidate and is forwarded to the host. */
-    const int32_t flags = myswy_session_process(session, ',', 0);
-    assert((flags & MYSWY_HANDLED) == 0);
+    const int32_t flags = chengyin_session_process(session, ',', 0);
+    assert((flags & CHENGYIN_HANDLED) == 0);
 
     int committed = 0;
-    if (unconditional || (flags & MYSWY_HANDLED)) {
-        const int32_t required = myswy_session_text(session, MYSWY_TEXT_COMMIT, 0, NULL, 0);
+    if (unconditional || (flags & CHENGYIN_HANDLED)) {
+        const int32_t required = chengyin_session_text(session, CHENGYIN_TEXT_COMMIT, 0, NULL, 0);
         if (required > 0 && (size_t)required <= capacity) {
             const int32_t written =
-                myswy_session_text(session, MYSWY_TEXT_COMMIT, 0, (uint8_t *)out, capacity);
+                chengyin_session_text(session, CHENGYIN_TEXT_COMMIT, 0, (uint8_t *)out, capacity);
             committed = written > 1;
         }
     }
-    myswy_session_free(session);
+    chengyin_session_free(session);
     return committed;
 }
 
@@ -58,7 +58,7 @@ static void sink_commit(void *user, const char *utf8) {
 static void sink_preedit(void *user, const char *utf8, int cursor, int visible) {
     (void)user; (void)utf8; (void)cursor; (void)visible;
 }
-static void sink_candidates(void *user, const MyswyEngineRow *rows, int count, int selected,
+static void sink_candidates(void *user, const ChengyinEngineRow *rows, int count, int selected,
                             int association) {
     (void)user; (void)rows; (void)count; (void)selected; (void)association;
 }
@@ -85,16 +85,16 @@ int main(void) {
 
     /* And the shipped engine must behave like the control arm, not the buggy one. */
     Sink sink = {{0}, 0};
-    MyswyEngineSink hooks = {&sink, sink_commit, sink_preedit, sink_candidates, sink_auxiliary};
-    MyswyEngine *engine = myswy_engine_new(&hooks);
+    ChengyinEngineSink hooks = {&sink, sink_commit, sink_preedit, sink_candidates, sink_auxiliary};
+    ChengyinEngine *engine = chengyin_engine_new(&hooks);
     assert(engine);
-    myswy_engine_process_key(engine, 'n', 0);
-    myswy_engine_process_key(engine, 'i', 0);
-    const int consumed = myswy_engine_process_key(engine, ',', 0);
+    chengyin_engine_process_key(engine, 'n', 0);
+    chengyin_engine_process_key(engine, 'i', 0);
+    const int consumed = chengyin_engine_process_key(engine, ',', 0);
     assert(consumed == 0); /* still forwarded to the host */
     assert(sink.commits == 1);
     assert(strcmp(sink.commit, control) == 0);
-    myswy_engine_free(engine);
+    chengyin_engine_free(engine);
 
     printf("negative control passed: the unconditional read is what preserves \"%s\"\n", control);
     return 0;

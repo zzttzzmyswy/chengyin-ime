@@ -1,4 +1,4 @@
-use myswy_core::{Dictionary, Key, Modifiers, Session};
+use chengyin_core::{Dictionary, Key, Modifiers, Session};
 use std::sync::Arc;
 
 fn session(dictionary: Arc<Dictionary>) -> Session {

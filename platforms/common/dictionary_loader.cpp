@@ -9,7 +9,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-namespace myswy {
+namespace chengyin {
 namespace {
 constexpr size_t MaxDictionaryBytes = 64 * 1024 * 1024;
 class File {
@@ -52,9 +52,9 @@ void DictionaryLoader::retire(DictionaryPtr dictionary) {
 }
 
 DictionaryPtr DictionaryLoader::load(const Request &request) {
-    MyswyDictionary *handle = nullptr;
+    ChengyinDictionary *handle = nullptr;
     if (request.path.empty()) {
-        handle = myswy_dictionary_new_demo();
+        handle = chengyin_dictionary_new_demo();
     } else {
         if (request.path.front() != '/' || request.path.find('\0') != std::string::npos) {
             throw std::runtime_error("词典路径必须是绝对路径");
@@ -85,11 +85,11 @@ DictionaryPtr DictionaryLoader::load(const Request &request) {
             }
             source.append(buffer.data(), static_cast<size_t>(count));
         }
-        handle = myswy_dictionary_new_tsv(reinterpret_cast<const uint8_t *>(source.data()), source.size());
+        handle = chengyin_dictionary_new_tsv(reinterpret_cast<const uint8_t *>(source.data()), source.size());
     }
     if (!handle) { throw std::runtime_error("词典无效：请检查 UTF-8、TSV 格式、重复项及大小限制"); }
     // Retain ownership if allocation of the C++ control block throws.
-    std::unique_ptr<MyswyDictionary, decltype(&myswy_dictionary_free)> owned(handle, myswy_dictionary_free);
+    std::unique_ptr<ChengyinDictionary, decltype(&chengyin_dictionary_free)> owned(handle, chengyin_dictionary_free);
     auto result = std::make_shared<DictionarySnapshot>(nullptr, request.path);
     result->dictionary = std::move(owned);
     return result;
@@ -124,4 +124,4 @@ void DictionaryLoader::run() {
         }
     }
 }
-} // namespace myswy
+} // namespace chengyin

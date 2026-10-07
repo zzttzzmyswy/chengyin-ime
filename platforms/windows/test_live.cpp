@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <atomic>
 #include <cwchar>
-namespace myswy {
+namespace chengyin {
 HINSTANCE module = nullptr;
 LONG objects = 0;
 }
@@ -55,15 +55,15 @@ struct Sink : ITfLangBarItemSink {
     }
 };
 void languageBar() {
-    myswy::Ptr<myswy::LanguageBarItem> item;
+    chengyin::Ptr<chengyin::LanguageBarItem> item;
     unsigned toggles = 0;
-    item.attach(new myswy::LanguageBarItem([&] {++toggles;}));
-    myswy::Ptr<myswy::LanguageButton> button;
-    require(SUCCEEDED(myswy::query(static_cast<myswy::LanguageButton *>(item.get()), myswy::kLanguageButton,
+    item.attach(new chengyin::LanguageBarItem([&] {++toggles;}));
+    chengyin::Ptr<chengyin::LanguageButton> button;
+    require(SUCCEEDED(chengyin::query(static_cast<chengyin::LanguageButton *>(item.get()), chengyin::kLanguageButton,
                                    button)), "public button interface");
     TF_LANGBARITEMINFO info{};
-    require(SUCCEEDED(item->GetInfo(&info)) && info.clsidService == myswy::kService
-            && info.guidItem == myswy::kInputModeButton
+    require(SUCCEEDED(item->GetInfo(&info)) && info.clsidService == chengyin::kService
+            && info.guidItem == chengyin::kInputModeButton
             && (info.dwStyle & 2), "system input-mode button uses our service identity");
     Sink sink;
     DWORD cookie = 0;
@@ -107,12 +107,12 @@ void languageBar() {
 }
 }
 int wmain(int argc, wchar_t **argv) {
-    myswy::module = GetModuleHandleW(nullptr);
+    chengyin::module = GetModuleHandleW(nullptr);
     require(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)), "COM apartment");
     if (argc == 3 && !std::wcscmp(argv[1], L"--publish")) {
-        myswy::Preferences prefs;
+        chengyin::Preferences prefs;
         prefs.fontSize = 26; prefs.layout = 1; prefs.pageSize = 9;
-        require(myswy::savePreferences(argv[2], prefs), "separate publisher saves isolated preferences");
+        require(chengyin::savePreferences(argv[2], prefs), "separate publisher saves isolated preferences");
         CoUninitialize();
         return 0;
     }
@@ -120,15 +120,15 @@ int wmain(int argc, wchar_t **argv) {
         bool complete = false;
         const auto name = L"Local\\Chengyin.Remote.Test." + std::to_wstring(GetCurrentProcessId());
         {
-            myswy::ConfigurationWatcher watcher(0, [&] {
-                auto snapshot = std::make_shared<myswy::ConfigurationUpdate>();
-                snapshot->preferencesValid = myswy::tryLoadPreferences(argv[2], snapshot->preferences);
+            chengyin::ConfigurationWatcher watcher(0, [&] {
+                auto snapshot = std::make_shared<chengyin::ConfigurationUpdate>();
+                snapshot->preferencesValid = chengyin::tryLoadPreferences(argv[2], snapshot->preferences);
                 return snapshot;
             }, [&](auto snapshot) {
                 if (!snapshot->preferencesValid) return;
                 complete = snapshot->preferences.fontSize == 26 && !snapshot->preferences.candidatePinyin;
                 const std::string report = complete ? "PASS" : "READY";
-                require(myswy::atomicWrite(argv[3], std::vector<uint8_t>(report.begin(), report.end())), "remote consumer report");
+                require(chengyin::atomicWrite(argv[3], std::vector<uint8_t>(report.begin(), report.end())), "remote consumer report");
             }, name.c_str(), argv[2]);
             require(watcher.valid(), "separate existing consumer file watcher");
             until([&] {return complete;});
@@ -142,48 +142,48 @@ int wmain(int argc, wchar_t **argv) {
     auto name = L"Local\\Chengyin.Live.Test." + std::to_wstring(GetCurrentProcessId());
     const DWORD mainThread = GetCurrentThreadId();
     {
-        const auto isolatedPublication = myswy::configurationEpochName();
-        require(isolatedPublication != myswy::kConfigurationEpoch
+        const auto isolatedPublication = chengyin::configurationEpochName();
+        require(isolatedPublication != chengyin::kConfigurationEpoch
             && isolatedPublication.find(std::to_wstring(GetCurrentProcessId())) != std::wstring::npos,
             "fixture publication never uses the production configuration channel");
-        myswy::LearningEpoch published(isolatedPublication.c_str());
-        myswy::LearningEpoch epoch(name.c_str());
+        chengyin::LearningEpoch published(isolatedPublication.c_str());
+        chengyin::LearningEpoch epoch(name.c_str());
         std::atomic<unsigned> loads{0};
         unsigned received[2] {};
         int sizes[2] {5, 5};
         auto load = [&] {
             require(GetCurrentThreadId() != mainThread, "file parsing stays off input thread");
             ++loads;
-            auto snapshot = std::make_shared<myswy::ConfigurationUpdate>();
-            snapshot->preferencesValid = myswy::tryLoadPreferences(file, snapshot->preferences);
+            auto snapshot = std::make_shared<chengyin::ConfigurationUpdate>();
+            snapshot->preferencesValid = chengyin::tryLoadPreferences(file, snapshot->preferences);
             return snapshot;
         };
-        auto apply = [&](int index, myswy::ConfigurationWatcher::Snapshot snapshot) {
+        auto apply = [&](int index, chengyin::ConfigurationWatcher::Snapshot snapshot) {
             require(GetCurrentThreadId() == mainThread, "configuration delivered in TSF apartment");
             ++received[index];
             if (snapshot->preferencesValid)
                 sizes[index] = snapshot->preferences.pageSize;
         };
-        myswy::ConfigurationWatcher first(epoch.current(), load, [&](auto s) {
+        chengyin::ConfigurationWatcher first(epoch.current(), load, [&](auto s) {
             apply(0, std::move(s));
         }, name.c_str());
-        myswy::ConfigurationWatcher second(epoch.current(), load, [&](auto s) {
+        chengyin::ConfigurationWatcher second(epoch.current(), load, [&](auto s) {
             apply(1, std::move(s));
         }, name.c_str());
         require(first.valid() && second.valid(), "two existing app watchers");
-        myswy::Preferences prefs;
+        chengyin::Preferences prefs;
         prefs.pageSize = 9;
         prefs.chinesePunctuation = false;
-        require(myswy::savePreferences(file, prefs), "atomic preferences publish");
+        require(chengyin::savePreferences(file, prefs), "atomic preferences publish");
         epoch.advance();
         until([&] {return received[0] && received[1];});
         require(sizes[0] == 9 && sizes[1] == 9, "all existing applications refresh");
-        require(!myswy::loadPreferences(file).chinesePunctuation, "punctuation setting persists");
+        require(!chengyin::loadPreferences(file).chinesePunctuation, "punctuation setting persists");
         unsigned before = loads.load();
         for (int i = 0; i < 100; ++i)
             epoch.advance();
         prefs.pageSize = 7;
-        require(myswy::savePreferences(file, prefs), "latest config");
+        require(chengyin::savePreferences(file, prefs), "latest config");
         epoch.advance();
         until([&] {return sizes[0] == 7 && sizes[1] == 7;});
         require(loads.load() - before < 20, "rapid saves coalesce");
@@ -198,15 +198,15 @@ int wmain(int argc, wchar_t **argv) {
         require(sizes[0] == 7 && sizes[1] == 7, "invalid updates retain usable configuration");
         auto generation = published.current();
         prefs.fontSize = 100;
-        require(!myswy::savePreferences(file, prefs)
+        require(!chengyin::savePreferences(file, prefs)
                 && generation == published.current(), "failed save does not signal update");
     }
-    require(myswy::objects == 0, "watchers and pending snapshots released");
+    require(chengyin::objects == 0, "watchers and pending snapshots released");
     // Closing while a worker owns an undelivered update must also drain its resources.
     {
-        myswy::LearningEpoch epoch(name.c_str());
+        chengyin::LearningEpoch epoch(name.c_str());
         std::atomic<bool> loaded{false};
-        myswy::ConfigurationWatcher watcher(epoch.current(), [&] {auto s = std::make_shared<myswy::ConfigurationUpdate>(); loaded = true; return s;}, [](
+        chengyin::ConfigurationWatcher watcher(epoch.current(), [&] {auto s = std::make_shared<chengyin::ConfigurationUpdate>(); loaded = true; return s;}, [](
         auto) {
             require(false, "closed watcher has no callback");
         }, name.c_str());
@@ -222,15 +222,15 @@ int wmain(int argc, wchar_t **argv) {
         const auto blockedName = name + L".Blocked";
         HANDLE blocker = CreateEventW(nullptr, TRUE, FALSE, blockedName.c_str());
         require(blocker != nullptr, "private incompatible notification object");
-        myswy::LearningEpoch unavailable(blockedName.c_str());
+        chengyin::LearningEpoch unavailable(blockedName.c_str());
         require(!unavailable.valid(), "shared mapping is actually unavailable for fallback regression");
-        myswy::Preferences prefs; prefs.pageSize = 5; prefs.candidatePinyin = true;
-        require(myswy::savePreferences(file, prefs), "file fallback baseline");
+        chengyin::Preferences prefs; prefs.pageSize = 5; prefs.candidatePinyin = true;
+        require(chengyin::savePreferences(file, prefs), "file fallback baseline");
         int font[2]{}, page[2]{}; bool pinyin[2]{true,true};
         auto load = [&] {
             require(GetCurrentThreadId() != mainThread, "fallback disk I/O stays off input thread");
-            auto snapshot = std::make_shared<myswy::ConfigurationUpdate>();
-            snapshot->preferencesValid = myswy::tryLoadPreferences(file, snapshot->preferences);
+            auto snapshot = std::make_shared<chengyin::ConfigurationUpdate>();
+            snapshot->preferencesValid = chengyin::tryLoadPreferences(file, snapshot->preferences);
             return snapshot;
         };
         auto apply = [&](int index, auto snapshot) {
@@ -242,8 +242,8 @@ int wmain(int argc, wchar_t **argv) {
             }
         };
         {
-            myswy::ConfigurationWatcher first(0, load, [&](auto s) {apply(0,std::move(s));}, blockedName.c_str(), file);
-            myswy::ConfigurationWatcher second(0, load, [&](auto s) {apply(1,std::move(s));}, blockedName.c_str(), file);
+            chengyin::ConfigurationWatcher first(0, load, [&](auto s) {apply(0,std::move(s));}, blockedName.c_str(), file);
+            chengyin::ConfigurationWatcher second(0, load, [&](auto s) {apply(1,std::move(s));}, blockedName.c_str(), file);
             require(first.valid() && second.valid(), "watchers survive unavailable shared mapping");
             until([&] {return font[0] == 18 && font[1] == 18;});
             wchar_t executable[32768]{};
@@ -262,7 +262,7 @@ int wmain(int argc, wchar_t **argv) {
             HANDLE consumer = spawn(L"--watch \"" + file + L"\" \"" + report + L"\"");
             auto reportIs = [&](const std::string &expected) {
                 std::vector<uint8_t> data;
-                return myswy::readSmallFile(report,data,16) && std::string(data.begin(),data.end()) == expected;
+                return chengyin::readSmallFile(report,data,16) && std::string(data.begin(),data.end()) == expected;
             };
             until([&] {return reportIs("READY");});
             HANDLE publisher = spawn(L"--publish \"" + file + L"\"");
@@ -279,13 +279,13 @@ int wmain(int argc, wchar_t **argv) {
         CloseHandle(blocker);
     }
     languageBar();
-    myswy::PunctuationState p;
+    chengyin::PunctuationState p;
     wchar_t out[3] {};
     require(p.render('^', true, out) == 2 && out[0] == L'…' && out[1] == L'…', "Chinese ellipsis pair");
     require(p.render('_', true, out) == 2 && out[0] == L'—', "Chinese dash pair");
     require(p.render(',', false, out) == 1 && out[0] == L',', "ASCII punctuation preference");
     DeleteFileW(file.c_str());
     CoUninitialize();
-    require(myswy::objects == 0, "all module lifetimes released");
+    require(chengyin::objects == 0, "all module lifetimes released");
     std::puts("PASS: multiple live config recipients, coalescing, invalid updates, shutdown, language bar and punctuation.");
 }

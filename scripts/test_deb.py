@@ -17,12 +17,12 @@ def run(command):
 
 
 def test_package(package):
-    with tempfile.TemporaryDirectory(prefix="myswy-dpkg-test-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="chengyin-dpkg-test-") as temporary:
         work = Path(temporary)
         root = work / "root"
         (root / "var/lib/dpkg").mkdir(parents=True)
         (root / "var/lib/dpkg/status").touch()
-        user_config = root / "home/test/.config/fcitx5/conf/myswy.conf"
+        user_config = root / "home/test/.config/fcitx5/conf/chengyin.conf"
         user_config.parent.mkdir(parents=True)
         user_config.write_text("DictionaryPath=/home/test/private.tsv\n")
         # Container dpkg defaults often exclude documentation. Include the full
@@ -35,7 +35,7 @@ def test_package(package):
         run(["dpkg-deb", "--raw-extract", str(package), str(extracted)])
         assert {p.name for p in (extracted / "DEBIAN").iterdir()} == {"control", "md5sums"}
         metadata = run(["dpkg-deb", "--field", str(package)])
-        assert "Package: fcitx5-myswy\n" in metadata
+        assert "Package: fcitx5-chengyin\n" in metadata
         assert "Depends: fcitx5 (>= 5.1)," in metadata
         assert "libfcitx5core" in metadata and "libc6" in metadata
         sums = []
@@ -58,10 +58,10 @@ def test_package(package):
         run(["dpkg-deb", "--root-owner-group", "--build", str(extracted), str(upgrade)])
         run(dpkg + ["--install", str(upgrade)])
         run(dpkg + ["--install", str(package)]) # rollback
-        run(dpkg + ["--remove", "fcitx5-myswy"])
+        run(dpkg + ["--remove", "fcitx5-chengyin"])
         assert all(not (root / path).exists() for _, path in sums)
         assert user_config.read_text() == "DictionaryPath=/home/test/private.tsv\n"
-        run(dpkg + ["--purge", "fcitx5-myswy"])
+        run(dpkg + ["--purge", "fcitx5-chengyin"])
     print(f"{package.name}: isolated-root install/reinstall/upgrade/rollback/remove/purge passed")
 
 

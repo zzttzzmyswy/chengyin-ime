@@ -1,14 +1,14 @@
 #pragma once
 #include "common.h"
-#include "myswy_ime.h"
+#include "chengyin_ime.h"
 #include "preferences.h"
 
-namespace myswy {
+namespace chengyin {
 struct WideText {
-    wchar_t data[MYSWY_MAX_TEXT_BYTES + 65] {};
+    wchar_t data[CHENGYIN_MAX_TEXT_BYTES + 65] {};
     int length = 0;
 };
-bool readText(MyswySession *session, uint32_t field, size_t index, WideText &out);
+bool readText(ChengyinSession *session, uint32_t field, size_t index, WideText &out);
 // Vertical side of the caret the popup is placed on.
 enum class Placement { below, above };
 struct PlacementInput {
@@ -35,11 +35,11 @@ class CandidateWindow {
   public:
     using Choice = void (*)(void *, uint64_t, int);
     ~CandidateWindow();
-    void show(MyswySession *, HWND owner, RECT caret, bool limited,
+    void show(ChengyinSession *, HWND owner, RECT caret, bool limited,
               void *target = nullptr, Choice choice = nullptr, uint64_t generation = 0,
               const Preferences &preferences = Preferences{}, bool inlineEditable = false);
     void hide();
-    void refreshPreferences(MyswySession *, const Preferences &);
+    void refreshPreferences(ChengyinSession *, const Preferences &);
     HWND handle() const { return hwnd_; }
   private:
     static LRESULT CALLBACK procedure(HWND, UINT, WPARAM, LPARAM);

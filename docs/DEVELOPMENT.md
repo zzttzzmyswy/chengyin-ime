@@ -111,7 +111,7 @@ Windows 一次 SetText 写 commit+preedit，再将 composition 起点 ShiftStart
 | 目录 | 职责 |
 | --- | --- |
 | `crates/ime-core` | 词典、音节图、有界解码、会话、联想与选词偏好；不访问平台文件或 GUI |
-| `crates/ime-ffi`、`include/myswy_ime.h` | C ABI、句柄所有权、UTF-8 缓冲区、panic 边界 |
+| `crates/ime-ffi`、`include/chengyin_ime.h` | C ABI、句柄所有权、UTF-8 缓冲区、panic 边界 |
 | `crates/ime-cli` | 查询、词库转换、交互演示 |
 | `platforms/windows` | TSF、原生设置、候选、学习保存、语言栏、安装器 |
 | `platforms/fcitx5` | Fcitx 5 适配、后台词库切换与配置 |
@@ -119,13 +119,13 @@ Windows 一次 SetText 写 commit+preedit，再将 composition 起点 ShiftStart
 | `data` | 有许可证和固定来源的常用词库；不得混入用户个人词库 |
 
 每个输入上下文拥有独立 Session；词典不可变并共享，用户偏好使用快照。
-公共 ABI 保留内部 Myswy 标识以兼容旧配置；对外品牌为澄音。
+公共 ABI 保留内部 Chengyin 标识以兼容旧配置；对外品牌为澄音。
 不要将平台消息循环、磁盘读写或字体逻辑加入共享核心。
 
 ## 构建和检查
 
 Rust 1.82+：`cargo test --workspace --locked`；Linux 完整检查为 `bash scripts/check.sh`。
-性能用 `cargo bench -p myswy-core --bench latency`，记录工具链、硬件、词库、场景和百分位。
+性能用 `cargo bench -p chengyin-core --bench latency`，记录工具链、硬件、词库、场景和百分位。
 按键处理的零分配保证不包含初始化、加载、GUI、后台持久化与系统 API。
 
 Windows 使用 [平台指南](../platforms/windows/README.md) 的 `Build.ps1`，同时运行六个 CTest
@@ -135,7 +135,7 @@ Python 3.11+、NSIS 3.11+；生产 DLL 与设置 EXE 静态链接运行库。
 `build/nsis-amd64` 复制私有工具链，并用固定 SHA-256 的 Debian `nsis-common 3.11-1`
 补齐 Windows PE 组件，不修改系统 NSIS。来源与组件哈希随包保存在 RUNTIME_LICENSES.zip。
 该下载只发生在构建机；离线准备可给 `scripts/prepare_windows_nsis.py` 传 `--package`。
-MinGW 交叉构建可指定 `MYSWY_CORE_LIBRARY` 与标准 CMake toolchain，注意 Rust target 必须匹配。
+MinGW 交叉构建可指定 `CHENGYIN_CORE_LIBRARY` 与标准 CMake toolchain，注意 Rust target 必须匹配。
 跨编译的 CTest 通过 `CMAKE_CROSSCOMPILING_EMULATOR` 启动 Wine；这不代替 Windows 实机。
 
 Linux/Fcitx 5 的 SDK、构建、暂存安装、Debian 包和 ASan/UBSan 命令见
@@ -145,7 +145,7 @@ Linux/Fcitx 5 的 SDK、构建、暂存安装、Debian 包和 ASan/UBSan 命令�
 
 `preferences.cpp` 使用有界、严格校验的 UTF-16LE INI。写入经临时文件、刷盘和原子替换，
 失败保留旧文件；新的 `ChinesePunctuation` 键缺失时默认启用，兼容旧 Version=1 配置。
-只有保存成功才增加会话范围共享映射 `Local\MyswyIME.ConfigurationGeneration` 的版本号。
+只有保存成功才增加会话范围共享映射 `Local\ChengyinIME.ConfigurationGeneration` 的版本号。
 词库导入/恢复、学习导入/清除也发布通知；普通选词保存不发布，避免每次上屏引发全应用重载。
 
 每个已激活 Service 的 `ConfigurationWatcher` 在后台每 200 ms 检查共享整数，有变化才读取配置、

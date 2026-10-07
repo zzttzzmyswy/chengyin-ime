@@ -1,4 +1,4 @@
-use myswy_core::{fuzzy::*, Dictionary, Key, Modifiers, Session};
+use chengyin_core::{fuzzy::*, Dictionary, Key, Modifiers, Session};
 use std::sync::Arc;
 fn replay(d: &Arc<Dictionary>, raw: &str, flags: u32) -> Session {
     let mut s = Session::new(Arc::clone(d));

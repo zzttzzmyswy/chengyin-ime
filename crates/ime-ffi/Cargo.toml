@@ -1,13 +1,13 @@
 [package]
-name = "myswy-ffi"
+name = "chengyin-ffi"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [lib]
-name = "myswy_ime"
+name = "chengyin_ime"
 crate-type = ["rlib", "cdylib", "staticlib"]
 
 [dependencies]
-myswy-core = { path = "../ime-core" }
+chengyin-core = { path = "../ime-core" }

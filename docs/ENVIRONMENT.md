@@ -14,12 +14,12 @@
 ```powershell
 $env:PATH="C:\Users\xhxez\.cargo\bin;C:\Program Files\CMake\bin;" + $env:PATH
 $env:RUSTFLAGS='-C target-feature=+crt-static'
-cargo build --release -p myswy-ffi --target x86_64-pc-windows-msvc --locked
+cargo build --release -p chengyin-ffi --target x86_64-pc-windows-msvc --locked
 python scripts/version.py --generate
 python scripts/version.py --check
 python scripts/version.py --verify-bump
 cmake -S platforms/windows -B build/windows-msvc -G 'Visual Studio 17 2022' -A x64 -DPython3_EXECUTABLE=C:/Users/xhxez/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe
-cmake --build build/windows-msvc --config Release --parallel 3 --target myswy_tsf myswy_settings myswy_probe windows_skin_test windows_ui_test windows_key_test windows_settings_test windows_update_test windows_live_test myswy_tsf_fixture
+cmake --build build/windows-msvc --config Release --parallel 3 --target chengyin_tsf chengyin_settings chengyin_probe windows_skin_test windows_ui_test windows_key_test windows_settings_test windows_update_test windows_live_test chengyin_tsf_fixture
 ctest --test-dir build/windows-msvc -C Release --output-on-failure
 python scripts/package_windows.py --build-dir build/windows-msvc --toolchain msvc --makensis build/nsis-amd64/makensis.exe --nsis-notice packaging/windows/NSIS-LICENSE.txt
 ```

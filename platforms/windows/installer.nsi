@@ -15,10 +15,29 @@ SetDatablockOptimize on
 
 !define PRODUCT "澄音输入法"
 !define CLASS "Software\Classes\CLSID\{65C32A54-219A-4F0A-B44C-B963D7BA532F}"
-!define ARP "Software\Microsoft\Windows\CurrentVersion\Uninstall\MyswyIME"
+!define ARP "Software\Microsoft\Windows\CurrentVersion\Uninstall\ChengyinIME"
+; preview24 and earlier shipped under the former project name: their uninstall
+; key, install root, marker and payload file names all carried it. The install
+; section detects such a layout, adopts it through the $Old* variables and
+; removes the obsolete key, so an in-place upgrade never strands or duplicates
+; an older preview.
+!define LEGACY_ARP "Software\Microsoft\Windows\CurrentVersion\Uninstall\MyswyIME"
+!define ROOT "$PROGRAMFILES64\ChengyinIME"
+!define LEGACY_ROOT "$PROGRAMFILES64\MyswyIME"
+!define NEW_DLL "chengyin_tsf.dll"
+!define LEGACY_DLL "myswy_tsf.dll"
+!define NEW_MARKER "chengyin-install.txt"
+!define LEGACY_MARKER "myswy-install.txt"
+!define NEW_SETTINGS "chengyin_settings.exe"
+!define LEGACY_SETTINGS "myswy_settings.exe"
+!define LEGACY_PROBE "myswy_probe.exe"
+; Revisions 1..6 shipped the settings UI as a standalone "testpad" executable.
+!define LEGACY_TESTPAD "myswy_testpad.exe"
+; Revisions 1..5 shipped a Start menu folder under the former name.
+!define LEGACY_MENU "Myswy 全拼"
 Name "${PRODUCT} ${VERSION}"
 OutFile "${OUTPUT}"
-InstallDir "$PROGRAMFILES64\MyswyIME\${VERSION}"
+InstallDir "$PROGRAMFILES64\ChengyinIME\${VERSION}"
 BrandingText "Chengyin IME · 离线中文输入法"
 VIProductVersion "${NUMERIC_VERSION}"
 VIAddVersionKey /LANG=2052 "ProductName" "${PRODUCT}"
@@ -51,6 +70,15 @@ Var OldDisplayName
 Var OldPublisher
 Var OldMenu
 Var OldHadArp
+; Names of the detected previous install. A preview24 or earlier build used the
+; former project name in every one of them.
+Var OldRoot
+Var OldDll
+Var OldMarker
+Var OldSettings
+Var OldTestpad
+Var OldArpKey
+Var Legacy
 Var Failure
 Var Phase
 Var Registered
@@ -67,24 +95,24 @@ Var Mutex
   ${EndIf}
 !macroend
 
-!macro Arp DIR VER REV
-  WriteRegStr HKLM "${ARP}" "DisplayName" "${PRODUCT}（预览）"
-  WriteRegStr HKLM "${ARP}" "DisplayVersion" "${VER}"
-  WriteRegStr HKLM "${ARP}" "InstallLocation" "${DIR}"
-  WriteRegStr HKLM "${ARP}" "UninstallString" '$\"${DIR}\Uninstall.exe$\"'
-  WriteRegStr HKLM "${ARP}" "QuietUninstallString" '$\"${DIR}\Uninstall.exe$\" /S'
-  WriteRegStr HKLM "${ARP}" "DisplayIcon" "${DIR}\myswy_settings.exe"
-  WriteRegStr HKLM "${ARP}" "Publisher" "Chengyin IME contributors"
-  WriteRegDWORD HKLM "${ARP}" "InstallRevision" ${REV}
-  WriteRegDWORD HKLM "${ARP}" "NoModify" 1
-  WriteRegDWORD HKLM "${ARP}" "NoRepair" 1
-  WriteRegDWORD HKLM "${ARP}" "EstimatedSize" ${SIZE_KIB}
+!macro Arp KEY DIR VER REV SETTINGS
+  WriteRegStr HKLM "${KEY}" "DisplayName" "${PRODUCT}（预览）"
+  WriteRegStr HKLM "${KEY}" "DisplayVersion" "${VER}"
+  WriteRegStr HKLM "${KEY}" "InstallLocation" "${DIR}"
+  WriteRegStr HKLM "${KEY}" "UninstallString" '$\"${DIR}\Uninstall.exe$\"'
+  WriteRegStr HKLM "${KEY}" "QuietUninstallString" '$\"${DIR}\Uninstall.exe$\" /S'
+  WriteRegStr HKLM "${KEY}" "DisplayIcon" "${DIR}\${SETTINGS}"
+  WriteRegStr HKLM "${KEY}" "Publisher" "Chengyin IME contributors"
+  WriteRegDWORD HKLM "${KEY}" "InstallRevision" ${REV}
+  WriteRegDWORD HKLM "${KEY}" "NoModify" 1
+  WriteRegDWORD HKLM "${KEY}" "NoRepair" 1
+  WriteRegDWORD HKLM "${KEY}" "EstimatedSize" ${SIZE_KIB}
 !macroend
 
-!macro Links DIR MENU
+!macro Links DIR MENU APP_SETTINGS
   CreateDirectory "$SMPROGRAMS\${MENU}"
   Delete "$SMPROGRAMS\${MENU}\输入测试.lnk"
-  CreateShortcut "$SMPROGRAMS\${MENU}\设置.lnk" "${DIR}\myswy_settings.exe"
+  CreateShortcut "$SMPROGRAMS\${MENU}\设置.lnk" "${DIR}\${APP_SETTINGS}"
   CreateShortcut "$SMPROGRAMS\${MENU}\使用说明.lnk" "${DIR}\README.md"
   CreateShortcut "$SMPROGRAMS\${MENU}\卸载.lnk" "${DIR}\Uninstall.exe"
 !macroend
@@ -101,8 +129,16 @@ Var Mutex
   ; Never recursively delete a folder containing unknown or user-created files.
   !insertmacro DeletePayload "${DIR}"
   Delete /REBOOTOK "${DIR}\Uninstall.exe"
-  Delete /REBOOTOK "${DIR}\myswy-install.txt"
-  Delete /REBOOTOK "${DIR}\myswy_testpad.exe"
+  Delete /REBOOTOK "${DIR}\${NEW_MARKER}"
+  ; A preview24 or earlier directory still holds the former names.
+  Delete /REBOOTOK "${DIR}\${LEGACY_MARKER}"
+  Delete /REBOOTOK "${DIR}\chengyin_testpad.exe"
+  Delete /REBOOTOK "${DIR}\${LEGACY_TESTPAD}"
+  ; A preview24 or earlier directory also holds the former binary names; the
+  ; generated payload list above only knows this build's names.
+  Delete /REBOOTOK "${DIR}\${LEGACY_DLL}"
+  Delete /REBOOTOK "${DIR}\${LEGACY_PROBE}"
+  Delete /REBOOTOK "${DIR}\${LEGACY_SETTINGS}"
   ; Files used only by the old preview1 ZIP distribution.
   Delete /REBOOTOK "${DIR}\Install.ps1"
   Delete /REBOOTOK "${DIR}\Uninstall.ps1"
@@ -114,7 +150,7 @@ Var Mutex
 Function ${PREFIX}.onInit
   SetRegView 64
   SetShellVarContext all
-  System::Call 'kernel32::CreateMutexW(p0,i0,w"Global\MyswyIME.Setup") p.r0 ?e'
+  System::Call 'kernel32::CreateMutexW(p0,i0,w"Global\ChengyinIME.Setup") p.r0 ?e'
   Pop $1
   StrCpy $Mutex $0
   ${If} $0 == 0
@@ -152,8 +188,8 @@ Section "输入法" Install
   StrCpy $OldHadArp 0
   StrCpy $Failure ""
   ; Always use our fixed version directory; /D must not redirect deletion.
-  StrCpy $INSTDIR "$PROGRAMFILES64\MyswyIME\${VERSION}"
-  !insertmacro RefuseLink "$PROGRAMFILES64\MyswyIME" failed
+  StrCpy $INSTDIR "$PROGRAMFILES64\ChengyinIME\${VERSION}"
+  !insertmacro RefuseLink "$PROGRAMFILES64\ChengyinIME" failed
   !insertmacro RefuseLink "$INSTDIR" failed
   InitPluginsDir
   SetOutPath "$PLUGINSDIR\payload"
@@ -164,62 +200,92 @@ Section "输入法" Install
     Goto failed
   ${EndIf}
   ClearErrors
-  ExecWait '$\"$PLUGINSDIR\payload\myswy_probe.exe$\" --verify-files $\"$PLUGINSDIR\payload$\" $\"$PLUGINSDIR\payload\SHA256SUMS.txt$\"' $0
+  ExecWait '$\"$PLUGINSDIR\payload\chengyin_probe.exe$\" --verify-files $\"$PLUGINSDIR\payload$\" $\"$PLUGINSDIR\payload\SHA256SUMS.txt$\"' $0
   ${If} ${Errors}
   ${OrIf} $0 != 0
     StrCpy $Failure "安装文件校验失败。系统没有被修改。"
     Goto failed
   ${EndIf}
-  ExecWait '$\"$PLUGINSDIR\payload\myswy_probe.exe$\" $\"$PLUGINSDIR\payload\myswy_tsf.dll$\"' $0
+  ExecWait '$\"$PLUGINSDIR\payload\chengyin_probe.exe$\" $\"$PLUGINSDIR\payload\chengyin_tsf.dll$\"' $0
   ${If} ${Errors}
   ${OrIf} $0 != 0
     StrCpy $Failure "输入服务自检失败。系统没有被修改。"
     Goto failed
   ${EndIf}
-  ExecWait '$\"$PLUGINSDIR\payload\myswy_probe.exe$\" --check-registry' $0
+  ExecWait '$\"$PLUGINSDIR\payload\chengyin_probe.exe$\" --check-registry' $0
   ${If} ${Errors}
   ${OrIf} $0 != 0
     StrCpy $Failure "已有注册信息无法读取或不完整，已保留原文件。"
     Goto failed
   ${EndIf}
   ReadRegStr $Registered HKLM "${CLASS}\InprocServer32" ""
+  ; Prefer this build's uninstall entry, then the former-name entry left by a
+  ; preview24 or earlier install. Both are adopted before any system change.
+  StrCpy $OldArpKey "${ARP}"
+  StrCpy $Legacy 0
   ReadRegStr $OldDir HKLM "${ARP}" "InstallLocation"
+  ${If} $OldDir == ""
+    ReadRegStr $OldDir HKLM "${LEGACY_ARP}" "InstallLocation"
+    ${If} $OldDir != ""
+      StrCpy $Legacy 1
+      StrCpy $OldArpKey "${LEGACY_ARP}"
+    ${EndIf}
+  ${EndIf}
+  ; A former-name install also used the former file, marker and settings names.
+  ${If} $Legacy == 1
+    StrCpy $OldRoot "${LEGACY_ROOT}"
+    StrCpy $OldDll "${LEGACY_DLL}"
+    StrCpy $OldMarker "${LEGACY_MARKER}"
+    StrCpy $OldSettings "${LEGACY_SETTINGS}"
+    StrCpy $OldTestpad "${LEGACY_TESTPAD}"
+  ${Else}
+    StrCpy $OldRoot "${ROOT}"
+    StrCpy $OldDll "${NEW_DLL}"
+    StrCpy $OldMarker "${NEW_MARKER}"
+    StrCpy $OldSettings "${NEW_SETTINGS}"
+    StrCpy $OldTestpad ""
+  ${EndIf}
   ${If} $OldDir != ""
     StrCpy $OldHadArp 1
-    ReadRegStr $OldDisplayName HKLM "${ARP}" "DisplayName"
-    ReadRegStr $OldPublisher HKLM "${ARP}" "Publisher"
-    ReadRegStr $OldVersion HKLM "${ARP}" "DisplayVersion"
+    ReadRegStr $OldDisplayName HKLM "$OldArpKey" "DisplayName"
+    ReadRegStr $OldPublisher HKLM "$OldArpKey" "Publisher"
+    ReadRegStr $OldVersion HKLM "$OldArpKey" "DisplayVersion"
     ClearErrors
-    ReadRegDWORD $OldRevision HKLM "${ARP}" "InstallRevision"
+    ReadRegDWORD $OldRevision HKLM "$OldArpKey" "InstallRevision"
     ${If} ${Errors}
       StrCpy $Failure "旧安装版本记录缺失，已保留原文件。"
       Goto failed
     ${EndIf}
   ${ElseIf} $Registered != ""
     ; Explicit migration from the only earlier ZIP release; no generic paths.
-    StrCpy $OldDir "$PROGRAMFILES64\MyswyIME\0.1.0-preview1"
+    StrCpy $OldRoot "${LEGACY_ROOT}"
+    StrCpy $OldDir "${LEGACY_ROOT}\0.1.0-preview1"
     StrCpy $OldVersion "0.1.0-preview1"
     StrCpy $OldRevision 1
+    StrCpy $OldDll "${LEGACY_DLL}"
+    StrCpy $OldMarker "${LEGACY_MARKER}"
+    StrCpy $OldSettings "${LEGACY_SETTINGS}"
+    StrCpy $OldTestpad "${LEGACY_TESTPAD}"
   ${EndIf}
   StrCpy $OldMenu "澄音输入法"
   ${If} $OldRevision <= 5
-    StrCpy $OldMenu "Myswy 全拼"
+    StrCpy $OldMenu "${LEGACY_MENU}"
   ${EndIf}
   ${If} $OldDir != ""
     ${GetParent} "$OldDir" $0
-    ${If} $0 != "$PROGRAMFILES64\MyswyIME"
-    ${OrIf} $OldDir != "$PROGRAMFILES64\MyswyIME\$OldVersion"
+    ${If} $0 != "$OldRoot"
+    ${OrIf} $OldDir != "$OldRoot\$OldVersion"
       StrCpy $Failure "已有注册或安装目录不属于此安装程序，已保留原文件。"
       Goto failed
     ${EndIf}
     ${If} $Registered != ""
-    ${AndIf} $Registered != "$OldDir\myswy_tsf.dll"
+    ${AndIf} $Registered != "$OldDir\$OldDll"
       StrCpy $Failure "已有注册或安装目录不属于此安装程序，已保留原文件。"
       Goto failed
     ${EndIf}
     !insertmacro RefuseLink "$OldDir" failed
     ClearErrors
-    FileOpen $0 "$OldDir\myswy-install.txt" r
+    FileOpen $0 "$OldDir\$OldMarker" r
     FileRead $0 $1
     FileClose $0
     ; The original PowerShell marker has CRLF; newer markers do not.
@@ -235,13 +301,13 @@ Section "输入法" Install
     ${EndIf}
     ${If} $OldDir == $INSTDIR
       ClearErrors
-      ExecWait '$\"$PLUGINSDIR\payload\myswy_probe.exe$\" --verify-files $\"$INSTDIR$\" $\"$PLUGINSDIR\payload\SHA256SUMS.txt$\"' $0
+      ExecWait '$\"$PLUGINSDIR\payload\chengyin_probe.exe$\" --verify-files $\"$INSTDIR$\" $\"$PLUGINSDIR\payload\SHA256SUMS.txt$\"' $0
       ${If} ${Errors}
       ${OrIf} $0 != 0
         StrCpy $Failure "同版本文件不同或损坏，请使用更新版本修复。"
         Goto failed
       ${EndIf}
-      ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s /n /i:repair $\"$INSTDIR\myswy_tsf.dll$\"' $0
+      ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s /n /i:repair $\"$INSTDIR\chengyin_tsf.dll$\"' $0
       ${If} ${Errors}
       ${OrIf} $0 != 0
         StrCpy $Failure "同版本注册修复未完成，已保留文件，可重试。"
@@ -265,14 +331,14 @@ Section "输入法" Install
   ClearErrors
   CopyFiles /SILENT "$PLUGINSDIR\payload\*.*" "$INSTDIR"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
-  FileOpen $0 "$INSTDIR\myswy-install.txt" w
+  FileOpen $0 "$INSTDIR\${NEW_MARKER}" w
   FileWrite $0 "${VERSION}"
   FileClose $0
   ${If} ${Errors}
     StrCpy $Failure "无法写入安装目录。"
     Goto failed
   ${EndIf}
-  ExecWait '$\"$PLUGINSDIR\payload\myswy_probe.exe$\" --verify-files $\"$INSTDIR$\" $\"$PLUGINSDIR\payload\SHA256SUMS.txt$\"' $0
+  ExecWait '$\"$PLUGINSDIR\payload\chengyin_probe.exe$\" --verify-files $\"$INSTDIR$\" $\"$PLUGINSDIR\payload\SHA256SUMS.txt$\"' $0
   ${If} ${Errors}
   ${OrIf} $0 != 0
     StrCpy $Failure "复制后的文件校验失败。"
@@ -280,7 +346,7 @@ Section "输入法" Install
   ${EndIf}
   ${If} $OldDir != ""
     StrCpy $Phase 2
-    ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s /u $\"$OldDir\myswy_tsf.dll$\"' $0
+    ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s /u $\"$OldDir\$OldDll$\"' $0
     ${If} ${Errors}
     ${OrIf} $0 != 0
       StrCpy $Failure "旧服务注销失败，安装已停止并尝试修复旧注册。"
@@ -288,7 +354,7 @@ Section "输入法" Install
     ${EndIf}
   ${EndIf}
   StrCpy $Phase 3
-  ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s $\"$INSTDIR\myswy_tsf.dll$\"' $0
+  ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s $\"$INSTDIR\${NEW_DLL}$\"' $0
   ${If} ${Errors}
   ${OrIf} $0 != 0
     StrCpy $Failure "新输入服务注册失败。"
@@ -296,8 +362,8 @@ Section "输入法" Install
   ${EndIf}
   StrCpy $Phase 4
   ClearErrors
-  !insertmacro Arp "$INSTDIR" "${VERSION}" ${REVISION}
-  !insertmacro Links "$INSTDIR" "澄音输入法"
+  !insertmacro Arp "${ARP}" "$INSTDIR" "${VERSION}" ${REVISION} "${NEW_SETTINGS}"
+  !insertmacro Links "$INSTDIR" "澄音输入法" "${NEW_SETTINGS}"
   ${If} ${Errors}
     StrCpy $Failure "无法写入卸载入口或开始菜单。"
     Goto failed
@@ -307,6 +373,10 @@ Section "输入法" Install
       !insertmacro RemoveLinks "$OldMenu"
     ${EndIf}
     !insertmacro RemoveKnown "$OldDir"
+    ; The former-name uninstall entry is now obsolete; the new key owns it.
+    ${If} $OldArpKey != "${ARP}"
+      DeleteRegKey HKLM "${LEGACY_ARP}"
+    ${EndIf}
   ${EndIf}
   SetOutPath "$TEMP"
   DetailPrint "安装成功。请注销并重新登录；默认输入法没有被更改。"
@@ -318,42 +388,43 @@ failed:
   ; retains files and an uninstall entry so a later retry can finish cleanup.
   ${If} $Phase >= 3
     ReadRegStr $0 HKLM "${CLASS}\InprocServer32" ""
-    ${If} $0 == "$INSTDIR\myswy_tsf.dll"
-      ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s /u $\"$INSTDIR\myswy_tsf.dll$\"' $1
+    ${If} $0 == "$INSTDIR\chengyin_tsf.dll"
+      ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s /u $\"$INSTDIR\chengyin_tsf.dll$\"' $1
     ${EndIf}
   ${EndIf}
   ${If} $Phase >= 2
   ${AndIf} $OldDir != ""
     ReadRegStr $0 HKLM "${CLASS}\InprocServer32" ""
     ${If} $0 == ""
-      ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s $\"$OldDir\myswy_tsf.dll$\"' $1
-    ${ElseIf} $0 == "$OldDir\myswy_tsf.dll"
-      ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s /n /i:repair $\"$OldDir\myswy_tsf.dll$\"' $1
+      ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s $\"$OldDir\chengyin_tsf.dll$\"' $1
+    ${ElseIf} $0 == "$OldDir\chengyin_tsf.dll"
+      ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s /n /i:repair $\"$OldDir\chengyin_tsf.dll$\"' $1
     ${EndIf}
   ${EndIf}
   ${If} $Phase >= 4
     ${If} $OldHadArp == 1
-      !insertmacro Arp "$OldDir" "$OldVersion" $OldRevision
-      WriteRegStr HKLM "${ARP}" "DisplayName" "$OldDisplayName"
-      WriteRegStr HKLM "${ARP}" "Publisher" "$OldPublisher"
+      !insertmacro Arp "$OldArpKey" "$OldDir" "$OldVersion" $OldRevision "$OldSettings"
+      WriteRegStr HKLM "$OldArpKey" "DisplayName" "$OldDisplayName"
+      WriteRegStr HKLM "$OldArpKey" "Publisher" "$OldPublisher"
       ${If} $OldMenu != "澄音输入法"
         !insertmacro RemoveLinks "澄音输入法"
       ${EndIf}
-      !insertmacro Links "$OldDir" "$OldMenu"
+      !insertmacro Links "$OldDir" "$OldMenu" "$OldSettings"
       ${If} $OldRevision <= 6
-        WriteRegStr HKLM "${ARP}" "DisplayIcon" "$OldDir\myswy_testpad.exe"
-        CreateShortcut "$SMPROGRAMS\$OldMenu\设置.lnk" "$OldDir\myswy_testpad.exe" "--settings"
-        CreateShortcut "$SMPROGRAMS\$OldMenu\输入测试.lnk" "$OldDir\myswy_testpad.exe"
+        WriteRegStr HKLM "$OldArpKey" "DisplayIcon" "$OldDir\$OldTestpad"
+        CreateShortcut "$SMPROGRAMS\$OldMenu\设置.lnk" "$OldDir\$OldTestpad" "--settings"
+        CreateShortcut "$SMPROGRAMS\$OldMenu\输入测试.lnk" "$OldDir\$OldTestpad"
       ${EndIf}
     ${Else}
       DeleteRegKey HKLM "${ARP}"
+      DeleteRegKey HKLM "${LEGACY_ARP}"
       !insertmacro RemoveLinks "澄音输入法"
     ${EndIf}
   ${EndIf}
   ${If} $Phase >= 1
     ReadRegStr $0 HKLM "${CLASS}\InprocServer32" ""
-    ${If} $0 == "$INSTDIR\myswy_tsf.dll"
-      !insertmacro Arp "$INSTDIR" "${VERSION}" ${REVISION}
+    ${If} $0 == "$INSTDIR\chengyin_tsf.dll"
+      !insertmacro Arp "${ARP}" "$INSTDIR" "${VERSION}" ${REVISION} "${NEW_SETTINGS}"
       StrCpy $Failure "$Failure$\r$\n清理未完成；文件和卸载入口已保留，请重试卸载。"
     ${Else}
       SetOutPath "$TEMP"
@@ -370,15 +441,15 @@ SectionEnd
 Section "Uninstall"
   ; NSIS runs a temporary copy of the uninstaller. Use the fixed owned version
   ; path, not that copy's EXEDIR or a command-line override.
-  StrCpy $INSTDIR "$PROGRAMFILES64\MyswyIME\${VERSION}"
-  !insertmacro RefuseLink "$PROGRAMFILES64\MyswyIME" un_failed
+  StrCpy $INSTDIR "$PROGRAMFILES64\ChengyinIME\${VERSION}"
+  !insertmacro RefuseLink "$PROGRAMFILES64\ChengyinIME" un_failed
   !insertmacro RefuseLink "$INSTDIR" un_failed
   ${GetParent} "$INSTDIR" $0
-  ${If} $0 != "$PROGRAMFILES64\MyswyIME"
+  ${If} $0 != "$PROGRAMFILES64\ChengyinIME"
     StrCpy $Failure "卸载程序不在所属安装目录中。"
     Goto un_failed
   ${EndIf}
-  ${IfNot} ${FileExists} "$INSTDIR\myswy-install.txt"
+  ${IfNot} ${FileExists} "$INSTDIR\chengyin-install.txt"
     ReadRegStr $0 HKLM "${CLASS}\InprocServer32" ""
     ReadRegStr $1 HKLM "${ARP}" "InstallLocation"
     ${If} $0 == ""
@@ -392,7 +463,7 @@ Section "Uninstall"
     ${EndIf}
   ${EndIf}
   ClearErrors
-  FileOpen $0 "$INSTDIR\myswy-install.txt" r
+  FileOpen $0 "$INSTDIR\chengyin-install.txt" r
   FileRead $0 $1
   FileClose $0
   ${TrimNewLines} "$1" $1
@@ -401,8 +472,8 @@ Section "Uninstall"
     StrCpy $Failure "安装标记缺失或不匹配，已保留文件。"
     Goto un_failed
   ${EndIf}
-  ${If} ${FileExists} "$INSTDIR\myswy_probe.exe"
-    ExecWait '$\"$INSTDIR\myswy_probe.exe$\" --check-registry' $0
+  ${If} ${FileExists} "$INSTDIR\chengyin_probe.exe"
+    ExecWait '$\"$INSTDIR\chengyin_probe.exe$\" --check-registry' $0
     ${If} ${Errors}
     ${OrIf} $0 != 0
       StrCpy $Failure "无法安全读取已有注册，已保留文件。"
@@ -411,16 +482,16 @@ Section "Uninstall"
   ${EndIf}
   ReadRegStr $0 HKLM "${CLASS}\InprocServer32" ""
   ${If} $0 != ""
-    ${If} $0 != "$INSTDIR\myswy_tsf.dll"
+    ${If} $0 != "$INSTDIR\chengyin_tsf.dll"
       StrCpy $Failure "当前注册属于其他目录，已保留全部文件。"
       Goto un_failed
     ${EndIf}
   ${EndIf}
-  ${If} ${FileExists} "$INSTDIR\myswy_tsf.dll"
+  ${If} ${FileExists} "$INSTDIR\chengyin_tsf.dll"
     ; The DLL also checks registration ownership/access, including when a
     ; registry read reports no server. Never delete a DLL after failed cleanup.
     ClearErrors
-    ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s /u $\"$INSTDIR\myswy_tsf.dll$\"' $0
+    ExecWait '$\"$SYSDIR\regsvr32.exe$\" /s /u $\"$INSTDIR\chengyin_tsf.dll$\"' $0
     ${If} ${Errors}
     ${OrIf} $0 != 0
       StrCpy $Failure "输入服务注销未完成，已保留文件，可稍后重试。"
@@ -442,7 +513,7 @@ Section "Uninstall"
   ${EndIf}
   SetOutPath "$TEMP"
   !insertmacro RemoveKnown "$INSTDIR"
-  RMDir "$PROGRAMFILES64\MyswyIME"
+  RMDir "$PROGRAMFILES64\ChengyinIME"
   DetailPrint "注销完成。应用占用的文件将在重新启动后删除；用户添加的文件予以保留。"
   SetErrorLevel 0
   Goto un_done

@@ -1,11 +1,11 @@
 #pragma once
-#include "myswy_ime.h"
+#include "chengyin_ime.h"
 #include <windows.h>
 #include <cstdint>
 #include <functional>
 #include <string>
 
-namespace myswy {
+namespace chengyin {
 // Identity of the custom vocabulary file for the reload decision. A missing file
 // carries no size or time, so equality is only meaningful while both exist.
 struct DictionaryStamp {
@@ -41,9 +41,9 @@ struct DictionaryRetryPolicy {
 class DictionarySource {
   public:
     // Produces the wanted custom vocabulary, or null when it cannot be read/parsed.
-    using Loader = std::function<MyswyDictionary *()>;
+    using Loader = std::function<ChengyinDictionary *()>;
     // Built-in base, used when no custom vocabulary is wanted.
-    using Fallback = MyswyDictionary *(*)();
+    using Fallback = ChengyinDictionary *(*)();
     // Counts only; no path, file name or vocabulary content.
     struct Stats {
         std::uint64_t loaded = 0, transient = 0, exhausted = 0;
@@ -58,15 +58,15 @@ class DictionarySource {
     // vocabulary is available at all. `renewed`, when given, reports whether this
     // call admitted a new snapshot, so a caller that merely re-queried an
     // already-accepted target can skip republishing it.
-    MyswyDictionary *acquire(bool custom, const DictionaryStamp &stamp, bool *renewed = nullptr);
+    ChengyinDictionary *acquire(bool custom, const DictionaryStamp &stamp, bool *renewed = nullptr);
     // Retries an unfulfilled target whose backoff has elapsed, returning true only
     // when a new snapshot was admitted. A still-failing target returns false and
     // leaves the old snapshot alone, so a retry never disturbs active input.
     bool retry(bool custom, const DictionaryStamp &stamp);
     // Frees a handle from acquire(), or one registered with adopt().
-    void release(MyswyDictionary *owned);
+    void release(ChengyinDictionary *owned);
     // Counts an externally created handle as a consumer of this snapshot.
-    void adopt(MyswyDictionary *owned);
+    void adopt(ChengyinDictionary *owned);
     // True while an unfulfilled target is waiting for its next attempt, so the
     // owner's worker can poll `retry` without touching the disk first.
     bool pending() const;
@@ -81,7 +81,7 @@ class DictionarySource {
     Loader loader_;
     Fallback fallback_;
     DictionaryRetryPolicy policy_;
-    MyswyDictionary *snapshot_ = nullptr;
+    ChengyinDictionary *snapshot_ = nullptr;
     size_t users_ = 0;
     bool custom_ = false;        // the accepted target is the custom file
     DictionaryStamp accepted_{}; // stamp of the accepted custom file

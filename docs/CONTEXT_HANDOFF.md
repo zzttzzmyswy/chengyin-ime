@@ -111,7 +111,7 @@ preview18 ad84c9d 的六作业和隔离安装/升级/回滚/卸载通过（37314
 - 先读 AGENTS.md、STATUS、ROADMAP、DEVELOPMENT。审查报告与修复计划另存 docs。
 - PowerShell 每次调用设置 cargo/CMake PATH；VS2022/MSVC 19.44、Rust 1.99、Win11 build26200。
 - cargo fmt；cargo test --workspace --locked；cargo clippy --workspace --all-targets --locked -- -D warnings。
-- 静态核心：RUSTFLAGS=-C target-feature=+crt-static，release myswy-ffi，x86_64-pc-windows-msvc。
+- 静态核心：RUSTFLAGS=-C target-feature=+crt-static，release chengyin-ffi，x86_64-pc-windows-msvc。
 - CMake 显式构建 production 和七项 CTest 依赖；ctest -C Release --output-on-failure。
 - package_windows.py 默认 preview19，固定 NSIS AMD64 helper；版本改变应同步 UI、更新 fixture、CI。
 - windows_desktop_test 为手动目标，不交付；已有 AV 提示不绕过、不关闭安全软件。

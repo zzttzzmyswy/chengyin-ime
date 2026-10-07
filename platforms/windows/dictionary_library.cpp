@@ -3,12 +3,12 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
-namespace myswy {
+namespace chengyin {
 namespace {
 constexpr size_t kMaximum = 64 * 1024 * 1024;
 constexpr uint8_t kMagic[] = {'C','Y','L','I','B',1,0,0};
 struct ImportGuard {
-    HANDLE handle = CreateMutexW(nullptr, FALSE, L"Local\\MyswyIME.DictionaryImport");
+    HANDLE handle = CreateMutexW(nullptr, FALSE, L"Local\\ChengyinIME.DictionaryImport");
     bool held = false;
     ImportGuard() {
         DWORD result = handle ? WaitForSingleObject(handle, 5000) : WAIT_FAILED;
@@ -27,13 +27,13 @@ bool parse(const std::vector<uint8_t> &data, std::vector<DictionaryEntry> &entri
     if (!managed(data)) {
         auto *dict = loadDictionaryBytes(data);
         if (!dict) return false;
-        int size = myswy_dictionary_binary(dict, nullptr, 0);
+        int size = chengyin_dictionary_binary(dict, nullptr, 0);
         DictionaryEntry legacy{L"旧版自定义词库", true, {}};
         if (size > 0) {
             legacy.binary.resize(static_cast<size_t>(size));
-            size = myswy_dictionary_binary(dict, legacy.binary.data(), legacy.binary.size());
+            size = chengyin_dictionary_binary(dict, legacy.binary.data(), legacy.binary.size());
         }
-        myswy_dictionary_free(dict);
+        chengyin_dictionary_free(dict);
         if (size <= 0) return false;
         entries.push_back(std::move(legacy));
         return true;
@@ -64,9 +64,9 @@ bool parse(const std::vector<uint8_t> &data, std::vector<DictionaryEntry> &entri
         if (!binarySize || binarySize > data.size() - at) return false;
         entry.binary.assign(data.begin() + at, data.begin() + at + binarySize);
         at += binarySize;
-        auto *dictionary = myswy_dictionary_new_binary(entry.binary.data(), entry.binary.size());
+        auto *dictionary = chengyin_dictionary_new_binary(entry.binary.data(), entry.binary.size());
         if (!dictionary) return false;
-        myswy_dictionary_free(dictionary);
+        chengyin_dictionary_free(dictionary);
         entries.push_back(std::move(entry));
     }
     return at == data.size();
@@ -114,14 +114,14 @@ bool addDictionaryLibrary(const std::wstring &source, const std::wstring &target
     if (!readDictionaryFile(source, bytes)) return false;
     auto *dictionary = loadDictionaryBytes(bytes);
     if (!dictionary) return false;
-    int size = myswy_dictionary_binary(dictionary, nullptr, 0);
+    int size = chengyin_dictionary_binary(dictionary, nullptr, 0);
     DictionaryEntry entry;
     entry.name = source.substr(source.find_last_of(L"\\/") + 1);
     if (size > 0) {
         entry.binary.resize(static_cast<size_t>(size));
-        size = myswy_dictionary_binary(dictionary, entry.binary.data(), entry.binary.size());
+        size = chengyin_dictionary_binary(dictionary, entry.binary.data(), entry.binary.size());
     }
-    myswy_dictionary_free(dictionary);
+    chengyin_dictionary_free(dictionary);
     if (size <= 0) return false;
     // Reimporting identical bytes is harmless and does not add duplicate rows.
     for (const auto &existing : entries)
@@ -144,7 +144,7 @@ bool changeDictionaryLibrary(const std::wstring &target, const DictionaryEntry &
     else found->enabled = !found->enabled;
     return store(target, entries);
 }
-MyswyDictionary *loadEffectiveDictionary(const std::vector<uint8_t> &bytes, MyswyDictionary *base) {
+ChengyinDictionary *loadEffectiveDictionary(const std::vector<uint8_t> &bytes, ChengyinDictionary *base) {
     if (!managed(bytes)) return loadDictionaryBytes(bytes); // preserve old configuration until first edit
     std::vector<DictionaryEntry> entries;
     if (!base || !parse(bytes, entries)) return nullptr;
@@ -153,22 +153,22 @@ MyswyDictionary *loadEffectiveDictionary(const std::vector<uint8_t> &bytes, Mysw
     // library, so a library holding many vocabularies would pay a much higher
     // peak for the same result (review R12). The base stays the first element so
     // an all-disabled library still yields exactly the built-in vocabulary.
-    std::vector<MyswyDictionary *> parts{base};
+    std::vector<ChengyinDictionary *> parts{base};
     for (const auto &entry : entries) {
         if (!entry.enabled) continue;
-        auto *dictionary = myswy_dictionary_new_binary(entry.binary.data(), entry.binary.size());
+        auto *dictionary = chengyin_dictionary_new_binary(entry.binary.data(), entry.binary.size());
         if (!dictionary) {
-            for (size_t i = 1; i < parts.size(); ++i) myswy_dictionary_free(parts[i]);
+            for (size_t i = 1; i < parts.size(); ++i) chengyin_dictionary_free(parts[i]);
             return nullptr;
         }
         parts.push_back(dictionary);
     }
     // The clone keeps the caller's `base` ownership contract intact, and avoids a
     // pointless rebuild for the common all-disabled library.
-    MyswyDictionary *result = parts.size() == 1
-        ? myswy_dictionary_clone(base)
-        : myswy_dictionary_merge_all(parts.data(), parts.size());
-    for (size_t i = 1; i < parts.size(); ++i) myswy_dictionary_free(parts[i]);
+    ChengyinDictionary *result = parts.size() == 1
+        ? chengyin_dictionary_clone(base)
+        : chengyin_dictionary_merge_all(parts.data(), parts.size());
+    for (size_t i = 1; i < parts.size(); ++i) chengyin_dictionary_free(parts[i]);
     return result;
 }
 }

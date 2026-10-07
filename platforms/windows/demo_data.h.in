@@ -1,4 +1,4 @@
 #pragma once
-namespace myswy {
-inline constexpr char kDemoTsv[] = R"myswylex(@MYSWY_DEMO_TSV@)myswylex";
+namespace chengyin {
+inline constexpr char kDemoTsv[] = R"chengyinlex(@CHENGYIN_DEMO_TSV@)chengyinlex";
 }

@@ -8,7 +8,7 @@
 #include "configuration.h"
 #include "punctuation.h"
 #include "language_bar.h"
-#ifdef MYSWY_FIXED_TEST_VOCABULARY
+#ifdef CHENGYIN_FIXED_TEST_VOCABULARY
 #include "test_configuration.h"
 #endif
 #include <memory>
@@ -18,22 +18,22 @@
 #include <textstor.h>
 #include <cwchar>
 
-namespace myswy {
+namespace chengyin {
 namespace {
 constexpr GUID kInputScope = {0xfde1eaee, 0x6924, 0x4cdf, {0x91, 0xe7, 0xda, 0x38, 0xcf, 0xf5, 0x55, 0x9d}};
 constexpr GUID kPropInputScope = {0x1713dd5a, 0x68e7, 0x4a5b, {0x9a, 0xf6, 0x59, 0x2a, 0x59, 0x5c, 0x77, 0x8d}};
 // DLL-scoped ownership. A TIP DLL can be unloaded repeatedly, so retain a dictionary
 // only while activated services use it. The lock is never taken on the key path.
-MyswyDictionary *embeddedDictionary() {
+ChengyinDictionary *embeddedDictionary() {
     HRSRC resource = FindResourceW(module, MAKEINTRESOURCEW(101), RT_RCDATA);
     HGLOBAL loaded = resource ? LoadResource(module, resource) : nullptr;
     const auto *data = loaded ? static_cast<const uint8_t *>(LockResource(loaded)) : nullptr;
-    return data ? myswy_dictionary_new_binary(data, SizeofResource(module, resource)) : nullptr;
+    return data ? chengyin_dictionary_new_binary(data, SizeofResource(module, resource)) : nullptr;
 }
 // Loads the wanted custom vocabulary, or null when it cannot be read/parsed.
 // The caller supplies the built-in base and keeps ownership of it.
-MyswyDictionary *loadCustomDictionary() {
-#ifdef MYSWY_FIXED_TEST_VOCABULARY
+ChengyinDictionary *loadCustomDictionary() {
+#ifdef CHENGYIN_FIXED_TEST_VOCABULARY
     const std::wstring path;
 #else
     const auto path = customDictionaryPath(false);
@@ -43,7 +43,7 @@ MyswyDictionary *loadCustomDictionary() {
         return nullptr;
     auto *base = embeddedDictionary();
     auto *result = base ? loadEffectiveDictionary(bytes, base) : nullptr;
-    myswy_dictionary_free(base);
+    chengyin_dictionary_free(base);
     return result;
 }
 DictionarySource &dictionarySource() {
@@ -55,17 +55,17 @@ DictionarySource &dictionarySource() {
 // The custom vocabulary target this process wants, and its on-disk identity. The
 // fixed-vocabulary fixture never reads a real user's file (review R09/R10).
 DictionaryStamp customDictionaryStamp() {
-#ifdef MYSWY_FIXED_TEST_VOCABULARY
+#ifdef CHENGYIN_FIXED_TEST_VOCABULARY
     return {};
 #else
     return readDictionaryStamp(customDictionaryPath(false));
 #endif
 }
-MyswyDictionary *acquireDictionary() {
+ChengyinDictionary *acquireDictionary() {
     const auto stamp = customDictionaryStamp();
     return dictionarySource().acquire(stamp.exists, stamp);
 }
-void releaseDictionary(MyswyDictionary *owned) {
+void releaseDictionary(ChengyinDictionary *owned) {
     dictionarySource().release(owned);
 }
 // Retries an unfulfilled custom vocabulary whose backoff elapsed. The caller only
@@ -73,7 +73,7 @@ void releaseDictionary(MyswyDictionary *owned) {
 // retire an active session's vocabulary (review R09).
 // The fixed-vocabulary fixture has no user file to retry, so the helper exists
 // only where a real custom vocabulary can fail (review R09).
-#ifndef MYSWY_FIXED_TEST_VOCABULARY
+#ifndef CHENGYIN_FIXED_TEST_VOCABULARY
 bool retryDictionary() {
     const auto stamp = customDictionaryStamp();
     return dictionarySource().retry(stamp.exists, stamp);
@@ -157,10 +157,10 @@ bool sensitive(ITfContext *context, TfEditCookie cookie, ITfRange *range) {
     return blocked;
 }
 
-HRESULT coreCaret(MyswySession *session, TfEditCookie cookie, ITfRange *range, Ptr<ITfRange> &out) {
-    uint8_t bytes[MYSWY_MAX_TEXT_BYTES + 1] {};
-    const int size = myswy_session_text(session, MYSWY_TEXT_PREEDIT, 0, bytes, sizeof(bytes));
-    const int cursor = myswy_session_preedit_cursor(session);
+HRESULT coreCaret(ChengyinSession *session, TfEditCookie cookie, ITfRange *range, Ptr<ITfRange> &out) {
+    uint8_t bytes[CHENGYIN_MAX_TEXT_BYTES + 1] {};
+    const int size = chengyin_session_text(session, CHENGYIN_TEXT_PREEDIT, 0, bytes, sizeof(bytes));
+    const int cursor = chengyin_session_preedit_cursor(session);
     if (size < 1 || size > static_cast<int>(sizeof(bytes)) || cursor < 0 || cursor >= size)
         return E_FAIL;
     const int length = size == 1 ? 0 : MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
@@ -180,27 +180,27 @@ HRESULT coreCaret(MyswySession *session, TfEditCookie cookie, ITfRange *range, P
         hr = out->Collapse(cookie, TF_ANCHOR_END);
     return hr;
 }
-bool followInlineCaret(MyswySession *session, TfEditCookie cookie, ITfRange *range, ITfRange *selection) {
+bool followInlineCaret(ChengyinSession *session, TfEditCookie cookie, ITfRange *range, ITfRange *selection) {
     LONG before = -1, after = 1, collapsed = 1;
     if (FAILED(selection->CompareStart(cookie, range, TF_ANCHOR_START, &before)) || before < 0
         || FAILED(selection->CompareEnd(cookie, range, TF_ANCHOR_END, &after)) || after > 0
         || FAILED(selection->CompareStart(cookie, selection, TF_ANCHOR_END, &collapsed)) || collapsed) return false;
     Ptr<ITfRange> prefix;
     if (FAILED(range->Clone(prefix.put())) || FAILED(prefix->ShiftEndToRange(cookie, selection, TF_ANCHOR_START))) return false;
-    wchar_t text[MYSWY_MAX_TEXT_BYTES + 1]{};
+    wchar_t text[CHENGYIN_MAX_TEXT_BYTES + 1]{};
     ULONG length = 0;
-    if (FAILED(prefix->GetText(cookie, 0, text, MYSWY_MAX_TEXT_BYTES, &length))) return false;
+    if (FAILED(prefix->GetText(cookie, 0, text, CHENGYIN_MAX_TEXT_BYTES, &length))) return false;
     const int position = length ? WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text, length, nullptr, 0, nullptr, nullptr) : 0;
     if (length && position <= 0) return false;
-    const int original = myswy_session_preedit_cursor(session);
-    myswy_session_process(session, MYSWY_KEY_HOME, 0);
-    const int minimum = myswy_session_preedit_cursor(session);
+    const int original = chengyin_session_preedit_cursor(session);
+    chengyin_session_process(session, CHENGYIN_KEY_HOME, 0);
+    const int minimum = chengyin_session_preedit_cursor(session);
     if (position < minimum) {
-        for (int i = minimum; i < original; ++i) myswy_session_process(session, MYSWY_KEY_RIGHT, 0);
+        for (int i = minimum; i < original; ++i) chengyin_session_process(session, CHENGYIN_KEY_RIGHT, 0);
         return false;
     }
-    for (int i = minimum; i < position; ++i) myswy_session_process(session, MYSWY_KEY_RIGHT, 0);
-    return myswy_session_preedit_cursor(session) == position;
+    for (int i = minimum; i < position; ++i) chengyin_session_process(session, CHENGYIN_KEY_RIGHT, 0);
+    return chengyin_session_preedit_cursor(session) == position;
 }
 
 bool shortcutDown() {
@@ -241,7 +241,7 @@ KeyPlan translate(WPARAM key, LPARAM lparam, bool active, bool english, bool ass
 class Service final : public ProcessorEx, public ITfKeyEventSink,
     public ITfCompositionSink, public ITfThreadMgrEventSink, public ITfTextEditSink, public LayoutSink,
     public ITfCompartmentEventSink
-#ifdef MYSWY_FIXED_TEST_VOCABULARY
+#ifdef CHENGYIN_FIXED_TEST_VOCABULARY
     , public test::ConfigurationTest
 #endif
 {
@@ -251,10 +251,10 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         watcher_.reset();
         pendingConfiguration_.reset();
         if (session_)
-            myswy_session_free(session_);
+            chengyin_session_free(session_);
         freeDictionary();
         if (profile_)
-            myswy_profile_free(profile_);
+            chengyin_profile_free(profile_);
     }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **out) override {
         if (!out)
@@ -272,7 +272,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             *out = static_cast<ITfTextEditSink *>(this);
         else if (iid == IID_ITfCompartmentEventSink)
             *out = static_cast<ITfCompartmentEventSink *>(this);
-#ifdef MYSWY_FIXED_TEST_VOCABULARY
+#ifdef CHENGYIN_FIXED_TEST_VOCABULARY
         else if (iid == test::kConfigurationTest)
             *out = static_cast<test::ConfigurationTest *>(this);
 #endif
@@ -300,14 +300,14 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             return E_INVALIDARG;
         if (manager_)
             return E_UNEXPECTED;
-        if (myswy_ime_abi_version() != MYSWY_ABI_VERSION)
+        if (chengyin_ime_abi_version() != CHENGYIN_ABI_VERSION)
             return E_FAIL;
         secure_ = (flags & TF_TMAE_SECUREMODE) != 0;
         uiOnly_ = (flags & TF_TMAE_UIELEMENTENABLEDONLY) != 0;
         query(manager, IID_ITfUIElementMgr, uiManager_);
         if (uiOnly_ && !uiManager_)
             return E_NOINTERFACE;
-#ifndef MYSWY_FIXED_TEST_VOCABULARY
+#ifndef CHENGYIN_FIXED_TEST_VOCABULARY
         DWORD observedConfiguration = 0;
         std::optional<LearningEpoch> configurationEpoch;
 #endif
@@ -317,19 +317,19 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             preferences_ = Preferences {};
             preferences_.learning = false;
             preferences_.associations = false;
-            profile_ = myswy_profile_new(nullptr, 0);
+            profile_ = chengyin_profile_new(nullptr, 0);
         } else {
-#ifdef MYSWY_FIXED_TEST_VOCABULARY
+#ifdef CHENGYIN_FIXED_TEST_VOCABULARY
             preferences_ = Preferences {};
             preferences_.pageSize = 9;
-            profile_ = myswy_profile_new(nullptr, 0);
+            profile_ = chengyin_profile_new(nullptr, 0);
 #else
             configurationEpoch.emplace(kConfigurationEpoch);
             observedConfiguration = configurationEpoch->current();
             preferences_ = loadPreferences(userFile(L"preferences.ini"));
             profile_ = loadProfile(userFile(L"learning.profile"));
             if (!profile_)
-                profile_ = myswy_profile_new(nullptr, 0);
+                profile_ = chengyin_profile_new(nullptr, 0);
             {
                 try {
                     const auto path = userFile(L"learning.profile", true);
@@ -382,7 +382,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
                 }
             }
             setInputMode();
-#ifndef MYSWY_FIXED_TEST_VOCABULARY
+#ifndef CHENGYIN_FIXED_TEST_VOCABULARY
             if (!secure_) {
                 const auto profilePath = userFile(L"learning.profile");
                 LearningEpoch learningEpoch(profileEpochName(profilePath).c_str());
@@ -407,7 +407,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
                         keep(this);
                         receiveConfiguration(std::move(snapshot));
                     }, kConfigurationEpoch, userFile(L"preferences.ini"), profileRevisionName(profilePath),
-#ifdef MYSWY_FIXED_TEST_VOCABULARY
+#ifdef CHENGYIN_FIXED_TEST_VOCABULARY
                        {});
 #else
                        [] { return retryDictionary(); });
@@ -420,7 +420,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         }
         return hr;
     }
-#ifdef MYSWY_FIXED_TEST_VOCABULARY
+#ifdef CHENGYIN_FIXED_TEST_VOCABULARY
     HRESULT STDMETHODCALLTYPE Appearance(UINT fontSize, UINT layout, BOOL pinyin) override {
         if (secure_)
             return E_ACCESSDENIED;
@@ -449,7 +449,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         snapshot->preferences.learning = learning != FALSE;
         snapshot->preferencesValid = true;
         if (data) {
-            snapshot->dictionary = myswy_dictionary_new_tsv(data, size);
+            snapshot->dictionary = chengyin_dictionary_new_tsv(data, size);
             // The fixture's TSV dictionary is a consumer of the DLL-scoped source
             // bookkeeping too, so it is counted here exactly like an acquired one.
             if (snapshot->dictionary)
@@ -468,10 +468,10 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             return E_ACCESSDENIED;
         // A fixture publishing what another application's ordinary save produces:
         // a profile that learned one selection, offered on the additive channel.
-        auto *learned = myswy_profile_new(nullptr, 0);
-        if (!learned || myswy_profile_record_selection(learned, key, keySize, text, textSize, 0) != 0) {
+        auto *learned = chengyin_profile_new(nullptr, 0);
+        if (!learned || chengyin_profile_record_selection(learned, key, keySize, text, textSize, 0) != 0) {
             if (learned)
-                myswy_profile_free(learned);
+                chengyin_profile_free(learned);
             return E_INVALIDARG;
         }
         auto snapshot = std::make_shared<ConfigurationUpdate>();
@@ -499,7 +499,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         unsubscribeMode();
         writer_.reset();
         if (profile_) {
-            myswy_profile_free(profile_);
+            chengyin_profile_free(profile_);
             profile_ = nullptr;
         }
         if (manager_) {
@@ -601,13 +601,13 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     HRESULT applyChoice(TfEditCookie cookie, ITfContext *context, uint64_t generation, int index) {
         choicePending_ = false;
         if (generation != uiGeneration_ || !active(context) || !allowed(context) ||
-                index < 0 || (index < 9 && index >= myswy_session_candidate_count(session_)) || index > 11)
+                index < 0 || (index < 9 && index >= chengyin_session_candidate_count(session_)) || index > 11)
             return S_OK;
         editing_ = true;
         BOOL consumed = FALSE;
-        const uint32_t key = index == 11 ? static_cast<uint32_t>(MYSWY_KEY_ESCAPE) : index == 9 ?
-                             static_cast<uint32_t>(MYSWY_KEY_PAGE_UP) : index == 10 ? static_cast<uint32_t>
-                             (MYSWY_KEY_PAGE_DOWN) : MYSWY_KEY_SELECT_1 + static_cast<uint32_t>(index);
+        const uint32_t key = index == 11 ? static_cast<uint32_t>(CHENGYIN_KEY_ESCAPE) : index == 9 ?
+                             static_cast<uint32_t>(CHENGYIN_KEY_PAGE_UP) : index == 10 ? static_cast<uint32_t>
+                             (CHENGYIN_KEY_PAGE_DOWN) : CHENGYIN_KEY_SELECT_1 + static_cast<uint32_t>(index);
         const HRESULT hr = edit(cookie, context, {Action::core, key, 0}, consumed);
         editing_ = false;
         return hr;
@@ -618,7 +618,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             associationRange_.reset();
             endElement();
             if (session_)
-                myswy_session_reset(session_);
+                chengyin_session_reset(session_);
             ++uiGeneration_;
             candidates_.hide();
         }
@@ -674,11 +674,11 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             hr = composition_->GetRange(range.put());
             if (SUCCEEDED(hr))
                 hr = coreCaret(session_, cookie, range.get(), expected);
-            wchar_t text[MYSWY_MAX_TEXT_BYTES + 1] {};
+            wchar_t text[CHENGYIN_MAX_TEXT_BYTES + 1] {};
             ULONG count = 0;
             WideText preedit;
-            if (!range || FAILED(range->GetText(cookie, 0, text, MYSWY_MAX_TEXT_BYTES, &count))
-                    || !readText(session_, MYSWY_TEXT_PREEDIT, 0, preedit) || count != static_cast<ULONG>(preedit.length)
+            if (!range || FAILED(range->GetText(cookie, 0, text, CHENGYIN_MAX_TEXT_BYTES, &count))
+                    || !readText(session_, CHENGYIN_TEXT_PREEDIT, 0, preedit) || count != static_cast<ULONG>(preedit.length)
                     || std::wmemcmp(text, preedit.data, count)) {
                 unbind();
                 return S_OK;
@@ -741,12 +741,12 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
                 if (!letter || !session_ || !same(context_.get(), context))
                     return S_OK;
             }
-            if (plan.action == Action::core && (plan.key == MYSWY_KEY_ESCAPE || plan.key == MYSWY_KEY_UP
-                                                || plan.key == MYSWY_KEY_DOWN || plan.key == MYSWY_KEY_PAGE_UP || plan.key == MYSWY_KEY_PAGE_DOWN)) {
+            if (plan.action == Action::core && (plan.key == CHENGYIN_KEY_ESCAPE || plan.key == CHENGYIN_KEY_UP
+                                                || plan.key == CHENGYIN_KEY_DOWN || plan.key == CHENGYIN_KEY_PAGE_UP || plan.key == CHENGYIN_KEY_PAGE_DOWN)) {
                 ++uiGeneration_;
-                const int result = myswy_session_process(session_, plan.key, 0);
-                eaten = result >= 0 && (result & MYSWY_HANDLED);
-                if (result < 0 || myswy_session_is_association(session_) <= 0)
+                const int result = chengyin_session_process(session_, plan.key, 0);
+                eaten = result >= 0 && (result & CHENGYIN_HANDLED);
+                if (result < 0 || chengyin_session_is_association(session_) <= 0)
                     endLocked(cookie);
                 else
                     showCandidates(cookie, context);
@@ -792,14 +792,14 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             return S_OK;
         }
         ++uiGeneration_;
-        const int result = myswy_session_process(session_, plan.key, 0);
+        const int result = chengyin_session_process(session_, plan.key, 0);
         if (result < 0) {
             endLocked(cookie);
             return S_OK;
         }
         WideText preedit, commit;
-        if (!readText(session_, MYSWY_TEXT_PREEDIT, 0, preedit)
-                || !readText(session_, MYSWY_TEXT_COMMIT, 0, commit)) {
+        if (!readText(session_, CHENGYIN_TEXT_PREEDIT, 0, preedit)
+                || !readText(session_, CHENGYIN_TEXT_COMMIT, 0, commit)) {
             endLocked(cookie);
             return S_OK;
         }
@@ -826,7 +826,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             return S_OK;
         }
         // A successful write must never be replayed, including boundary failures.
-        eaten = (result & MYSWY_HANDLED) || hasCommit;
+        eaten = (result & CHENGYIN_HANDLED) || hasCommit;
         if (partialCommit) {
             Ptr<ITfRange> boundary;
             LONG shifted = 0;
@@ -857,14 +857,14 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         if (hasCommit && plan.punctuation)
             punctuation_.accepted(plan.punctuation, !english_ && preferences_.chinesePunctuation);
         if (hasCommit && !plan.punctuation && session_ && same(context_.get(), context) && preferences_.learning) {
-            uint8_t spelling[64] {}, text[MYSWY_MAX_TEXT_BYTES + 1] {};
-            const int keySize = myswy_session_text(session_, MYSWY_TEXT_LEARNING_KEY, 0, spelling, sizeof(spelling));
-            const int textSize = myswy_session_text(session_, MYSWY_TEXT_COMMIT, 0, text, sizeof(text));
-            if (myswy_session_learn_commit(session_) > 0) {
-                auto *snapshot = myswy_session_profile(session_);
+            uint8_t spelling[64] {}, text[CHENGYIN_MAX_TEXT_BYTES + 1] {};
+            const int keySize = chengyin_session_text(session_, CHENGYIN_TEXT_LEARNING_KEY, 0, spelling, sizeof(spelling));
+            const int textSize = chengyin_session_text(session_, CHENGYIN_TEXT_COMMIT, 0, text, sizeof(text));
+            if (chengyin_session_learn_commit(session_) > 0) {
+                auto *snapshot = chengyin_session_profile(session_);
                 if (snapshot) {
                     if (profile_)
-                        myswy_profile_free(profile_);
+                        chengyin_profile_free(profile_);
                     profile_ = snapshot;
                 }
                 if (writer_ && keySize > 1 && keySize <= static_cast<int>(sizeof(spelling)) && textSize > 1
@@ -873,7 +873,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             }
         }
         // Text was changed: even if a later caret/UI operation fails, do not replay this key.
-        eaten = (result & MYSWY_HANDLED) || hasCommit;
+        eaten = (result & CHENGYIN_HANDLED) || hasCommit;
         Ptr<ITfRange> caret;
         HRESULT hr;
         if (preedit.length == 0) {
@@ -891,7 +891,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             return S_OK;
         }
         if (preedit.length == 0) {
-            const bool suggestions = hasCommit && !plan.punctuation && myswy_session_is_association(session_) > 0;
+            const bool suggestions = hasCommit && !plan.punctuation && chengyin_session_is_association(session_) > 0;
             const uint64_t retired = uiGeneration_ + 1;
             endLocked(cookie, hasCommit);
             if (suggestions && uiGeneration_ == retired && session_ && same(context_.get(), context)) {
@@ -901,7 +901,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             return S_OK;
         }
         associationRange_.reset();
-        limited_ = (result & MYSWY_LIMITED) != 0 || myswy_session_budget_limited(session_) > 0;
+        limited_ = (result & CHENGYIN_LIMITED) != 0 || chengyin_session_budget_limited(session_) > 0;
         showCandidates(cookie, context);
         return S_OK;
     }
@@ -921,7 +921,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             return;
         }
         if (index >= 0 && index < 9)
-            myswy_session_set_selected(session_, static_cast<size_t>(index));
+            chengyin_session_set_selected(session_, static_cast<size_t>(index));
     }
   private:
     void subscribeMode() {
@@ -1101,7 +1101,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     }
     bool association(ITfContext *context) const {
         return associationRange_ && session_ && same(context_.get(), context)
-               && myswy_session_is_association(session_) > 0;
+               && chengyin_session_is_association(session_) > 0;
     }
     bool allowed(ITfContext *context) const {
         if (!manager_ || !context || editing_)
@@ -1118,7 +1118,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         old.attach(composition_.detach());
         associationRange_.reset();
         if (session_ && !preserve)
-            myswy_session_reset(session_);
+            chengyin_session_reset(session_);
         endElement();
         candidates_.hide();
         if (old)
@@ -1152,7 +1152,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         old.attach(composition_.detach());
         endElement();
         if (session_) {
-            myswy_session_free(session_);
+            chengyin_session_free(session_);
             session_ = nullptr;
         }
         candidates_.hide();
@@ -1170,16 +1170,16 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         if (same(context_.get(), context))
             return session_ != nullptr;
         unbind();
-        session_ = myswy_session_new_with_dictionary(dictionary_);
+        session_ = chengyin_session_new_with_dictionary(dictionary_);
         if (!session_)
             return false;
-        myswy_session_configure(session_, static_cast<uint32_t>(preferences_.pageSize),
+        chengyin_session_configure(session_, static_cast<uint32_t>(preferences_.pageSize),
                                 (preferences_.learning ? 1u : 0u) | (preferences_.associations ? 2u : 0u));
-        myswy_session_configure_incremental(session_, 1);
-        sessionMatchingOptions_ = myswy_session_configure_matching(session_,preferences_.matchingOptions) == 0
+        chengyin_session_configure_incremental(session_, 1);
+        sessionMatchingOptions_ = chengyin_session_configure_matching(session_,preferences_.matchingOptions) == 0
                                   ? preferences_.matchingOptions : 0;
         if (profile_)
-            myswy_session_set_profile(session_, profile_);
+            chengyin_session_set_profile(session_, profile_);
         context_.attach(context);
         context->AddRef();
         Ptr<ITfSource> source;
@@ -1231,13 +1231,13 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             auto next = std::move(pendingConfiguration_);
             if (next->profile) {
                 if (profile_)
-                    myswy_profile_free(profile_);
+                    chengyin_profile_free(profile_);
                 profile_ = std::exchange(next->profile, nullptr);
                 // An idle session exists only for post-commit associations; pushing
                 // the merged profile in makes the other application's selection take
                 // effect without discarding that association.
                 if (session_)
-                    myswy_session_set_profile(session_, profile_);
+                    chengyin_session_set_profile(session_, profile_);
             }
             learningRevision_ = next->learningRevision;
             revisionOnly_ = false;
@@ -1253,7 +1253,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         }
         if (destructive && next->profile) {
             if (profile_)
-                myswy_profile_free(profile_);
+                chengyin_profile_free(profile_);
             profile_ = std::exchange(next->profile, nullptr);
             learningGeneration_ = next->learningGeneration;
         }
@@ -1266,7 +1266,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         if (!dictionary_)
             return;
         if (secure_)
-            myswy_dictionary_free(dictionary_);
+            chengyin_dictionary_free(dictionary_);
         else
             releaseDictionary(dictionary_);
         dictionary_ = nullptr;
@@ -1295,9 +1295,9 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     Ptr<ITfContext> context_;
     Ptr<ITfComposition> composition_;
     Ptr<ITfRange> associationRange_;
-    MyswySession *session_ = nullptr;
+    ChengyinSession *session_ = nullptr;
     uint32_t sessionMatchingOptions_ = 0; // frozen with the composition, unlike a new preference snapshot
-    MyswyDictionary *dictionary_ = nullptr;
+    ChengyinDictionary *dictionary_ = nullptr;
     CandidateWindow candidates_;
     Preferences preferences_{};
     Ptr<ITfLangBarItemMgr> languageManager_;
@@ -1312,7 +1312,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     // is adopted without retiring the active session.
     bool revisionOnly_ = false;
     ShiftSwitch shift_;
-    MyswyProfile *profile_ = nullptr;
+    ChengyinProfile *profile_ = nullptr;
     std::unique_ptr<LearningWriter> writer_;
     Ptr<ITfCompartment> openMode_, conversionMode_;
     DWORD openCookie_ = TF_INVALID_COOKIE, conversionCookie_ = TF_INVALID_COOKIE;

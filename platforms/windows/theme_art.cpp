@@ -2,7 +2,7 @@
 #include <objidl.h>
 #include <gdiplus.h>
 #include <algorithm>
-namespace myswy {
+namespace chengyin {
 namespace {
 using namespace Gdiplus;
 struct Runtime {

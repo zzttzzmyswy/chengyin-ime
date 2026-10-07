@@ -1,4 +1,4 @@
-use myswy_core::{fuzzy::OPTIONS_MASK, Dictionary, Key, Modifiers, Session};
+use chengyin_core::{fuzzy::OPTIONS_MASK, Dictionary, Key, Modifiers, Session};
 use std::sync::Arc;
 fn press(s: &mut Session, k: Key) {
     assert!(s.process(k, Modifiers::default()).handled);

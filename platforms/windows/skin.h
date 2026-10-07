@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-namespace myswy {
+namespace chengyin {
 struct SkinImage;
 struct Skin {
     std::wstring name = L"自定义皮肤";

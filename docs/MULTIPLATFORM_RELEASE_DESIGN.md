@@ -10,7 +10,7 @@
 
 1. **IBus 引擎用 C + 现有 C ABI**，不用 Rust `ibus` 绑定。已在 13.24 用真实 `ibus-daemon` 跑通端到端：引擎进程经 C ABI 调用共享核心，客户端收到 `你`（见 §2.3）。工作量小、复用最彻底。
 2. **Fcitx5 存在真实跨版本编译缺陷**：`platforms/fcitx5/engine.cpp:22` 用了 `fcitx::StandardPath`，而 Fcitx **5.1.13** 起 `iniparser.h` 改为 include `standardpaths.h`，导致 5.1.13+ 上该类型不可见。已实测：Debian trixie(5.1.12)、Ubuntu 24.04(5.1.7)、Arch(5.1.23) 三方对照，并验证一行 `#include <fcitx-utils/standardpath.h>` 在三方都能编过（§1.4）。**这是 M1「X11/Wayland 可安装产物」的前置阻塞项**，必须先修。
-3. **Wayland 覆盖要分两层说**：Fcitx5 插件在 **Weston headless** 下能加载（已实测 `Loaded addon myswy`）；但 Weston headless 只提供 `zwp_text_input_manager_v1`，**不提供 input-method-v2 / virtual-keyboard**，所以 compositor 级的输入法协议无法在纯 headless 下验证。13.24 可自动化的边界是：插件加载、InputContext 事件级测试、X11/Xvfb 下真实按键。协议/焦点/候选定位必须留实机（§3）。
+3. **Wayland 覆盖要分两层说**：Fcitx5 插件在 **Weston headless** 下能加载（已实测 `Loaded addon chengyin`）；但 Weston headless 只提供 `zwp_text_input_manager_v1`，**不提供 input-method-v2 / virtual-keyboard**，所以 compositor 级的输入法协议无法在纯 headless 下验证。13.24 可自动化的边界是：插件加载、InputContext 事件级测试、X11/Xvfb 下真实按键。协议/焦点/候选定位必须留实机（§3）。
 4. **Release 流程缺一条腿**：现有 CI 只产出 artifact，**没有 tag→Release 的作业**；仓库 `releases` 与 `tags` 均为空（已查）。而 Windows 更新器 `update.cpp` 硬绑定 `releases/download/<tag>/chengyin-windows-x64-<tag>-msvc.exe` + `sha256:` digest，因此 release 流程必须与既有下载契约严格对齐（§4）。
 5. **签名策略**：当前包 `"signed": false`（`package_windows.py` BUILD_INFO）。无代码签名证书，必须显式声明，不能含糊。给出三条可选路径与推荐（§4.5）。
 
@@ -22,11 +22,11 @@
 
 | 方案 | 评估 |
 | --- | --- |
-| **C + 现有 C ABI（推荐）** | 与 `platforms/fcitx5` 同一模式（薄平台层 + 静态链 Rust 核心）。`include/myswy_ime.h` 已是稳定 v1，无需新绑定。已实测可编译并通过真实 daemon 端到端。 |
+| **C + 现有 C ABI（推荐）** | 与 `platforms/fcitx5` 同一模式（薄平台层 + 静态链 Rust 核心）。`include/chengyin_ime.h` 已是稳定 v1，无需新绑定。已实测可编译并通过真实 daemon 端到端。 |
 | Rust `ibus` crate / 自己写 GObject 绑定 | 需要引入新依赖并对 GObject 类型系统做 unsafe 绑定；核心已明确"禁用 unsafe、不做平台 I/O"。为 IBus 打破这条边界不划算。 |
 | Python + `gi`（`ibus` Python 引擎） | 13.24 有 `gi`，但需 Python 运行时依赖，且与"单文件原生产物"的发布口径不符。 |
 
-结论：**C（C11）+ GLib/IBus C API + 静态链 `libmyswy_ime.a`**，与 Fcitx5 插件对称。
+结论：**C（C11）+ GLib/IBus C API + 静态链 `libchengyin_ime.a`**，与 Fcitx5 插件对称。
 
 ### 1.2 与 Fcitx5 的复用边界
 
@@ -51,23 +51,23 @@ IBus 引擎按 `process_key_event` 收 `(keyval, keycode, state)` 返回 `gboole
 
 | IBus 侧 | C ABI 侧 | 注意 |
 | --- | --- | --- |
-| `IBusEngine::process_key_event` | `myswy_session_process` | 返回 `MYSWY_HANDLED` 才 return TRUE |
-| `update_preedit_text` | `MYSWY_TEXT_DISPLAY_PREEDIT` + `myswy_session_preedit_cursor` | 光标是 **UTF-8 字节**偏移，IBus 要按字符（`g_utf8_strlen` 截断） |
-| `update_lookup_table` / `update_auxiliary_text` | `myswy_session_candidate_count` / `MYSWY_TEXT_CANDIDATE` | 候选页 9 条，`MYSWY_TEXT_CANDIDATE_PINYIN` 做注释 |
-| `commit_text` | `MYSWY_TEXT_COMMIT` | **每次 process 后都要读一次**（包含 handled=false），读到即写回宿主 |
-| `focus_in` / `focus_out` / `reset` | `myswy_session_reset` | 每个 InputContext 独立 Session |
-| 上屏成功 | `myswy_session_learn_commit` | 只在宿主确认写入后调用 |
-| 空格/Enter | `MYSWY_KEY_SPACE` / `MYSWY_KEY_ENTER` | 显式映射物理键，不能直接传 keyval |
-| Ctrl/Alt/Super | `MYSWY_MOD_*` | 带修饰键直接透传 |
+| `IBusEngine::process_key_event` | `chengyin_session_process` | 返回 `CHENGYIN_HANDLED` 才 return TRUE |
+| `update_preedit_text` | `CHENGYIN_TEXT_DISPLAY_PREEDIT` + `chengyin_session_preedit_cursor` | 光标是 **UTF-8 字节**偏移，IBus 要按字符（`g_utf8_strlen` 截断） |
+| `update_lookup_table` / `update_auxiliary_text` | `chengyin_session_candidate_count` / `CHENGYIN_TEXT_CANDIDATE` | 候选页 9 条，`CHENGYIN_TEXT_CANDIDATE_PINYIN` 做注释 |
+| `commit_text` | `CHENGYIN_TEXT_COMMIT` | **每次 process 后都要读一次**（包含 handled=false），读到即写回宿主 |
+| `focus_in` / `focus_out` / `reset` | `chengyin_session_reset` | 每个 InputContext 独立 Session |
+| 上屏成功 | `chengyin_session_learn_commit` | 只在宿主确认写入后调用 |
+| 空格/Enter | `CHENGYIN_KEY_SPACE` / `CHENGYIN_KEY_ENTER` | 显式映射物理键，不能直接传 keyval |
+| Ctrl/Alt/Super | `CHENGYIN_MOD_*` | 带修饰键直接透传 |
 
 两个易错点（写实现时必须覆盖测试）：
 
 1. **commit 必须在 process 之后无条件读取一次**，漏读会导致宿主丢字或重复上屏。头文件已明确这个合约。
-2. **`myswy_session_text` 是"先查容量"协议**：传 `NULL` 拿含 NUL 的所需容量，容量不足**完全不写**（不会截断出半个 UTF-8）。IBus 侧要用两段式调用，不能假定 256 够。
+2. **`chengyin_session_text` 是"先查容量"协议**：传 `NULL` 拿含 NUL 的所需容量，容量不足**完全不写**（不会截断出半个 UTF-8）。IBus 侧要用两段式调用，不能假定 256 够。
 
 ### 1.4 IBus 打包
 
-- **component XML**：装到 `${datadir}/ibus/component/myswy.xml`，`<exec>` 指向 `libexec` 下的引擎可执行文件。参考 `simple.xml` 的结构（name/description/exec/version/author/license/homepage/textdomain/engines）。
+- **component XML**：装到 `${datadir}/ibus/component/chengyin.xml`，`<exec>` 指向 `libexec` 下的引擎可执行文件。参考 `simple.xml` 的结构（name/description/exec/version/author/license/homepage/textdomain/engines）。
 - **引擎可执行文件**：IBus 引擎是独立进程（与 Fcitx5 的进程内插件不同）。静态链 Rust 核心 → 单文件，无额外 `.so` 依赖。
 - **包**：
   - Debian：扩展现有 `packaging/debian` 思路，新增 `scripts/package_ibus_deb.py`，复用 `package_deb.py` 的**严格校验**风格（native arch 检查、`dpkg-shlibdeps` 解析依赖、不覆盖同名产物、`--root-owner-group`）。
@@ -115,7 +115,7 @@ Rust 1.98.0, cmake 4.4.3, python 3.14.7
 
 ### 2.2 C + C ABI 编译通过
 
-一个最小 IBus 引擎（`G_DEFINE_TYPE` 子类 `IBusEngine`，在 `process_key_event` 里调 `myswy_session_process` / `myswy_session_text` / `ibus_engine_commit_text`）在 `-Wall -Wextra -Werror` 下编译通过，链接 `libmyswy_ime.so`：
+一个最小 IBus 引擎（`G_DEFINE_TYPE` 子类 `IBusEngine`，在 `process_key_event` 里调 `chengyin_session_process` / `chengyin_session_text` / `ibus_engine_commit_text`）在 `-Wall -Wextra -Werror` 下编译通过，链接 `libchengyin_ime.so`：
 
 ```
 IBUS+C-ABI COMPILE: OK
@@ -174,7 +174,7 @@ platforms/fcitx5/engine.cpp:27: error: 'StandardPathTempFile' 在命名空间 'f
 
 > 注意：5.1.23 下 `StandardPath` 是 deprecated，`-Werror` 会因 `-Wdeprecated-declarations` 失败。所以**只加 include 还不够**，还要决定策略：迁移到 `StandardPaths`（新 API，但 5.1.13 以下没有），或对这两个符号局部抑制弃用告警。建议子迭代里做**版本化适配**：`#if FCITX_VERSION >= 5.1.13` 走新 API，否则走旧 API；这样两代都能用且无告警。这是需要单独设计与测试的活，不塞进本设计。
 
-**I08 已按上述"版本化适配"落地（2026-10-07）**，与本节设想的唯一差别是版本来源：Fcitx 头文件**不导出**版本宏（`FCITX_VERSION` 在 5.1.23 头文件里不存在），改由 CMake 的 `Fcitx5Core_VERSION` 生成 `MYSWY_FCITX_VERSION`（数值化，`5.1.12 → 50112`）传给 `engine.cpp`。三方复测结果：
+**I08 已按上述"版本化适配"落地（2026-10-07）**，与本节设想的唯一差别是版本来源：Fcitx 头文件**不导出**版本宏（`FCITX_VERSION` 在 5.1.23 头文件里不存在），改由 CMake 的 `Fcitx5Core_VERSION` 生成 `CHENGYIN_FCITX_VERSION`（数值化，`5.1.12 → 50112`）传给 `engine.cpp`。三方复测结果：
 
 | 环境 | Fcitx | 派生的宏 | `iniparser.h` 引入 | 构建 | CTest |
 | --- | --- | --- | --- | --- | --- |
@@ -190,21 +190,21 @@ platforms/fcitx5/engine.cpp:27: error: 'StandardPathTempFile' 在命名空间 'f
 
 - **Weston headless** 可起（需 `XDG_RUNTIME_DIR` 且权限 0700），暴露 `wl_compositor v5`、`wp_viewporter`、`xdg_wm_base v5`、`zwp_input_panel_v1`、**`zwp_text_input_manager_v1 v1`**。
 - **Weston headless 不暴露** `zwp_input_method_v2`，也不暴露 virtual-keyboard。
-- **Fcitx5 插件在 Xvfb 下真实加载成功**：日志出现 `Loaded addon myswy`（`OnDemand=False` 时）。
+- **Fcitx5 插件在 Xvfb 下真实加载成功**：日志出现 `Loaded addon chengyin`（`OnDemand=False` 时）。
 
-⚠️ **一处未定论，不要当结论用**：探针日志同时出现 `Found 0 input method(s) in addon myswy`。查上游 `inputmethodmanager.cpp:196` 可知该行来自 `engine->listInputMethods()`，即插件**自己的** `Engine::listInputMethods()` 返回值。本次探针用的 `myswy.so` 是**直接拷贝的构建产物**，没有走 `cmake --install`，其 inputmethod conf 未被 Fcitx 正常发现——**尚不能区分**"插件实现有问题"和"探针装配不完整"。因此本设计**不主张**"IM 注册已通过"；该项留到 I08/I09 用正规 `cmake --install` 流程验证。这也是把它列为待办而非既成事实的原因。
+⚠️ **一处未定论，不要当结论用**：探针日志同时出现 `Found 0 input method(s) in addon chengyin`。查上游 `inputmethodmanager.cpp:196` 可知该行来自 `engine->listInputMethods()`，即插件**自己的** `Engine::listInputMethods()` 返回值。本次探针用的 `chengyin.so` 是**直接拷贝的构建产物**，没有走 `cmake --install`，其 inputmethod conf 未被 Fcitx 正常发现——**尚不能区分**"插件实现有问题"和"探针装配不完整"。因此本设计**不主张**"IM 注册已通过"；该项留到 I08/I09 用正规 `cmake --install` 流程验证。这也是把它列为待办而非既成事实的原因。
 
-**I08 已用正规 `cmake --install` 判定（2026-10-07，Fcitx 5.1.23）：IM 注册通过，"Found 0" 属探针装配问题。** 做法：`cmake --install` 到独立 `CMAKE_INSTALL_PREFIX`（走 `$HOME/.local/lib/fcitx5` 与 `share/fcitx5/{addon,inputmethod}`），再用框架自己的 `AddonManager` + `InputMethodManager` 枚举——`addonInfo("myswy")` 存在、`foreachEntries` 枚举到 `name=Chengyin Pinyin (Prototype) addon=myswy label=拼`；删掉安装出来的 `addon/`、`inputmethod/` 后同一探针立刻变 NO（阴性对照成立）。
+**I08 已用正规 `cmake --install` 判定（2026-10-07，Fcitx 5.1.23）：IM 注册通过，"Found 0" 属探针装配问题。** 做法：`cmake --install` 到独立 `CMAKE_INSTALL_PREFIX`（走 `$HOME/.local/lib/fcitx5` 与 `share/fcitx5/{addon,inputmethod}`），再用框架自己的 `AddonManager` + `InputMethodManager` 枚举——`addonInfo("chengyin")` 存在、`foreachEntries` 枚举到 `name=Chengyin Pinyin (Prototype) addon=chengyin label=拼`；删掉安装出来的 `addon/`、`inputmethod/` 后同一探针立刻变 NO（阴性对照成立）。
 
-根因（上游可查）：`inputmethodmanager.cpp` 的 `Found N input method(s) in addon X` 只对**非 OnDemand** addon 打印（`loadDynamicEntries` 开头即 `if (!addonInfo || addonInfo->onDemand()) continue;`）。本插件的 `myswy-addon.conf` 是 `OnDemand=True`，其入口按设计由 `inputmethod/*.conf` 静态注册，本来就不经 `listInputMethods()`，所以那行 `Found 0` 与插件实现无关。原探针只是把 `myswy.so` 拷进构建目录、没安装 `inputmethod/myswy.conf`，于是两侧都没有入口。
+根因（上游可查）：`inputmethodmanager.cpp` 的 `Found N input method(s) in addon X` 只对**非 OnDemand** addon 打印（`loadDynamicEntries` 开头即 `if (!addonInfo || addonInfo->onDemand()) continue;`）。本插件的 `chengyin-addon.conf` 是 `OnDemand=True`，其入口按设计由 `inputmethod/*.conf` 静态注册，本来就不经 `listInputMethods()`，所以那行 `Found 0` 与插件实现无关。原探针只是把 `chengyin.so` 拷进构建目录、没安装 `inputmethod/chengyin.conf`，于是两侧都没有入口。
 
 因此自动化能力分三档：
 
 | 档 | 能验证 | 不能验证 |
 | --- | --- | --- |
 | A. 单元/事件级（现有 CTest） | InputContext 事件转换、UTF-8 上屏、会话隔离、陈旧候选、reset/敏感字段、词典热切换 | 焦点路由、光标定位、真实候选窗 |
-| B. 无头集成（**本设计新增**） | **已实测**：Xvfb 下插件加载（`Loaded addon myswy`）；IBus 真实 daemon 端到端提交。**待打通**：addon/IM 注册（§3.2 未定论）、Xvfb 下"真实 X 按键 → 上屏"闭合（需装到正规路径后压键，本设计未做） | compositor 协议（text-input-v3 / input-method-v2） |
-| C. 实机（**必须 MYSWY**） | KDE/GNOME/sway 的 Wayland 协议、GTK/Qt immodule、候选窗定位、多屏/分数缩放 | — |
+| B. 无头集成（**本设计新增**） | **已实测**：Xvfb 下插件加载（`Loaded addon chengyin`）；IBus 真实 daemon 端到端提交。**待打通**：addon/IM 注册（§3.2 未定论）、Xvfb 下"真实 X 按键 → 上屏"闭合（需装到正规路径后压键，本设计未做） | compositor 协议（text-input-v3 / input-method-v2） |
+| C. 实机（**必须 CHENGYIN**） | KDE/GNOME/sway 的 Wayland 协议、GTK/Qt immodule、候选窗定位、多屏/分数缩放 | — |
 
 **B 档能做但 C 档绝不能省的**，原因就是 §3.2 那条：headless compositor 没有 input-method 协议，谁也没法在 13.24 上"模拟"出 KWin 的 text-input-v3 行为。不要用 B 档结果声称 Wayland 支持。
 
@@ -239,7 +239,7 @@ docker run --rm -v "$PWD":/src:ro -w /tmp debian:trixie bash -c \
 
 # B 档：Xvfb + fcitx5 加载
 Xvfb :97 -screen 0 1024x768x24 &
-DISPLAY=:97 fcitx5 -d --enable=myswy -r    # 断言日志含 "Loaded addon myswy"
+DISPLAY=:97 fcitx5 -d --enable=chengyin -r    # 断言日志含 "Loaded addon chengyin"
 ```
 
 ---
@@ -328,7 +328,7 @@ chengyin-<tag>-arch-x86_64.pkg.tar.zst     # 建议（PKGBUILD 产出）
 
 沿用「同一时间只做一个开发迭代」。建议拆分（依赖顺序）：
 
-| 子迭代 | 内容 | 验收命令 | 需要 MYSWY |
+| 子迭代 | 内容 | 验收命令 | 需要 CHENGYIN |
 | --- | --- | --- | --- |
 | **I08** | Fcitx5 跨版本兼容（§3.1）：版本化适配 `StandardPaths`/`StandardPath`，修 5.1.13+ 构建 | 三方构建+CTest 全绿（trixie/ubuntu24.04/Arch）；`scripts/check.sh` 不变绿 | 否 |
 | **I09** | `platforms/common/` 抽取 + IBus 引擎骨架（§1） | 编译 `-Werror`；无头 daemon 端到端断言 `COMMIT: 你`；A 档 CTest | 否 |

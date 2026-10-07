@@ -52,7 +52,7 @@ Fcitx 5 的插件可复用其前端和候选 UI，但 compositor 是否实现协
 
 ## Windows 实机验收（全部待测）
 
-当前预览目标 Windows 10 2004+/Windows 11、Intel/AMD x64。先运行包内 `myswy_testpad.exe` 的两个标准编辑框及密码框，再测：
+当前预览目标 Windows 10 2004+/Windows 11、Intel/AMD x64。先运行包内 `chengyin_testpad.exe` 的两个标准编辑框及密码框，再测：
 
 | 应用/场景 | 重点 |
 | --- | --- |

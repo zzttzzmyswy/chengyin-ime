@@ -2,17 +2,17 @@
 #include "theme_art.h"
 #include <algorithm>
 #include <cwchar>
-namespace myswy {
+namespace chengyin {
 namespace {
-constexpr wchar_t kWindowClass[] = L"Myswy.Candidates.Preview1";
+constexpr wchar_t kWindowClass[] = L"Chengyin.Candidates.Preview1";
 struct DpiContext {
     DPI_AWARENESS_CONTEXT previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     ~DpiContext() { if (previous) SetThreadDpiAwarenessContext(previous); }
 };
 }
-bool readText(MyswySession *session, uint32_t field, size_t index, WideText &out) {
-    uint8_t bytes[MYSWY_MAX_TEXT_BYTES + 65] {};
-    const int size = myswy_session_text(session, field, index, bytes, sizeof(bytes));
+bool readText(ChengyinSession *session, uint32_t field, size_t index, WideText &out) {
+    uint8_t bytes[CHENGYIN_MAX_TEXT_BYTES + 65] {};
+    const int size = chengyin_session_text(session, field, index, bytes, sizeof(bytes));
     out = {};
     if (size <= 0 || size > static_cast<int>(sizeof(bytes)))
         return false;
@@ -77,7 +77,7 @@ CandidateWindow::~CandidateWindow() {
         DeleteObject(footerFont_);
     UnregisterClassW(kWindowClass, module);
 }
-void CandidateWindow::refreshPreferences(MyswySession *session, const Preferences &preferences) {
+void CandidateWindow::refreshPreferences(ChengyinSession *session, const Preferences &preferences) {
     if (!session || !hwnd_ || !IsWindowVisible(hwnd_))
         return;
     HWND owner = reinterpret_cast<HWND>(GetWindowLongPtrW(hwnd_, GWLP_HWNDPARENT));
@@ -99,7 +99,7 @@ void CandidateWindow::hide() {
         ShowWindow(hwnd_, SW_HIDE);
     }
 }
-void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool limited, void *target,
+void CandidateWindow::show(ChengyinSession *session, HWND owner, RECT caret, bool limited, void *target,
                            Choice choice, uint64_t generation, const Preferences &preferences, bool inlineEditable) {
     requestedCaret_ = caret;
     limited_ = limited;
@@ -203,12 +203,12 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         fontSize_ = preferences.fontSize;
         fontFace_ = preferences.font;
     }
-    readText(session, preferences.separators ? MYSWY_TEXT_DISPLAY_PREEDIT : MYSWY_TEXT_PREEDIT, 0, rows_[0]);
+    readText(session, preferences.separators ? CHENGYIN_TEXT_DISPLAY_PREEDIT : CHENGYIN_TEXT_PREEDIT, 0, rows_[0]);
     if (!preferences.candidatePinyin) {
         rows_[0].data[0] = L'\0';
         rows_[0].length = 0;
     }
-    association_ = myswy_session_is_association(session) > 0;
+    association_ = chengyin_session_is_association(session) > 0;
     if (association_) {
         constexpr wchar_t label[] = L"联想 · Tab / 鼠标确认";
         std::copy_n(label, std::size(label), rows_[0].data);
@@ -219,19 +219,19 @@ void CandidateWindow::show(MyswySession *session, HWND owner, RECT caret, bool l
         std::copy_n(label, std::wcslen(label) + 1, rows_[0].data + rows_[0].length);
         rows_[0].length = static_cast<int>(std::wcslen(rows_[0].data));
     }
-    count_ = std::clamp(myswy_session_candidate_count(session), 0, 9);
-    selected_ = myswy_session_selected(session);
+    count_ = std::clamp(chengyin_session_candidate_count(session), 0, 9);
+    selected_ = chengyin_session_selected(session);
     hover_ = -1;
-    const int page = myswy_session_page(session);
+    const int page = chengyin_session_page(session);
     previous_ = page > 0;
-    next_ = myswy_session_has_next_page(session) > 0;
+    next_ = chengyin_session_has_next_page(session) > 0;
     footer_.length = std::swprintf(footer_.data, std::size(footer_.data), L"%ls  %d  %ls",
                                    previous_ ? L"‹" : L"", page + 1, next_ ? L"›" : L"");
     for (int i = 0; i < count_; ++i) {
-        readText(session, MYSWY_TEXT_CANDIDATE, static_cast<size_t>(i), rows_[i + 1]);
-        readText(session, MYSWY_TEXT_CANDIDATE_PINYIN, static_cast<size_t>(i), pinyin_[i]);
+        readText(session, CHENGYIN_TEXT_CANDIDATE, static_cast<size_t>(i), rows_[i + 1]);
+        readText(session, CHENGYIN_TEXT_CANDIDATE_PINYIN, static_cast<size_t>(i), pinyin_[i]);
         std::fill_n(marks_[i],256,uint8_t{0});
-        myswy_session_candidate_marks(session,static_cast<size_t>(i),marks_[i],256);
+        chengyin_session_candidate_marks(session,static_cast<size_t>(i),marks_[i],256);
         if (preferences.candidatePinyin && std::any_of(marks_[i],marks_[i]+256,[](uint8_t mark){return mark!=0;})) showPinyin_=true;
     }
     MONITORINFO monitor{};

@@ -10,7 +10,7 @@
 #include <initializer_list>
 #include <vector>
 
-namespace myswy {
+namespace chengyin {
 HINSTANCE module = nullptr;
 LONG objects = 0;
 }
@@ -21,14 +21,14 @@ void require(bool condition, const char *what) {
         std::exit(1);
     }
 }
-void type(MyswySession *session, const char *text) {
+void type(ChengyinSession *session, const char *text) {
     for (; *text; ++text)
-        require(myswy_session_process(session, static_cast<uint32_t>(*text), 0) & MYSWY_HANDLED, "letter consumed");
+        require(chengyin_session_process(session, static_cast<uint32_t>(*text), 0) & CHENGYIN_HANDLED, "letter consumed");
 }
 }
 int main() {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    using namespace myswy;
+    using namespace chengyin;
     module = GetModuleHandleW(nullptr);
     require(planKey('N', 'n', false, false, false).action == Action::core, "start composition");
     require(planKey('N', 'n', true, false, false).action == Action::pass, "idle Ctrl bypass");
@@ -49,7 +49,7 @@ int main() {
                 "shifted symbol/capital finishes raw composition without conversion");
     }
     require(planKey(0xde, '\'', false, false, true).punctuation == 0, "apostrophe separates syllables");
-    require(planKey(VK_TAB, 0, false, false, true, false, true).key == MYSWY_KEY_TAB,
+    require(planKey(VK_TAB, 0, false, false, true, false, true).key == CHENGYIN_KEY_TAB,
             "Tab explicitly accepts idle association");
     for (uint32_t vk : {
                 0x20u, 0x0du, 0x08u, 0x31u
@@ -168,34 +168,34 @@ int main() {
         require(placed.left == 2800 && placed.top == 124,
                 "a popup at the right work-area edge is clamped inside that monitor");
     }
-    MyswySession *session = myswy_session_new();
+    ChengyinSession *session = chengyin_session_new();
     require(session != nullptr, "session");
     type(session, "nihao");
     for (int i = 0; i < 10; ++i)
-        require(planKey(0x20, ' ', false, false, true).key == MYSWY_KEY_ENTER, "repeated raw-space planning");
+        require(planKey(0x20, ' ', false, false, true).key == CHENGYIN_KEY_ENTER, "repeated raw-space planning");
     WideText output;
-    require(readText(session, MYSWY_TEXT_PREEDIT, 0, output)
+    require(readText(session, CHENGYIN_TEXT_PREEDIT, 0, output)
             && std::wcscmp(output.data, L"nihao") == 0, "test key planning is pure");
     const KeyPlan comma = planKey(0xbc, ',', false, false, true);
-    require(myswy_session_process(session, comma.key, 0) == 0, "core punctuation returns unhandled commit");
-    require(readText(session, MYSWY_TEXT_COMMIT, 0, output)
+    require(chengyin_session_process(session, comma.key, 0) == 0, "core punctuation returns unhandled commit");
+    require(readText(session, CHENGYIN_TEXT_COMMIT, 0, output)
             && std::wcscmp(output.data, L"你好") == 0, "commit before punctuation");
     output.data[output.length++] = static_cast<wchar_t>(comma.punctuation);
     require(std::wcscmp(output.data, L"你好,") == 0, "single ordered insertion");
     type(session, "nihao");
-    require(myswy_session_process(session, MYSWY_KEY_ESCAPE, 0) == MYSWY_HANDLED, "cancel");
-    require(readText(session, MYSWY_TEXT_COMMIT, 0, output) && output.length == 0, "cancel does not commit");
-    myswy_session_free(session);
+    require(chengyin_session_process(session, CHENGYIN_KEY_ESCAPE, 0) == CHENGYIN_HANDLED, "cancel");
+    require(readText(session, CHENGYIN_TEXT_COMMIT, 0, output) && output.length == 0, "cancel does not commit");
+    chengyin_session_free(session);
     const char tsv[] = "x\t\xf0\x9f\x98\x80\t1\n";
-    MyswyDictionary *dict = myswy_dictionary_new_tsv(reinterpret_cast<const uint8_t *>(tsv), std::strlen(tsv));
+    ChengyinDictionary *dict = chengyin_dictionary_new_tsv(reinterpret_cast<const uint8_t *>(tsv), std::strlen(tsv));
     require(dict != nullptr, "emoji dictionary");
-    session = myswy_session_new_with_dictionary(dict);
-    myswy_dictionary_free(dict);
+    session = chengyin_session_new_with_dictionary(dict);
+    chengyin_dictionary_free(dict);
     type(session, "x");
-    require(readText(session, MYSWY_TEXT_CANDIDATE, 0, output) && output.length == 2 &&
+    require(readText(session, CHENGYIN_TEXT_CANDIDATE, 0, output) && output.length == 2 &&
             output.data[0] == 0xd83d && output.data[1] == 0xde00, "UTF-8 to UTF-16 surrogate pair");
-    myswy_session_free(session);
-    session = myswy_session_new();
+    chengyin_session_free(session);
+    session = chengyin_session_new();
     type(session, "nihao");
     {
         CandidateWindow candidates;
@@ -209,7 +209,7 @@ int main() {
             result->index = index;
             result->generation = generation;
         };
-        HWND owner = CreateWindowW(L"STATIC", L"Myswy test owner", WS_OVERLAPPEDWINDOW,
+        HWND owner = CreateWindowW(L"STATIC", L"Chengyin test owner", WS_OVERLAPPEDWINDOW,
                                    0, 0, 300, 200, nullptr, nullptr, module, nullptr);
         require(owner != nullptr, "candidate test owner");
         Preferences headerPrefs; headerPrefs.candidatePinyin = true;
@@ -341,7 +341,7 @@ int main() {
             require(afterPaint <= before, "each theme releases GDI/GDI+ objects after 300 warm repaints");
             std::sort(timings.begin(),timings.end()); RECT geometry{}; GetWindowRect(popup,&geometry);
             std::printf("Theme %d paint: count=%d, %ldx%ld, dpi=%u, n=300, P50/P95/P99 %.1f/%.1f/%.1f us, GDI %lu -> %lu (RedrawWindow+GdiFlush; no TSF/core/compositor)\n",
-                theme,myswy_session_candidate_count(session),geometry.right-geometry.left,geometry.bottom-geometry.top,windowDpi(popup),
+                theme,chengyin_session_candidate_count(session),geometry.right-geometry.left,geometry.bottom-geometry.top,windowDpi(popup),
                 timings[149],timings[284],timings[296],before,afterPaint);
         }
         {
@@ -356,7 +356,7 @@ int main() {
         }
         DestroyWindow(owner); // Windows automatically destroys its owned popup.
         require(!IsWindow(popup), "owned popup retired with owner");
-        owner = CreateWindowW(L"STATIC", L"Myswy second owner", WS_OVERLAPPEDWINDOW,
+        owner = CreateWindowW(L"STATIC", L"Chengyin second owner", WS_OVERLAPPEDWINDOW,
                               0, 0, 300, 200, nullptr, nullptr, module, nullptr);
         candidates.show(session, owner, RECT{200, 100, 201, 120}, false);
         popup = candidates.handle();
@@ -365,7 +365,7 @@ int main() {
         require(!IsWindowVisible(popup), "popup hides on cleanup");
         DestroyWindow(owner);
     }
-    myswy_session_free(session);
+    chengyin_session_free(session);
     std::puts("PASS: key planning, shortcuts, punctuation ordering, cancellation, UTF-16.");
     return 0;
 }

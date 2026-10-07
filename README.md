@@ -57,9 +57,9 @@ Linux 安装与构建见 [Fcitx 5 指南](platforms/fcitx5/README.md)。
 
 ```sh
 cargo test --workspace --locked
-cargo run --release -p myswy-cli -- --dict data/daily.mswydict --query woxihuanzhongwen
-cargo run --release -p myswy-cli -- --dict data/daily.mswydict --query wxhzw
-cargo run --release -p myswy-cli -- --dict data/daily.mswydict --query "xi'an"
+cargo run --release -p chengyin-cli -- --dict data/daily.mswydict --query woxihuanzhongwen
+cargo run --release -p chengyin-cli -- --dict data/daily.mswydict --query wxhzw
+cargo run --release -p chengyin-cli -- --dict data/daily.mswydict --query "xi'an"
 # Linux：格式、静态检查、测试、release 与 C ABI 检查
 bash scripts/check.sh
 ```
@@ -76,7 +76,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platforms\windows\Buil
 - [开发指南](docs/DEVELOPMENT.md)：目录、构建、回归、配置通知、输入与资源生命周期。
 - [环境与复现](docs/ENVIRONMENT.md)：本次云环境、工具版本、验证边界。
 - [当前状态](docs/STATUS.md)、[本轮任务清单](docs/WINDOWS_TASKLIST.md)、[长期路线](docs/ROADMAP.md)。
-- [架构](docs/ARCHITECTURE.md)、[C ABI](include/myswy_ime.h)、[搜狗格式兼容](docs/SOGOU_COMPATIBILITY.md)。
+- [架构](docs/ARCHITECTURE.md)、[C ABI](include/chengyin_ime.h)、[搜狗格式兼容](docs/SOGOU_COMPATIBILITY.md)。
 - [词库来源](data/README.md)、[第三方许可](platforms/windows/THIRD_PARTY.md)、[集中实测门槛](docs/WINDOWS_RELEASE_GATE.md)。
 
 代码采用 [MIT License](LICENSE)。词库分别使用 Apache-2.0 与 MIT，转换来源、固定修订和原始许可

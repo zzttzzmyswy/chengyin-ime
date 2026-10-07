@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
-namespace myswy {
+namespace chengyin {
 inline constexpr wchar_t kRepository[] = L"https://github.com/zzttzzmyswy/myswyIm";
 inline constexpr wchar_t kReleases[] = L"https://github.com/zzttzzmyswy/myswyIm/releases";
 struct ReleaseUpdate {

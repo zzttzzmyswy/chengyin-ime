@@ -7,7 +7,7 @@
 #include <mutex>
 #include <thread>
 #include <string>
-namespace myswy {
+namespace chengyin {
 // Bounded event queue. No disk access or profile serialization on the key thread.
 // A failed save keeps the event at the head and retries it under a bounded
 // budget; only shutdown abandons the remaining queue. The destructor joins

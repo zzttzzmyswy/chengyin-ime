@@ -17,7 +17,7 @@ flowchart TB
 
 ## 核心和状态
 
-`myswy-core` 禁用 unsafe，没有 I/O、线程或系统依赖。不可变词库通过 Arc 共享，每个输入上下文单独 Session。初始化一次预留工作区，真实词库下输入、整句解码、翻页、局部编辑、选段撤回、提交和 reset 的计数回归为零次堆分配。
+`chengyin-core` 禁用 unsafe，没有 I/O、线程或系统依赖。不可变词库通过 Arc 共享，每个输入上下文单独 Session。初始化一次预留工作区，真实词库下输入、整句解码、翻页、局部编辑、选段撤回、提交和 reset 的计数回归为零次堆分配。
 
 Session 分开保存原始 ASCII 拼音、光标、已选中文与输入边界；显示预编辑由已选中文和未译拼音组成。前缀候选带 consumed 字节数，选择后保留尾部；在已选边界退格可撤回。左右/Home/End/Delete 编辑剩余拼音。新输入、撤回如果超过输入/文本/歧义预算，保留原状态。Enter 提交显示原文，Esc 清除整个组合，标点强制提交候选及剩余原文后透传。
 
@@ -61,11 +61,11 @@ GBK 编码和文件 I/O。设置进程合并/编译，再互斥、刷盘和原�
 
 ## C ABI
 
-`myswy-ffi` 输出静态库和动态库，公开接口见 `include/myswy_ime.h`。固定宽度整数表示键、字段和结果；不跨 ABI 传递 Rust String/Vec/enum。所有文本用调用方缓冲区复制，先查询含 NUL 的所需容量；容量不足完全不写，避免截断 UTF-8。
+`chengyin-ffi` 输出静态库和动态库，公开接口见 `include/chengyin_ime.h`。固定宽度整数表示键、字段和结果；不跨 ABI 传递 Rust String/Vec/enum。所有文本用调用方缓冲区复制，先查询含 NUL 的所需容量；容量不足完全不写，避免截断 UTF-8。
 
 词典句柄拥有 Arc；创建 Session 后原词典句柄可以释放。释放函数必须与构造函数配对；空指针有定义行为，但任意无效指针/重用已释放句柄不在保护范围内。单 Session 不能并发使用；读写的序列化由适配器负责。所有可能 panic 的 ABI 路径捕获 unwind；OOM、无效外部指针和进程级故障仍可能终止宿主。不要在 release 配置中启用 panic=abort 后继续声称 panic 被隔离。
 
-ABI v1 增加了 `myswy_dictionary_new_demo` 和 `myswy_session_set_dictionary`，保留原函数签名和 commit/所有权契约。新增键、二进制构造、共享句柄复制、光标/翻页/跨度 getter 及候选高亮 setter 均为 ABI v1 的追加接口。切换仅允许预编辑为空，否则返回 BUSY 且不修改状态；成功时复用缓冲区，并保留上一事件 commit。使用这些新增函数的适配器需要配套新版库，当前 Fcitx 模块静态链接同一次构建的核心。
+ABI v1 增加了 `chengyin_dictionary_new_demo` 和 `chengyin_session_set_dictionary`，保留原函数签名和 commit/所有权契约。新增键、二进制构造、共享句柄复制、光标/翻页/跨度 getter 及候选高亮 setter 均为 ABI v1 的追加接口。切换仅允许预编辑为空，否则返回 BUSY 且不修改状态；成功时复用缓冲区，并保留上一事件 commit。使用这些新增函数的适配器需要配套新版库，当前 Fcitx 模块静态链接同一次构建的核心。
 
 ## Fcitx 词典加载与生命周期
 

@@ -15,7 +15,7 @@ SHA256SUMS.txt 用于文件完整性校验；当前开发包没有代码签名�
 安装 EXE 使用 NSIS 3.11 的原生 amd64 Unicode 安装/卸载 stub、System 插件和 LZMA。NSIS 及这些组件的署名、许可和例外完整保留于 INSTALLER_LICENSE.txt，来源记录见源码 packaging/windows/README.md。NSIS 仅是构建工具和安装时运行代码，正常输入不加载安装器。
 
 词库：Rime pinyin-simp，修订 0c6861ef7420ee780270ca6d993d18d4101049d0，
-Apache-2.0。原始说明其派生于 Android 开源 PinyinIME。澄音（早期名 Myswy）将拼音音节
+Apache-2.0。原始说明其派生于 Android 开源 PinyinIME。澄音（早期名 Chengyin）将拼音音节
 分隔改为撇号、零权重改为 1、重复项取最大值，并编译为二进制；保留完整
 词典和许可记录。许可证、来源 SHA256 和转换说明位于 RUNTIME_LICENSES.zip
 中的 vocabulary/，源码中的 data/sources/ 保留原始文件。

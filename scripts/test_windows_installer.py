@@ -19,7 +19,9 @@ import zlib
 from package_windows import build_installer
 
 CLASS = r"Software\Classes\CLSID\{65C32A54-219A-4F0A-B44C-B963D7BA532F}\InprocServer32"
-ARP = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\MyswyIME"
+ARP = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\ChengyinIME"
+# preview24 and earlier registered their uninstall entry under the former name.
+LEGACY_ARP = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\MyswyIME"
 
 
 def main() -> None:
@@ -34,8 +36,8 @@ def main() -> None:
     if os.name != "nt" and not (args.runner and args.wine_prefix):
         parser.error("Non-Windows tests need both --runner and --wine-prefix")
     prefix = [args.runner] if args.runner else []
-    driver = (args.build_dir / "Release/myswy_probe.exe" if (args.build_dir / "Release").exists()
-              else args.build_dir / "myswy_probe.exe").resolve()
+    driver = (args.build_dir / "Release/chengyin_probe.exe" if (args.build_dir / "Release").exists()
+              else args.build_dir / "chengyin_probe.exe").resolve()
 
     def run(*command: str | Path, success: bool = True) -> subprocess.CompletedProcess:
         result = subprocess.run([*prefix, *map(str, command)], stdout=subprocess.PIPE,
@@ -64,8 +66,11 @@ def main() -> None:
 
     product_name = "澄音输入法（预览）"
     menu_root = None
-    product = ((args.wine_prefix / "drive_c/Program Files") if args.wine_prefix
-               else Path(os.environ["ProgramFiles"])) / "MyswyIME"
+    program_files = ((args.wine_prefix / "drive_c/Program Files") if args.wine_prefix
+                     else Path(os.environ["ProgramFiles"]))
+    product = program_files / "ChengyinIME"
+    # preview24 and earlier installed under the former project name.
+    legacy_product = program_files / "MyswyIME"
 
     def host_path(windows_path: str) -> Path:
         if args.wine_prefix:
@@ -89,8 +94,8 @@ def main() -> None:
         expected = product / version
         location = read(ARP, "InstallLocation")
         assert location and host_path(location) == expected, "Uninstall entry points at the wrong directory"
-        assert read(CLASS) == location + "\\myswy_tsf.dll", "COM path does not match install entry"
-        assert (expected / "myswy-install.txt").read_text().strip() == version
+        assert read(CLASS) == location + "\\chengyin_tsf.dll", "COM path does not match install entry"
+        assert (expected / "chengyin-install.txt").read_text().strip() == version
         actual_name = read(ARP, "DisplayName")
         assert actual_name == product_name, (
             f"Installed Apps product name mismatch: {ascii(actual_name)} != {ascii(product_name)}")
@@ -98,7 +103,7 @@ def main() -> None:
             menu = menu_root / "澄音输入法"
             assert all((menu / (name + ".lnk")).is_file() for name in ["设置", "使用说明", "卸载"]), "New Start menu actions missing"
             assert not (menu / "输入测试.lnk").exists(), "Standalone test shortcut must be removed"
-            assert not (expected / "myswy_testpad.exe").exists(), "Standalone test program must be removed"
+            assert not (expected / "chengyin_testpad.exe").exists(), "Standalone test program must be removed"
         return expected
 
     def uninstall(folder: Path) -> None:
@@ -110,7 +115,7 @@ def main() -> None:
             menu = menu_root / "澄音输入法"
             assert not any((menu / (name + ".lnk")).exists() for name in ["输入测试", "设置", "使用说明", "卸载"]), "Owned Start menu actions must be removed"
 
-    with tempfile.TemporaryDirectory(prefix="myswy-lifecycle-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="chengyin-lifecycle-") as temporary:
         work = Path(temporary)
         current: Path | None = None
         settings_files: dict[Path, bytes] = {}
@@ -119,15 +124,17 @@ def main() -> None:
         settings_bytes = b"ni\tlocal-vocabulary\t10\n"
         try:
             run((args.previous_package or args.package).resolve(), "/S")
-            location = read(ARP, "InstallLocation")
-            assert location is not None
-            current = host_path(location)
+            # A preserved preview24 installer registers under the former name.
+            previous_location = read(ARP, "InstallLocation") or read(LEGACY_ARP, "InstallLocation")
+            assert previous_location is not None
+            current = host_path(previous_location)
+            previous_is_legacy = read(ARP, "InstallLocation") is None
             if args.wine_prefix:
                 local_data=run("cmd.exe","/c","set","LOCALAPPDATA").stdout.decode(errors="replace").strip()
                 assert local_data.startswith("LOCALAPPDATA="), "Cannot locate isolated local settings"
-                settings_root=host_path(local_data.split("=",1)[1]) / "MyswyIME"
+                settings_root=host_path(local_data.split("=",1)[1]) / ("MyswyIME" if previous_is_legacy else "ChengyinIME")
             else:
-                settings_root=Path(os.environ["LOCALAPPDATA"]) / "MyswyIME"
+                settings_root=Path(os.environ["LOCALAPPDATA"]) / ("MyswyIME" if previous_is_legacy else "ChengyinIME")
             # Only create owned fixtures after checking every user path first.
             learning_record = struct.pack("<HHII", 5, 6, 7, 1) + b"nihao" + "你好".encode("utf-8")
             learning_bytes = b"MSWYUSR1" + struct.pack("<III", 1, 1, zlib.crc32(learning_record)) + learning_record
@@ -147,7 +154,10 @@ def main() -> None:
                 previous_directory = current
                 previous_info = json.loads((current / "BUILD_INFO.json").read_text(encoding="utf-8"))
                 previous_revision = int(previous_info["version"].rsplit("-preview",1)[1])
-                old_menu = menu_root / ("Myswy 全拼" if previous_revision < 6 else "澄音输入法")
+                # Revisions 1..5 shipped the former-name Start menu folder; a
+                # former-name previous install keeps it until it is migrated.
+                old_menu = menu_root / (("Myswy 全拼" if previous_is_legacy else "Chengyin 全拼")
+                                        if previous_revision < 6 else "澄音输入法")
                 menu_note = old_menu / "user-added.txt"
                 assert old_menu.is_dir() and not menu_note.exists()
                 menu_note.write_bytes(menu_note_bytes)
@@ -156,7 +166,11 @@ def main() -> None:
                 assert location is not None
                 current = host_path(location)
                 assert current != previous_directory, "Previous installer must have a lower revision"
-                assert not (previous_directory / "myswy_testpad.exe").exists(), "Old standalone test executable must be removed"
+                previous_testpad = "myswy_testpad.exe" if previous_is_legacy else "chengyin_testpad.exe"
+                assert not (previous_directory / previous_testpad).exists(), "Old standalone test executable must be removed"
+                assert not previous_directory.exists() or not any(previous_directory.iterdir()), "Old install directory must be cleaned"
+                if previous_is_legacy:
+                    assert read(LEGACY_ARP, "InstallLocation") is None, "Obsolete uninstall key must be removed"
                 if menu_root:
                     assert not (old_menu / "输入测试.lnk").exists(), "Old test shortcut must be removed"
                     if previous_revision < 6:
@@ -170,8 +184,8 @@ def main() -> None:
             base, revision_text = version.rsplit("-preview", 1)
             revision = int(revision_text)
             installed(version)
-            probe = current / "myswy_probe.exe"
-            run(probe, current / "myswy_tsf.dll", "--registered")
+            probe = current / "chengyin_probe.exe"
+            run(probe, current / "chengyin_tsf.dll", "--registered")
             run(probe, "--verify-files", current, current / "SHA256SUMS.txt")
             run(args.package.resolve(), "/S")
             installed(version)
@@ -202,10 +216,10 @@ def main() -> None:
                 next_version = f"{base}-preview{next_revision}"
                 updated = dict(info, version=next_version)
                 (stage / "BUILD_INFO.json").write_text(json.dumps(updated) + "\n", encoding="utf-8")
-                dll = (args.build_dir / "Release/myswy_registration_failure.dll"
+                dll = (args.build_dir / "Release/chengyin_registration_failure.dll"
                        if (args.build_dir / "Release").exists()
-                       else args.build_dir / "myswy_registration_failure.dll") if bad else current / "myswy_tsf.dll"
-                shutil.copy2(dll, stage / "myswy_tsf.dll")
+                       else args.build_dir / "chengyin_registration_failure.dll") if bad else current / "chengyin_tsf.dll"
+                shutil.copy2(dll, stage / "chengyin_tsf.dll")
                 hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest().upper()
                           for p in sorted(stage.iterdir()) if p.name != "SHA256SUMS.txt"}
                 (stage / "SHA256SUMS.txt").write_text("".join(f"{h}  {n}\n" for n, h in hashes.items()), encoding="ascii")
@@ -216,7 +230,7 @@ def main() -> None:
             failure = fixture("fault-fixture", revision + 1, bad=True)
             run(failure, "/S", success=False)
             installed(version)
-            run(probe, current / "myswy_tsf.dll", "--registered")
+            run(probe, current / "chengyin_tsf.dll", "--registered")
             assert not (product / f"{base}-preview{revision + 1}").exists()
             print("PASS: injected upgrade registration failure restores old COM and files", flush=True)
 
@@ -226,7 +240,7 @@ def main() -> None:
             try:
                 run(driver, "--uninstall-exe", current / "Uninstall.exe", success=False)
                 run(failure, "/S", success=False)
-                assert read(CLASS) == r"C:\foreign\tip.dll" and (current / "myswy_tsf.dll").exists()
+                assert read(CLASS) == r"C:\foreign\tip.dll" and (current / "chengyin_tsf.dll").exists()
             finally:
                 run("reg.exe", "add", "HKLM\\" + CLASS, "/ve", "/t", "REG_SZ", "/d", original_server, "/f")
             print("PASS: changed files and foreign registration are preserved", flush=True)
@@ -235,8 +249,8 @@ def main() -> None:
             unknown.write_text("keep", encoding="utf-8")
             upgrade = fixture("upgrade-fixture", revision + 1)
             old = current
-            stop_event = "Local\\Myswy.IM.TestHold." + work.name
-            held = subprocess.Popen([*prefix, str(driver), "--hold-dll", str((old / "myswy_tsf.dll").resolve()), stop_event],
+            stop_event = "Local\\Chengyin.IM.TestHold." + work.name
+            held = subprocess.Popen([*prefix, str(driver), "--hold-dll", str((old / "chengyin_tsf.dll").resolve()), stop_event],
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             ready: queue.Queue = queue.Queue()
             threading.Thread(target=lambda: ready.put(held.stdout.readline()), daemon=True).start()
@@ -244,7 +258,7 @@ def main() -> None:
                 assert ready.get(timeout=15).strip() == b"READY", "DLL holder did not start"
                 run(upgrade, "/S")
                 current = installed(f"{base}-preview{revision + 1}")
-                if (old / "myswy_tsf.dll").exists():
+                if (old / "chengyin_tsf.dll").exists():
                     if os.name == "nt":
                         import winreg
                         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager") as key:
@@ -252,7 +266,7 @@ def main() -> None:
                     else:
                         pending = run("reg.exe", "query", r"HKLM\SYSTEM\CurrentControlSet\Control\Session Manager",
                                       "/v", "PendingFileRenameOperations").stdout.decode(errors="replace")
-                    assert "MyswyIME" in pending and "myswy_tsf.dll" in pending, "Occupied old DLL must be queued for reboot cleanup"
+                    assert "ChengyinIME" in pending and "chengyin_tsf.dll" in pending, "Occupied old DLL must be queued for reboot cleanup"
             finally:
                 if held.poll() is None:
                     run(driver, "--release-dll-hold", stop_event)
@@ -262,7 +276,7 @@ def main() -> None:
             assert unknown.read_text() == "keep"
             # Once the holder exits, CI can remove its owned deferred DLL;
             # production Windows performs the queued removal at reboot.
-            (old / "myswy_tsf.dll").unlink(missing_ok=True)
+            (old / "chengyin_tsf.dll").unlink(missing_ok=True)
             run(args.package.resolve(), "/S", success=False)
             installed(f"{base}-preview{revision + 1}")
             assert all(path.read_bytes() == content for path, content in settings_files.items()), "Upgrade must preserve vocabulary, preferences and learning"
@@ -290,13 +304,13 @@ def main() -> None:
 
             # Emulate the earlier ZIP's installed layout: no Apps & Features
             # entry and an ASCII/CRLF marker. No PowerShell runtime is needed.
-            legacy = product / "0.1.0-preview1"
+            legacy = legacy_product / "0.1.0-preview1"
             legacy.mkdir(parents=True)
             for name in ("myswy_tsf.dll", "myswy_probe.exe", "myswy_testpad.exe", "README.md", "LICENSE",
                          "THIRD_PARTY.md", "RUNTIME_LICENSES.zip", "BUILD_INFO.json"):
-                source = stage / ("myswy_settings.exe" if name == "myswy_testpad.exe" else name)
+                source = stage / ("chengyin_settings.exe" if name == "myswy_testpad.exe" else name)
                 if name == "myswy_tsf.dll":
-                    source = args.build_dir / ("Release/myswy_tsf.dll" if (args.build_dir / "Release").exists() else "myswy_tsf.dll")
+                    source = args.build_dir / ("Release/chengyin_tsf.dll" if (args.build_dir / "Release").exists() else "chengyin_tsf.dll")
                 shutil.copy2(source, legacy / name)
             (legacy / "myswy-install.txt").write_bytes(b"0.1.0-preview1\r\n")
             (legacy / "BUILD_INFO.json").write_text(json.dumps(dict(info, version="0.1.0-preview1")), encoding="utf-8")
@@ -306,6 +320,7 @@ def main() -> None:
             run(args.package.resolve(), "/S")
             current = installed(version)
             assert not legacy.exists()
+            assert not legacy_product.exists()
             # Exercise the ordinary temporary-copy uninstaller used by Apps &
             # Features, in addition to the deterministic exit-code tests above.
             run(current / "Uninstall.exe", "/S")
@@ -330,7 +345,7 @@ def main() -> None:
                 settings_root.rmdir()
             if current and (current / "Uninstall.exe").exists():
                 location = read(ARP, "InstallLocation")
-                if location and host_path(location) == current and read(CLASS) == location + "\\myswy_tsf.dll":
+                if location and host_path(location) == current and read(CLASS) == location + "\\chengyin_tsf.dll":
                     uninstall(current)
             # _?= leaves a running uninstaller scheduled for deletion. Once the
             # test process exits it can be removed locally without rebooting CI.
@@ -344,6 +359,16 @@ def main() -> None:
                             folder.rmdir()
                 if not any(product.iterdir()):
                     product.rmdir()
+            if legacy_product.exists():
+                for folder in legacy_product.iterdir():
+                    if folder.is_dir() and not folder.is_symlink() and folder.name.startswith("0.1.0-preview"):
+                        remaining = list(folder.iterdir())
+                        if all(p.name == "Uninstall.exe" for p in remaining):
+                            for p in remaining:
+                                p.unlink()
+                            folder.rmdir()
+                if not any(legacy_product.iterdir()):
+                    legacy_product.rmdir()
 
 
 if __name__ == "__main__":

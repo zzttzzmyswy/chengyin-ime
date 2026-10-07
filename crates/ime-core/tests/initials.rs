@@ -1,4 +1,4 @@
-use myswy_core::{fuzzy::*, Dictionary, Key, Modifiers, Profile, Session};
+use chengyin_core::{fuzzy::*, Dictionary, Key, Modifiers, Profile, Session};
 use std::sync::Arc;
 fn type_keys(s: &mut Session, raw: &str) {
     for c in raw.chars() {

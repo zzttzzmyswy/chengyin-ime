@@ -10,13 +10,13 @@
 #include <cstdlib>
 #include <string>
 
-namespace myswy::test {
+namespace chengyin::test {
 HWND testCandidateWindow() {
     struct Search { HWND any = nullptr, visible = nullptr; } found;
     EnumThreadWindows(GetCurrentThreadId(), [](HWND window, LPARAM parameter) -> BOOL {
         auto *result = reinterpret_cast<Search *>(parameter);
         wchar_t name[64]{}; GetClassNameW(window, name, 64);
-        if (!std::wcscmp(name, L"Myswy.Candidates.Preview1")) {
+        if (!std::wcscmp(name, L"Chengyin.Candidates.Preview1")) {
             result->any = window;
             if (IsWindowVisible(window)) result->visible = window;
         }
@@ -486,8 +486,8 @@ void type(ITfKeyEventSink *keys, Context *context, const char *text) {
 }
 }
 void runEditTests(ITfKeyEventSink *keys) {
-    using namespace myswy;
-    using namespace myswy::test;
+    using namespace chengyin;
+    using namespace chengyin::test;
     BYTE previous[256] {}, neutral[256] {};
     require(GetKeyboardState(previous) && SetKeyboardState(neutral), "neutral keyboard state");
     HKL layout = LoadKeyboardLayoutW(L"00000409", 0);
@@ -905,7 +905,7 @@ void runEditTests(ITfKeyEventSink *keys) {
     std::puts("PASS: TSF edits, lock denial, commit order, focus isolation, cancellation, host failures, cleanup.");
 }
 
-namespace myswy::test {
+namespace chengyin::test {
 class Manager final : public ThreadStub, public KeystrokeStub, public ITfSource, public ITfUIElementMgr {
   public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **out) override {
@@ -1013,9 +1013,9 @@ class Manager final : public ThreadStub, public KeystrokeStub, public ITfSource,
     Ptr<ITfThreadMgrEventSink> thread;
 };
 }
-void runServiceTests(myswy::ProcessorEx *service, ITfKeyEventSink *keys) {
-    using namespace myswy;
-    using namespace myswy::test;
+void runServiceTests(chengyin::ProcessorEx *service, ITfKeyEventSink *keys) {
+    using namespace chengyin;
+    using namespace chengyin::test;
     Ptr<Manager> manager;
     manager.attach(new Manager);
     require(service->ActivateEx(manager.get(), 7, TF_TMAE_UIELEMENTENABLEDONLY) == E_NOINTERFACE,

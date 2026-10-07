@@ -1,4 +1,4 @@
-use myswy_core::{fuzzy::*, Dictionary, Key, Modifiers, Session};
+use chengyin_core::{fuzzy::*, Dictionary, Key, Modifiers, Session};
 use std::sync::Arc;
 fn dictionary() -> Arc<Dictionary> {
     Arc::new(Dictionary::from_tsv("zhang\t张\t1000\nzan\t赞\t100\nzang\t脏\t200\nni\t你\t900\nli\t李\t800\nhao\t好\t800\nzhang'hao\t账号\t700\n").unwrap())

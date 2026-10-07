@@ -31,7 +31,7 @@ public:
 
 struct TemporaryDirectory {
     TemporaryDirectory() {
-        char pattern[] = "/tmp/myswy-reload-XXXXXX";
+        char pattern[] = "/tmp/chengyin-reload-XXXXXX";
         const char *created = ::mkdtemp(pattern);
         assert(created);
         path = created;
@@ -67,9 +67,9 @@ int main() {
 
     fcitx::InputContextManager manager;
     fcitx::EventLoop loop;
-    myswy::Engine engine(manager, loop);
+    chengyin::Engine engine(manager, loop);
     Context a(manager), b(manager);
-    const fcitx::InputMethodEntry entry("myswy", "Myswy", "zh_CN", "myswy");
+    const fcitx::InputMethodEntry entry("chengyin", "Chengyin", "zh_CN", "chengyin");
     auto press = [&](Context &ic, fcitx::KeySym sym) {
         fcitx::KeyEvent event(&ic, fcitx::Key(sym));
         engine.keyEvent(entry, event);
@@ -83,15 +83,15 @@ int main() {
         fcitx::RawConfig config;
         config.setValueByPath("DictionaryPath", path);
         engine.setConfig(config);
-        assert(engine.reloadState() == myswy::Engine::ReloadState::Loading);
+        assert(engine.reloadState() == chengyin::Engine::ReloadState::Loading);
     };
     auto persistedPath = [&] {
-        myswy::EngineConfig config;
-        fcitx::readAsIni(config, "conf/myswy.conf");
+        chengyin::EngineConfig config;
+        fcitx::readAsIni(config, "conf/chengyin.conf");
         return *config.dictionaryPath;
     };
-    auto state = [&](Context &ic) { return ic.propertyAs<myswy::State>("myswyState"); };
-    std::weak_ptr<const myswy::DictionarySnapshot> retired;
+    auto state = [&](Context &ic) { return ic.propertyAs<chengyin::State>("chengyinState"); };
+    std::weak_ptr<const chengyin::DictionarySnapshot> retired;
 
     std::vector<std::function<void()>> steps;
     steps.push_back([&] {
@@ -104,7 +104,7 @@ int main() {
         press(b, FcitxKey_space);
     });
     steps.push_back([&] {
-        assert(engine.reloadState() == myswy::Engine::ReloadState::Ready);
+        assert(engine.reloadState() == chengyin::Engine::ReloadState::Ready);
         assert(engine.dictionaryPath() == first);
         assert(persistedPath() == first);
         assert(candidate(a) == "你好");
@@ -135,7 +135,7 @@ int main() {
         configure(bad);
     });
     auto checkFailure = [&] {
-        assert(engine.reloadState() == myswy::Engine::ReloadState::Failed);
+        assert(engine.reloadState() == chengyin::Engine::ReloadState::Failed);
         assert(!engine.dictionaryError().empty());
         assert(engine.dictionaryPath() == second);
         assert(persistedPath() == second); // rejected config is never saved
@@ -165,7 +165,7 @@ int main() {
         configure("");
     });
     steps.push_back([&] {
-        assert(engine.reloadState() == myswy::Engine::ReloadState::Ready);
+        assert(engine.reloadState() == chengyin::Engine::ReloadState::Ready);
         assert(engine.dictionaryPath().empty());
         assert(persistedPath().empty());
         assert(candidate(b) == "新词二");
@@ -175,9 +175,9 @@ int main() {
         press(b, FcitxKey_Escape);
         // Manual edits plus reloadConfig use the same background loading path.
         writeFile(second, "ni'hao\t重新加载\t1\n");
-        myswy::EngineConfig disk;
+        chengyin::EngineConfig disk;
         disk.dictionaryPath.setValue(second);
-        assert(fcitx::safeSaveAsIni(disk, "conf/myswy.conf"));
+        assert(fcitx::safeSaveAsIni(disk, "conf/chengyin.conf"));
         engine.reloadConfig();
     });
     steps.push_back([&] {
@@ -188,19 +188,19 @@ int main() {
         assert(state(a)->dictionary == state(b)->dictionary);
         // A valid dictionary can still fail to persist. Preserve runtime input
         // and report that restart durability was not achieved.
-        const auto file = configHome + "/fcitx5/conf/myswy.conf";
+        const auto file = configHome + "/fcitx5/conf/chengyin.conf";
         std::filesystem::rename(file, file + ".saved");
         std::filesystem::create_directory(file);
         configure("");
     });
     steps.push_back([&] {
-        assert(engine.reloadState() == myswy::Engine::ReloadState::Ready);
+        assert(engine.reloadState() == chengyin::Engine::ReloadState::Ready);
         assert(engine.dictionaryPath().empty());
         assert(engine.dictionaryError().find("保存失败") != std::string::npos);
         type(a);
         assert(candidate(a) == "你好");
         press(a, FcitxKey_space);
-        const auto file = configHome + "/fcitx5/conf/myswy.conf";
+        const auto file = configHome + "/fcitx5/conf/chengyin.conf";
         std::filesystem::remove(file);
         std::filesystem::rename(file + ".saved", file);
     });
@@ -210,7 +210,7 @@ int main() {
     auto timer = loop.addTimeEvent(CLOCK_MONOTONIC, fcitx::now(CLOCK_MONOTONIC), 0,
         [&](fcitx::EventSourceTime *source, uint64_t) {
             assert(fcitx::now(CLOCK_MONOTONIC) < deadline);
-            if (engine.reloadState() != myswy::Engine::ReloadState::Loading && step < steps.size()) {
+            if (engine.reloadState() != chengyin::Engine::ReloadState::Loading && step < steps.size()) {
                 steps[step++]();
             }
             if (step == steps.size() && retired.expired()) { loop.exit(); }

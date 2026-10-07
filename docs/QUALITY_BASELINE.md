@@ -10,7 +10,7 @@
 命令与基线完全相同：
 
 ```sh
-cargo run --release -p myswy-core --example quality_report --locked
+cargo run --release -p chengyin-core --example quality_report --locked
 ```
 
 | 范围 | n | 指标 | 基线 87,540 | I05 184,173 | Δ |
@@ -50,7 +50,7 @@ cargo run --release -p myswy-core --example quality_report --locked
 
 ### 三、同机微基准前后对照
 
-`cargo bench -p myswy-core --bench latency --locked`，同机同轮前后各跑一次。
+`cargo bench -p chengyin-core --bench latency --locked`，同机同轮前后各跑一次。
 硬件同第四节（i9-10900X / 251 GiB / Arch Linux）。单位 µs。
 
 | 场景 | 基线 P50 | I05 P50 | 基线 P95 | I05 P95 | 基线 P99 | I05 P99 |
@@ -123,7 +123,7 @@ python3 scripts/audit_sample.py --check   # 种子 i05-audit-2026-10-06
 
 ## preview23 的 Windows 分段模式回归 · 2026-10-06
 
-默认工具继续旧staged配置；新增 `cargo run --release -p myswy-core --example quality_report --locked -- --incremental`
+默认工具继续旧staged配置；新增 `cargo run --release -p chengyin-core --example quality_report --locked -- --incremental`
 测实际Windows立即分段配置。Win11 build26200/Ryzen9950X/Rust1.99，旧316d7f3快照与当前核心使用相同488条集、词库、flags与空个人历史。
 旧/新总体Top1/Top9/200页可达=92.0%/97.7%/98.8%；dev/test Top1=92.6%/91.4%；整词/单字首选100%。
 分类/分档/半集汇总一致；当前默认配置也与I03一致。日志 build/quality-preview22-incremental.txt、quality-preview23-incremental.txt、quality-preview23.txt。
@@ -137,13 +137,13 @@ python3 scripts/audit_sample.py --check   # 种子 i05-audit-2026-10-06
 
 ```sh
 # 1. 质量基线（独立标注集，只测共享核心）
-cargo run --release -p myswy-core --example quality_report --locked
+cargo run --release -p chengyin-core --example quality_report --locked
 
 # 2. 核心微基准（逐键 / 候选标记 / 编辑 / 翻页）
-MYSWY_BENCH_ROUNDS=1000 cargo bench -p myswy-core --bench latency --locked
+CHENGYIN_BENCH_ROUNDS=1000 cargo bench -p chengyin-core --bench latency --locked
 
 # 3. 标注集结构门禁（含开发/测试集不重叠的自动检查）
-cargo test -p myswy-core --test quality_corpus --locked
+cargo test -p chengyin-core --test quality_corpus --locked
 
 # 4. 重新生成标注集（确定性）
 python3 scripts/generate_eval_corpus.py
@@ -313,7 +313,7 @@ dev 与 test 的 Top-1 差 1.2 个百分点（样本各 244，单条权重约 0.
 ## preview22 合并后的 Windows 重放 · 2026-10-06
 
 Win11 build26200 / Ryzen 9 9950X 16C32T / Rust 1.99 MSVC Release，同一固定词库与 488 条集，空个人历史。
-`cargo run --release -p myswy-core --example quality_report --locked`，日志 `build/quality-preview22-integrated.txt`。
+`cargo run --release -p chengyin-core --example quality_report --locked`，日志 `build/quality-preview22-integrated.txt`。
 总体 Top-1/Top-9/200 页可达 = 92.0%/97.7%/98.8%，错误组合率 0.8%；
 dev/test 各 244 条 Top-1 = 92.6%/91.4%，整词/单字首选均 100%。总体、分类、分档、半集指标与 I03 一致。
 这是质量集回归证据，不是与 Linux 基准的延迟比较；用户本批 A不A/词语＋的输入另有 grammar 回归，

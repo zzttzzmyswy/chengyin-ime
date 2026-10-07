@@ -7,12 +7,12 @@ namespace {
 void require(bool ok, const char *why) {
     if (!ok) { std::fprintf(stderr, "update FAIL: %s\n", why); std::exit(1); }
 }
-bool parse(const char *json, myswy::ReleaseUpdate &result) {
-    return myswy::parseReleases(std::vector<uint8_t>(json, json + std::strlen(json)), result);
+bool parse(const char *json, chengyin::ReleaseUpdate &result) {
+    return chengyin::parseReleases(std::vector<uint8_t>(json, json + std::strlen(json)), result);
 }
 }
 int main(int argc, char **argv) {
-    using namespace myswy;
+    using namespace chengyin;
     if (argc == 2 && std::strcmp(argv[1], "--live-check") == 0) {
         const auto live = checkReleaseUpdate();
         std::wprintf(L"%ls\n", live.message.c_str());
@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     require(parse("[]", result) && !result.available, "no published releases is a normal result");
     // R13: the future release comes from version.json via the generated header, so
     // bumping the version cannot leave this fixture testing a stale tag.
-    const std::string futureTag = MYSWY_FUTURE_TAG_UTF8;
+    const std::string futureTag = CHENGYIN_FUTURE_TAG_UTF8;
     const std::string assetName = "chengyin-windows-x64-" + futureTag + "-msvc.exe";
     const std::string assetUrl = "https://github.com/zzttzzmyswy/myswyIm/releases/download/v"
         + futureTag + "/" + assetName;
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     // The downgrade case must name a tag the installed version sees as older, so it
     // is derived from the current revision rather than a literal that a bump would
     // invalidate (review R13).
-    const std::string oldTag = "preview" + std::to_string(MYSWY_REVISION > 1 ? MYSWY_REVISION - 1 : 1);
+    const std::string oldTag = "preview" + std::to_string(CHENGYIN_REVISION > 1 ? CHENGYIN_REVISION - 1 : 1);
     unsafe = fixture;
     unsafe.replace(unsafe.find(futureTag), futureTag.size(), oldTag);
     require(parse(unsafe.c_str(), result) && !result.available, "old version cannot downgrade installation");
@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
                 "unavailable theme uses system palette without retained character colors");
     }
     // Override HKCU in this process only; never change the user's real theme.
-    const std::wstring keyName = L"Software\\MyswyIME\\TestTheme-" + std::to_wstring(GetCurrentProcessId());
+    const std::wstring keyName = L"Software\\ChengyinIME\\TestTheme-" + std::to_wstring(GetCurrentProcessId());
     HKEY isolated = nullptr, personalize = nullptr;
     require(RegCreateKeyExW(HKEY_CURRENT_USER, keyName.c_str(), 0, nullptr, 0, KEY_ALL_ACCESS, nullptr, &isolated, nullptr) == ERROR_SUCCESS,
             "create process-private registry fixture");

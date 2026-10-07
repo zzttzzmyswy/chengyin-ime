@@ -29,6 +29,6 @@ Windows 设置的“追加词库”支持 `.scel` 细胞词库和搜狗文本导
 `a3cbd9727ce1c49039bab91a21052c1c8a282d50`；只参考字段格式和验证样例，
 没有把其 GPL 实现纳入本项目。不能据一个样例宣布所有搜狗版本均兼容。
 
-CLI 使用同一个解析器：`myswy --import 词库.scel 输出.mswydict`；CLI 的文本
+CLI 使用同一个解析器：`chengyin --import 词库.scel 输出.mswydict`；CLI 的文本
 输入使用 Unicode，GBK 文本需先转换为 UTF-8。搜狗词库由用户本地导入，
 安装包只预载具有明确开源许可的 Rime/jieba 数据。

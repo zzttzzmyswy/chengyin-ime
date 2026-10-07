@@ -22,7 +22,7 @@ from version import load as load_version
 
 VERSION = load_version()
 REVISION = VERSION.preview
-BINARIES = {"myswy_tsf.dll": True, "myswy_probe.exe": False, "myswy_settings.exe": False}
+BINARIES = {"chengyin_tsf.dll": True, "chengyin_probe.exe": False, "chengyin_settings.exe": False}
 
 
 def validate_pe(path: Path, dll: bool) -> None:
@@ -85,7 +85,7 @@ def nsis_quote(value: str) -> str:
 
 
 def build_installer(stage: Path, output: Path, makensis: str, version: str, revision: int) -> None:
-    with tempfile.TemporaryDirectory(prefix="myswy-nsis-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="chengyin-nsis-") as temporary:
         include = Path(temporary) / "payload.nsh"
         names = sorted(p.name for p in stage.iterdir())
         lines = ["!macro ExtractPayload"]
@@ -140,7 +140,7 @@ def main() -> None:
     if output.exists():
         raise FileExistsError(f"Refusing to overwrite {output}")
     sysroot = args.rust_sysroot or Path(subprocess.check_output(["rustc", "--print", "sysroot"], text=True).strip())
-    with tempfile.TemporaryDirectory(prefix="myswy-windows-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="chengyin-windows-") as temporary:
         stage = Path(temporary) / "stage"
         subprocess.run([args.cmake, "--install", str(args.build_dir.resolve()), "--config", "Release", "--prefix", str(stage)], check=True)
         for name, dll in BINARIES.items():
@@ -161,10 +161,10 @@ def main() -> None:
         if platform.system() == "Windows":
             # Exercise the exact verifier used by the installer before emitting
             # an EXE. A new payload filename must agree with its allowlist.
-            subprocess.run([str(stage / "myswy_probe.exe"), "--verify-files", str(stage),
+            subprocess.run([str(stage / "chengyin_probe.exe"), "--verify-files", str(stage),
                             str(stage / "SHA256SUMS.txt")], check=True)
-            subprocess.run([str(stage / "myswy_probe.exe"), str(stage / "myswy_tsf.dll")], check=True)
-        candidate = Path(temporary) / "myswy-package.exe"
+            subprocess.run([str(stage / "chengyin_probe.exe"), str(stage / "chengyin_tsf.dll")], check=True)
+        candidate = Path(temporary) / "chengyin-package.exe"
         build_installer(stage, candidate, args.makensis, tag, args.revision)
         with output.open("xb") as destination:
             try:

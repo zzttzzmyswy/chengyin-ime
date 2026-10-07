@@ -1,4 +1,4 @@
-/* IBus engine for the Chengyin (myswy) shared core.
+/* IBus engine for the Chengyin (chengyin) shared core.
  *
  * Unlike the Fcitx5 addon, an IBus engine is a separate process: ibus-daemon
  * spawns this executable and asks it for an IBusEngine per input context. All
@@ -6,34 +6,34 @@
  * covered by the CTests; this file only translates IBus vfuncs into those
  * calls.
  *
- * Session lifetime: every IBusEngine instance owns a private MyswySession, so
+ * Session lifetime: every IBusEngine instance owns a private ChengyinSession, so
  * two input contexts never share composition state. focus_out and reset both
  * drop the composition, because a new context means a new session anyway.
  */
 #include <ibus.h>
 #include <stdlib.h>
 #include "engine.h"
-#include "myswy_ime.h"
+#include "chengyin_ime.h"
 
-#define MYSWY_ENGINE_NAME "myswy"
-#define MYSWY_ENGINE_LONGNAME "Chengyin Pinyin (Prototype)"
-#define MYSWY_ENGINE_COMPONENT "org.freedesktop.IBus.Myswy"
+#define CHENGYIN_ENGINE_NAME "chengyin"
+#define CHENGYIN_ENGINE_LONGNAME "Chengyin Pinyin (Prototype)"
+#define CHENGYIN_ENGINE_COMPONENT "org.freedesktop.IBus.Chengyin"
 /* The ABI pages candidates nine at a time and reports indexes relative to the
  * current page, so a lookup table is always exactly one page. */
-#define MYSWY_PAGE_SIZE 9
+#define CHENGYIN_PAGE_SIZE 9
 
-typedef struct _MyswyIbusEngine {
+typedef struct _ChengyinIbusEngine {
     IBusEngine parent;
-    MyswyEngine *core;
+    ChengyinEngine *core;
     /* Cached so the SIGUSR-style teardown never touches freed GObjects. */
     gboolean has_preedit;
-} MyswyIbusEngine;
+} ChengyinIbusEngine;
 
-typedef struct _MyswyIbusEngineClass {
+typedef struct _ChengyinIbusEngineClass {
     IBusEngineClass parent_class;
-} MyswyIbusEngineClass;
+} ChengyinIbusEngineClass;
 
-G_DEFINE_TYPE(MyswyIbusEngine, myswy_ibus_engine, IBUS_TYPE_ENGINE)
+G_DEFINE_TYPE(ChengyinIbusEngine, chengyin_ibus_engine, IBUS_TYPE_ENGINE)
 
 /* --- sink callbacks: engine.c -> IBus ------------------------------------ */
 
@@ -47,12 +47,12 @@ G_DEFINE_TYPE(MyswyIbusEngine, myswy_ibus_engine, IBUS_TYPE_ENGINE)
  * "ibus_serializable_serialize_object: assertion failed" and then a crash.
  */
 static void sink_commit(void *user, const char *utf8) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)user;
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)user;
     ibus_engine_commit_text(IBUS_ENGINE(self), ibus_text_new_from_string(utf8));
 }
 
 static void sink_preedit(void *user, const char *utf8, int cursor_chars, int visible) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)user;
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)user;
     if (!visible || utf8[0] == '\0') {
         if (self->has_preedit) {
             ibus_engine_hide_preedit_text(IBUS_ENGINE(self));
@@ -66,10 +66,10 @@ static void sink_preedit(void *user, const char *utf8, int cursor_chars, int vis
     self->has_preedit = TRUE;
 }
 
-static void sink_candidates(void *user, const MyswyEngineRow *rows, int count, int selected,
+static void sink_candidates(void *user, const ChengyinEngineRow *rows, int count, int selected,
                             int association) {
     (void)association;
-    MyswyIbusEngine *self = (MyswyIbusEngine *)user;
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)user;
     IBusEngine *engine = IBUS_ENGINE(self);
     if (count <= 0) {
         ibus_engine_hide_lookup_table(engine);
@@ -86,7 +86,7 @@ static void sink_candidates(void *user, const MyswyEngineRow *rows, int count, i
 }
 
 static void sink_auxiliary(void *user, const char *utf8) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)user;
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)user;
     IBusEngine *engine = IBUS_ENGINE(self);
     if (utf8[0] == '\0') {
         ibus_engine_hide_auxiliary_text(engine);
@@ -97,114 +97,114 @@ static void sink_auxiliary(void *user, const char *utf8) {
 
 /* --- IBusEngine vfuncs --------------------------------------------------- */
 
-static gboolean myswy_process_key_event(IBusEngine *engine, guint keyval, guint keycode,
+static gboolean chengyin_process_key_event(IBusEngine *engine, guint keyval, guint keycode,
                                        guint state) {
     (void)keycode;
-    MyswyIbusEngine *self = (MyswyIbusEngine *)engine;
-    return myswy_engine_process_key(self->core, (uint32_t)keyval, (uint32_t)state) ? TRUE : FALSE;
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)engine;
+    return chengyin_engine_process_key(self->core, (uint32_t)keyval, (uint32_t)state) ? TRUE : FALSE;
 }
 
-static void myswy_focus_in(IBusEngine *engine) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)engine;
-    myswy_engine_reset(self->core);
+static void chengyin_focus_in(IBusEngine *engine) {
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)engine;
+    chengyin_engine_reset(self->core);
 }
 
-static void myswy_focus_out(IBusEngine *engine) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)engine;
-    myswy_engine_reset(self->core);
+static void chengyin_focus_out(IBusEngine *engine) {
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)engine;
+    chengyin_engine_reset(self->core);
 }
 
-static void myswy_reset(IBusEngine *engine) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)engine;
-    myswy_engine_reset(self->core);
+static void chengyin_reset(IBusEngine *engine) {
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)engine;
+    chengyin_engine_reset(self->core);
 }
 
-static void myswy_enable(IBusEngine *engine) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)engine;
-    myswy_engine_reset(self->core);
+static void chengyin_enable(IBusEngine *engine) {
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)engine;
+    chengyin_engine_reset(self->core);
 }
 
-static void myswy_disable(IBusEngine *engine) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)engine;
-    myswy_engine_reset(self->core);
+static void chengyin_disable(IBusEngine *engine) {
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)engine;
+    chengyin_engine_reset(self->core);
 }
 
-static void myswy_page_up(IBusEngine *engine) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)engine;
-    myswy_engine_page(self->core, 0);
+static void chengyin_page_up(IBusEngine *engine) {
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)engine;
+    chengyin_engine_page(self->core, 0);
 }
 
-static void myswy_page_down(IBusEngine *engine) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)engine;
-    myswy_engine_page(self->core, 1);
+static void chengyin_page_down(IBusEngine *engine) {
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)engine;
+    chengyin_engine_page(self->core, 1);
 }
 
-static void myswy_cursor_up(IBusEngine *engine) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)engine;
-    myswy_engine_move(self->core, 1);
+static void chengyin_cursor_up(IBusEngine *engine) {
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)engine;
+    chengyin_engine_move(self->core, 1);
 }
 
-static void myswy_cursor_down(IBusEngine *engine) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)engine;
-    myswy_engine_move(self->core, 0);
+static void chengyin_cursor_down(IBusEngine *engine) {
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)engine;
+    chengyin_engine_move(self->core, 0);
 }
 
-static void myswy_candidate_clicked(IBusEngine *engine, guint index, guint button, guint state) {
+static void chengyin_candidate_clicked(IBusEngine *engine, guint index, guint button, guint state) {
     (void)button;
     (void)state;
-    MyswyIbusEngine *self = (MyswyIbusEngine *)engine;
-    myswy_engine_select(self->core, (size_t)index);
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)engine;
+    chengyin_engine_select(self->core, (size_t)index);
 }
 
 /* IBus reports password/private fields here. Composing into one would leak the
  * keystrokes into a hidden field's candidate list and league them into the
  * learning profile, so a sensitive context is never composed into. */
-static void myswy_set_content_type(IBusEngine *engine, guint purpose, guint hints) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)engine;
+static void chengyin_set_content_type(IBusEngine *engine, guint purpose, guint hints) {
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)engine;
     const gboolean sensitive = purpose == IBUS_INPUT_PURPOSE_PASSWORD ||
                                purpose == IBUS_INPUT_PURPOSE_PIN ||
                                (hints & (IBUS_INPUT_HINT_HIDDEN_TEXT | IBUS_INPUT_HINT_PRIVATE)) != 0;
-    myswy_engine_set_sensitive(self->core, sensitive ? 1 : 0);
+    chengyin_engine_set_sensitive(self->core, sensitive ? 1 : 0);
 }
 
-static void myswy_ibus_engine_init(MyswyIbusEngine *self) {
-    static const MyswyEngineSink sink = {
+static void chengyin_ibus_engine_init(ChengyinIbusEngine *self) {
+    static const ChengyinEngineSink sink = {
         .user = NULL,
         .on_commit = sink_commit,
         .on_preedit = sink_preedit,
         .on_candidates = sink_candidates,
         .on_auxiliary = sink_auxiliary,
     };
-    MyswyEngineSink bound = sink;
+    ChengyinEngineSink bound = sink;
     bound.user = self;
-    self->core = myswy_engine_new(&bound);
+    self->core = chengyin_engine_new(&bound);
     g_assert(self->core != NULL);
     self->has_preedit = FALSE;
 }
 
-static void myswy_ibus_engine_finalize(GObject *object) {
-    MyswyIbusEngine *self = (MyswyIbusEngine *)object;
-    myswy_engine_free(self->core);
+static void chengyin_ibus_engine_finalize(GObject *object) {
+    ChengyinIbusEngine *self = (ChengyinIbusEngine *)object;
+    chengyin_engine_free(self->core);
     self->core = NULL;
-    G_OBJECT_CLASS(myswy_ibus_engine_parent_class)->finalize(object);
+    G_OBJECT_CLASS(chengyin_ibus_engine_parent_class)->finalize(object);
 }
 
-static void myswy_ibus_engine_class_init(MyswyIbusEngineClass *klass) {
+static void chengyin_ibus_engine_class_init(ChengyinIbusEngineClass *klass) {
     GObjectClass *object_class = G_OBJECT_CLASS(klass);
     IBusEngineClass *engine_class = IBUS_ENGINE_CLASS(klass);
-    object_class->finalize = myswy_ibus_engine_finalize;
-    engine_class->process_key_event = myswy_process_key_event;
-    engine_class->focus_in = myswy_focus_in;
-    engine_class->focus_out = myswy_focus_out;
-    engine_class->reset = myswy_reset;
-    engine_class->enable = myswy_enable;
-    engine_class->disable = myswy_disable;
-    engine_class->page_up = myswy_page_up;
-    engine_class->page_down = myswy_page_down;
-    engine_class->cursor_up = myswy_cursor_up;
-    engine_class->cursor_down = myswy_cursor_down;
-    engine_class->candidate_clicked = myswy_candidate_clicked;
-    engine_class->set_content_type = myswy_set_content_type;
+    object_class->finalize = chengyin_ibus_engine_finalize;
+    engine_class->process_key_event = chengyin_process_key_event;
+    engine_class->focus_in = chengyin_focus_in;
+    engine_class->focus_out = chengyin_focus_out;
+    engine_class->reset = chengyin_reset;
+    engine_class->enable = chengyin_enable;
+    engine_class->disable = chengyin_disable;
+    engine_class->page_up = chengyin_page_up;
+    engine_class->page_down = chengyin_page_down;
+    engine_class->cursor_up = chengyin_cursor_up;
+    engine_class->cursor_down = chengyin_cursor_down;
+    engine_class->candidate_clicked = chengyin_candidate_clicked;
+    engine_class->set_content_type = chengyin_set_content_type;
 }
 
 /* --- process bootstrap --------------------------------------------------- */
@@ -212,21 +212,21 @@ static void myswy_ibus_engine_class_init(MyswyIbusEngineClass *klass) {
 static IBusBus *bus = NULL;
 static IBusFactory *factory = NULL;
 /* The component's <exec> must be an absolute path, because ibus-daemon spawns it
- * from an unrelated working directory. Running as `./ibus-engine-myswy` in the
+ * from an unrelated working directory. Running as `./ibus-engine-chengyin` in the
  * build tree would otherwise publish an exec the daemon could not resolve. */
 static gchar *executable_path = NULL;
 
 static IBusComponent *build_component(const gchar *exec) {
-    IBusComponent *component = ibus_component_new(MYSWY_ENGINE_COMPONENT,
+    IBusComponent *component = ibus_component_new(CHENGYIN_ENGINE_COMPONENT,
                                                   "Chengyin IME",
                                                   "0.1.0",
                                                   "MIT",
                                                   "Chengyin IME contributors",
                                                   "https://github.com/zzttzzmyswy/myswyIm",
                                                   exec,
-                                                  "myswy");
-    IBusEngineDesc *description = ibus_engine_desc_new(MYSWY_ENGINE_NAME,
-                                                       MYSWY_ENGINE_LONGNAME,
+                                                  "chengyin");
+    IBusEngineDesc *description = ibus_engine_desc_new(CHENGYIN_ENGINE_NAME,
+                                                       CHENGYIN_ENGINE_LONGNAME,
                                                        "Chengyin full pinyin",
                                                        "zh_CN",
                                                        "MIT",
@@ -247,16 +247,16 @@ static void on_bus_acquired(IBusBus *acquired, gpointer user_data) {
     ibus_bus_register_component(acquired, component);
 
     factory = ibus_factory_new(ibus_bus_get_connection(acquired));
-    ibus_factory_add_engine(factory, MYSWY_ENGINE_NAME, myswy_ibus_engine_get_type());
-    ibus_bus_request_name(acquired, MYSWY_ENGINE_COMPONENT, 0);
+    ibus_factory_add_engine(factory, CHENGYIN_ENGINE_NAME, chengyin_ibus_engine_get_type());
+    ibus_bus_request_name(acquired, CHENGYIN_ENGINE_COMPONENT, 0);
 }
 
 int main(int argc, char **argv) {
     (void)argc;
-    g_set_prgname("ibus-engine-myswy");
+    g_set_prgname("ibus-engine-chengyin");
     ibus_init();
-    if (myswy_ime_abi_version() != MYSWY_ABI_VERSION) {
-        g_printerr("myswy: C ABI version mismatch\n");
+    if (chengyin_ime_abi_version() != CHENGYIN_ABI_VERSION) {
+        g_printerr("chengyin: C ABI version mismatch\n");
         return 1;
     }
     executable_path = g_file_read_link("/proc/self/exe", NULL);

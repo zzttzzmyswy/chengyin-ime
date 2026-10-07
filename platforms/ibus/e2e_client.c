@@ -1,9 +1,9 @@
 /* Headless IBus client used by platforms/ibus/e2e.sh.
  *
- * Creates a real input context on a real session bus, selects the myswy engine
+ * Creates a real input context on a real session bus, selects the chengyin engine
  * and types `ni` + space, then reports the preedit/commit signals it received.
  * It is the host side on purpose: the engine under test is the shipped
- * ibus-engine-myswy process, so observing COMMIT proves the whole chain
+ * ibus-engine-chengyin process, so observing COMMIT proves the whole chain
  * (client -> ibus-daemon -> engine process -> Rust core -> commit signal).
  *
  * Exits non-zero when the expected commit never arrives, so the shell script
@@ -51,14 +51,14 @@ static void send_key(guint keyval) {
 }
 
 int main(int argc, char **argv) {
-    const char *engine = argc > 1 ? argv[1] : "myswy";
+    const char *engine = argc > 1 ? argv[1] : "chengyin";
     ibus_init();
     bus = ibus_bus_new();
     if (!ibus_bus_is_connected(bus)) {
         fprintf(stderr, "[client] not connected to a bus\n");
         return 2;
     }
-    context = ibus_bus_create_input_context(bus, "myswy-e2e-client");
+    context = ibus_bus_create_input_context(bus, "chengyin-e2e-client");
     if (!context) {
         fprintf(stderr, "[client] could not create an input context\n");
         return 2;

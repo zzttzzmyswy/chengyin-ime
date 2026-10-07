@@ -15,7 +15,7 @@ import tempfile
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = "fcitx5-myswy"
+PACKAGE = "fcitx5-chengyin"
 
 
 def run(command, **kwargs):
@@ -39,12 +39,12 @@ def build(args):
     if output.exists():
         raise ValueError(f"Refusing to overwrite existing package: {output}")
 
-    with tempfile.TemporaryDirectory(prefix="myswy-package-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="chengyin-package-") as temporary:
         work = Path(temporary)
         stage = work / "stage"
         environment = dict(os.environ, DESTDIR=str(stage), LC_ALL="C")
         run([args.cmake, "--install", str(build_dir)], env=environment)
-        modules = list(stage.glob("usr/lib*/**/fcitx5/myswy.so"))
+        modules = list(stage.glob("usr/lib*/**/fcitx5/chengyin.so"))
         if len(modules) != 1:
             raise ValueError("Expected exactly one Fcitx module under /usr/lib or /usr/lib64")
         # Native packages only: reject a module from an incompatible build target.
@@ -57,7 +57,7 @@ def build(args):
         debian.mkdir()
         (debian / "control").write_text(
             f"Source: {PACKAGE}\nSection: utils\nPriority: optional\nMaintainer: {args.maintainer}\n\n"
-            f"Package: {PACKAGE}\nArchitecture: any\nDescription: Myswy pinyin development preview\n"
+            f"Package: {PACKAGE}\nArchitecture: any\nDescription: Chengyin pinyin development preview\n"
         )
         command = ["dpkg-shlibdeps", "-O", "--warnings=0", "-e" + str(modules[0])]
         command.extend("-l" + str(path.resolve()) for path in args.library_dir)
@@ -79,7 +79,7 @@ def build(args):
             f"Maintainer: {args.maintainer}\nSection: utils\nPriority: optional\n"
             f"Installed-Size: {installed_size}\nDepends: fcitx5 (>= 5.1), {match[1]}\n"
             "Recommends: fcitx5-config-qt\nHomepage: https://github.com/zzttzzmyswy/myswyIm\n"
-            "Description: Myswy full-pinyin Fcitx 5 development preview\n"
+            "Description: Chengyin full-pinyin Fcitx 5 development preview\n"
             " Shared Rust input core with background custom TSV dictionary loading.\n"
             " Includes a small demo vocabulary; real desktop validation is pending.\n"
         )
@@ -103,7 +103,7 @@ def main():
     parser.add_argument("--output-dir", type=Path, default=ROOT / "build/packages")
     parser.add_argument("--cmake", default=shutil.which("cmake") or "cmake")
     parser.add_argument("--version", help="Debian version; defaults to workspace version + -1")
-    parser.add_argument("--maintainer", default="Myswy IM development build <maintainer@example.invalid>")
+    parser.add_argument("--maintainer", default="Chengyin IM development build <maintainer@example.invalid>")
     parser.add_argument("--library-dir", type=Path, action="append", default=[], help="Extra SDK library search directory")
     parser.add_argument("--shlibs-local", type=Path, help="Explicit shlibs metadata for an unpacked SDK")
     args = parser.parse_args()
