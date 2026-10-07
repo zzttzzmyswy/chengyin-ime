@@ -22,6 +22,8 @@ struct Preferences {
     bool learning = true;
     bool associations = true;
     bool defaultEnglish = false;
+    // A brief 中/英 badge near the caret after the user switches mode.
+    bool modeHint = true;
     bool caretFallback = true;
     bool chinesePunctuation = true;
     bool autoUpdate = true; // check releases in settings, install only on user action

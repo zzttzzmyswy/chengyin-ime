@@ -146,6 +146,7 @@ bool tryLoadPreferences(const std::wstring &path, Preferences &result) {
               && flag(L"SkinDecorations", p.skinDecorations)
               && flag(L"Learning", p.learning)
               && flag(L"Associations", p.associations) && flag(L"DefaultEnglish", p.defaultEnglish)
+              && flag(L"ModeHint", p.modeHint)
               && flag(L"CaretFallback", p.caretFallback) && flag(L"ChinesePunctuation", p.chinesePunctuation)
               && flag(L"AutoUpdate", p.autoUpdate);
     if (!ok || !validPreferences(p))
@@ -178,7 +179,8 @@ bool savePreferences(const std::wstring &path, const Preferences &p) {
       << L"\nSeparators=" << p.separators << L"\nCandidatePinyin=" << p.candidatePinyin
       << L"\nShowCandidatePinyin=" << p.candidatePinyin << L"\nLearning=" <<
       p.learning
-      << L"\nAssociations=" << p.associations << L"\nDefaultEnglish=" << p.defaultEnglish << L"\nCaretFallback=" <<
+      << L"\nAssociations=" << p.associations << L"\nDefaultEnglish=" << p.defaultEnglish << L"\nModeHint=" <<
+      p.modeHint << L"\nCaretFallback=" <<
       p.caretFallback << L"\nChinesePunctuation=" << p.chinesePunctuation << L"\nAutoUpdate=" << p.autoUpdate << L"\n";
     const auto text = s.str();
     std::vector<uint8_t> bytes(2 + text.size()*sizeof(wchar_t));

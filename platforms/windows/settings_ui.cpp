@@ -257,6 +257,7 @@ void Settings::buildPage() {
     case 0:
         begin(L"输入模式");
         checkbox(202, L"启动输入服务时默认使用英文", draft_.defaultEnglish);
+        checkbox(205, L"切换中/英文时在光标附近显示提示", draft_.modeHint);
         paragraph(
             L"修改默认模式不会改变当前的中英文状态。可随时用左 Shift 或 Ctrl+Space 切换。");
         label(L"Shift 切换键：", 20, y, 160, 24);
@@ -573,6 +574,9 @@ void Settings::collect(int id) {
     case 202:
         draft_.defaultEnglish = checked(id);
         break;
+    case 205:
+        draft_.modeHint = checked(id);
+        break;
     case 204:
         draft_.chinesePunctuation = checked(id);
         break;
@@ -784,7 +788,7 @@ void Settings::command(int id, int event) {
         return;
     }
     if ((event == CBN_SELCHANGE && (id == 200 || id == 201 || (id >= 302 && id <= 305))) || (event == BN_CLICKED
-            && (id == 202 || id == 203 || id == 204 || id == 306 || id == 307 || id == 501 || id == 601 || id == 608
+            && (id == 202 || id == 203 || id == 204 || id == 205 || id == 306 || id == 307 || id == 501 || id == 601 || id == 608
                 || (id>=801 && id<=811) || (id>=820 && id<=823)))) {
         collect(id);
         return;
