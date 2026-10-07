@@ -1,5 +1,11 @@
 # 项目状态
 
+## 项目标识改名 I10（preview25）· 2026-10-07
+
+PR #16：项目英文标识 `myswy` → `chengyin`（crate、C ABI 符号与 `chengyin_ime.h`、构建产物、安装器、deb 包名 `fcitx5-chengyin`），仓库改名为 `zzttzzmyswy/chengyin-ime`。行为不变；CLSID/profile GUID 不变。
+升级兼容：安装器识别 preview24 旧注册表键/安装目录/旧布局并迁移，旧用户数据目录 `MyswyIME` 可读取，`.myswyuser` 旧备份仍可导入；词库格式魔数 `MSWYDICT` 保持不变。
+验证：`scripts/check.sh` 全绿；CI 6/6（含 windows-tsf 原生 CTest 与安装生命周期）。release v0.1.0-preview25 资产取自 main `7e2caac` 的 CI artifact。均为自动化结果；preview24 用户经旧仓库 URL 重定向自动更新的效果待 MYSWY 实机确认。
+
 ## Fcitx5 跨版本兼容 I08 · 2026-10-07
 
 PR #13：修复 Fcitx ≥5.1.13 下 `fcitx::StandardPath` 未声明导致插件无法编译；按 CMake 解析的 `Fcitx5Core_VERSION` 选择 `StandardPaths`（≥5.1.13）或 `StandardPath`（<5.1.13）。
@@ -13,7 +19,7 @@ PR #9：内置词库 87,540 → 184,173 条（2.10×），`.mswydict` 25.7 MiB�
 新增来源 THUOCL（MIT，70,276 条）与 phrase-pinyin-data `pinyin.txt`（MIT，26,357 条），固定修订与许可原文在 `data/sources/`；排除 rime-essay（LGPL-3.0）。
 新词权重 1，并受“不抢既有首选/不遮蔽模糊音键/须有词频证据”三条准入规则约束；200 条随机抽样无词频证据 0/200。
 同命令 `quality_report` 前后对照：全部/dev/test 的 Top-1、Top-9、可达、错误组合率完全一致。词库加载 120→358 ms（启动一次性），日常逐键 P50 137→162 µs。
-合并后 main 的 windows-tsf 因 `test_settings.cpp` 写死旧条数（87541）失败，随 preview24 修正。自动化结果，Windows 实机体感待 CHENGYIN 验收。
+合并后 main 的 windows-tsf 因 `test_settings.cpp` 写死旧条数（87541）失败，随 preview24 修正。自动化结果，Windows 实机体感待 MYSWY 验收。
 
 ## 长拼音分段输入学习完整词组 · 2026-10-06
 
