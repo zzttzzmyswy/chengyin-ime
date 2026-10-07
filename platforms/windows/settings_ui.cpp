@@ -967,7 +967,7 @@ void Settings::command(int id, int event) {
     if (id == 609 || id == 610) { checkUpdate(id == 610); return; }
     if (id == 502) {
         std::wstring target;
-        if (chooseFile(target, true, L"澄音学习备份\0*.chengyinuser;*.chengyinuser\0所有文件\0*.*\0\0")) {
+        if (chooseFile(target, true, L"澄音学习备份\0*.chengyinuser;*.myswyuser\0所有文件\0*.*\0\0")) {
             auto *profile = loadProfile(userFile(L"learning.profile"));
             bool ok = profile && saveProfile(target, profile);
             if (profile)
@@ -978,7 +978,7 @@ void Settings::command(int id, int event) {
     }
     if (id == 503) {
         std::wstring source;
-        if (chooseFile(source, false, L"澄音学习备份\0*.chengyinuser;*.chengyinuser\0所有文件\0*.*\0\0")) {
+        if (chooseFile(source, false, L"澄音学习备份\0*.chengyinuser;*.myswyuser\0所有文件\0*.*\0\0")) {
             bool ok = importProfile(source, userFile(L"learning.profile", true));
             notify(ok ? L"学习备份已导入，会自动同步到已打开的应用。" :
                    L"导入失败：文件损坏或无法保存；原学习数据保留。", !ok);

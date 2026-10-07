@@ -137,7 +137,7 @@ PgUp/PgDn 继续切换核心候选页。陈旧/重复提交在写锁中校验并
 使用新配置，不需要重新打开应用。大型词库的加载时间另计。手工改 INI 不会发布通知。
 当前应用的新选词立即影响自身排序；其他应用的普通选词同步仍在重新激活或配置更新时读取。
 关闭学习停止记录与个性化排序，已有数据保留；提供
-备份、校验后导入和清除（`.chengyinuser`，兼容旧 `.chengyinuser`）。`preferences.ini` 与 `learning.profile` 位于
+备份、校验后导入和清除（`.chengyinuser`，兼容旧 `.myswyuser`）。`preferences.ini` 与 `learning.profile` 位于
 `%LocalAppData%\ChengyinIME`，升级/卸载均保留；文件未加密，备份可能包含敏感词句。
 
 ## 词库与导入

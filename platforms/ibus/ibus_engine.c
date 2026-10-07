@@ -1,4 +1,4 @@
-/* IBus engine for the Chengyin (chengyin) shared core.
+/* IBus engine for the Chengyin shared core.
  *
  * Unlike the Fcitx5 addon, an IBus engine is a separate process: ibus-daemon
  * spawns this executable and asks it for an IBusEngine per input context. All
