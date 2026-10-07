@@ -1,5 +1,6 @@
 #include <algorithm>
 #include "candidate.h"
+#include "mode_hint.h"
 #include "keymap.h"
 #include "settings.h"
 #include "dictionary_source.h"
@@ -435,6 +436,16 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         receiveConfiguration(std::move(snapshot));
         return S_OK;
     }
+    HRESULT STDMETHODCALLTYPE Hint(BOOL enabled) override {
+        if (secure_)
+            return E_ACCESSDENIED;
+        auto snapshot = std::make_shared<ConfigurationUpdate>();
+        snapshot->preferences = preferences_;
+        snapshot->preferences.modeHint = enabled != FALSE;
+        snapshot->preferencesValid = true;
+        receiveConfiguration(std::move(snapshot));
+        return S_OK;
+    }
     HRESULT STDMETHODCALLTYPE Update(UINT page, BOOL punctuation, BOOL associations, BOOL learning,
                                      const uint8_t *data, size_t size) override {
         if (secure_)
@@ -486,6 +497,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     }
 #endif
     HRESULT STDMETHODCALLTYPE Deactivate() override {
+        modeHint_.hide();
         if (languageItem_) {
             languageItem_->detach();
             if (languageManager_)
@@ -529,8 +541,11 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnSetFocus(BOOL foreground) override {
-        if (!foreground)
+        if (!foreground) {
+            // The badge sits at one host's caret, so a focus change retires it.
+            modeHint_.hide();
             unbind();
+        }
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnTestKeyDown(ITfContext *context, WPARAM key, LPARAM lparam,
@@ -581,9 +596,15 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             next = guid == GUID_COMPARTMENT_KEYBOARD_OPENCLOSE ? value.lVal == 0 : !(value.lVal & 1);
         VariantClear(&value);
         if (next != english_) {
+            // Captured first: unbind() retires the composition this anchor may live in.
+            const CaretAnchor anchor = caretAnchor();
             unbind();
             english_ = next;
             setInputMode();
+            // An external switch — the language bar, OPENCLOSE or the conversion
+            // mode compartment — is the third trigger path, and it funnels through
+            // the same notification as the two keyboard paths.
+            notifyModeChanged(anchor);
         }
         return S_OK;
     }
@@ -787,6 +808,8 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
             const HRESULT hr = compositions->StartComposition(cookie, range.get(), this, composition_.put());
             if (FAILED(hr) || !composition_)
                 return S_OK;
+            // The user is composing again; the mode badge would only sit on the caret.
+            modeHint_.hide();
         } else if (FAILED(composition_->GetRange(range.put()))) {
             endLocked(cookie);
             return S_OK;
@@ -1088,13 +1111,86 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
                 service->requestChoice(generation, index);
                 service->Release();
             }, uiGeneration_, preferences_, inlineEditable);
+            // A visible candidate list is the user composing again; the mode
+            // badge would only sit on top of it.
+            modeHint_.hide();
         } else
             candidates_.hide();
     }
+    // The caret the mode hint anchors to, gathered the way the candidate popup
+    // gathers it: the live composition anchor first, then the system caret, then
+    // the input view's own corner. The two fallbacks are opt-out, matching
+    // caretFallback, so turning that off turns this off too.
+    struct CaretAnchor {
+        bool located = false;
+        RECT rect{};
+        HWND owner = nullptr;
+    };
+    CaretAnchor caretAnchor() const {
+        CaretAnchor anchor;
+        if (haveAnchor_ && IsWindow(anchorOwner_)) {
+            anchor = {true, anchor_, anchorOwner_};
+            return anchor;
+        }
+        GUITHREADINFO info{};
+        info.cbSize = sizeof(info);
+        if (GetGUIThreadInfo(GetCurrentThreadId(), &info)) {
+            anchor.owner = info.hwndFocus ? info.hwndFocus : info.hwndActive;
+            if (preferences_.caretFallback && info.hwndCaret) {
+                POINT first{info.rcCaret.left, info.rcCaret.top}, last{info.rcCaret.right, info.rcCaret.bottom};
+                if (ClientToScreen(info.hwndCaret, &first) && ClientToScreen(info.hwndCaret, &last)) {
+                    anchor.rect = {first.x, first.y, last.x,
+                                   std::max<LONG>(last.y, first.y + preferences_.fontSize)};
+                    anchor.located = true;
+                    return anchor;
+                }
+            }
+        }
+        if (!anchor.owner) {
+            HWND focused = GetFocus();
+            anchor.owner = focused ? focused : GetForegroundWindow();
+        }
+        // Without a caret the hint still belongs somewhere predictable: the top
+        // of the owning window, where a status badge is least in the way.
+        if (preferences_.caretFallback && anchor.owner) {
+            RECT client{};
+            if (GetClientRect(anchor.owner, &client)) {
+                POINT origin{client.left, client.top};
+                if (ClientToScreen(anchor.owner, &origin)) {
+                    anchor.rect = {origin.x + 12, origin.y + 8, origin.x + 13,
+                                   origin.y + 8 + preferences_.fontSize};
+                    anchor.located = true;
+                    return anchor;
+                }
+            }
+        }
+        return anchor;
+    }
+    // The single notification point every mode change funnels through, so no
+    // trigger path can pop the hint twice for one switch. The caller captures the
+    // anchor before it retires the composition the anchor came from.
+    void notifyModeChanged(const CaretAnchor &anchor) {
+        if (!preferences_.modeHint || !anchor.located || !anchor.owner) {
+            modeHint_.hide();
+            return;
+        }
+        // The badge is drawn by this process; a foreign host's caret coordinates
+        // are not ours to place a window over.
+        DWORD process = 0;
+        GetWindowThreadProcessId(anchor.owner, &process);
+        if (process != GetCurrentProcessId()) {
+            modeHint_.hide();
+            return;
+        }
+        modeHint_.show(anchor.owner, anchor.rect, english_, preferences_, GetTickCount64());
+    }
     void toggleEnglish() {
+        // Captured first: unbind() retires the composition this anchor may live in.
+        const CaretAnchor anchor = caretAnchor();
         unbind();
         english_ = !english_;
         setInputMode();
+        notifyModeChanged(anchor);
     }
     bool active(ITfContext *context) const {
         return (composition_ || associationRange_) && same(context_.get(), context);
@@ -1299,6 +1395,7 @@ class Service final : public ProcessorEx, public ITfKeyEventSink,
     uint32_t sessionMatchingOptions_ = 0; // frozen with the composition, unlike a new preference snapshot
     ChengyinDictionary *dictionary_ = nullptr;
     CandidateWindow candidates_;
+    ModeHintWindow modeHint_;
     Preferences preferences_{};
     Ptr<ITfLangBarItemMgr> languageManager_;
     Ptr<LanguageBarItem> languageItem_;

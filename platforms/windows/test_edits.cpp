@@ -2,6 +2,7 @@
 // Windows' text store or GUI. Faults are injected before/after text mutation.
 #include "test_stubs.h"
 #include "ui_element.h"
+#include "mode_hint.h"
 #include <textstor.h>
 #include <inputscope.h>
 #include "test_configuration.h"
@@ -9,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <utility>
 
 namespace chengyin::test {
 HWND testCandidateWindow() {
@@ -23,6 +25,21 @@ HWND testCandidateWindow() {
         return TRUE;
     }, reinterpret_cast<LPARAM>(&found));
     return found.visible ? found.visible : found.any;
+}
+HWND testVisibleWindow(const wchar_t *className) {
+    HWND visible = nullptr;
+    std::pair<const wchar_t *, HWND *> search{className, &visible};
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND window, LPARAM parameter) -> BOOL {
+        auto *result = reinterpret_cast<std::pair<const wchar_t *, HWND *> *>(parameter);
+        wchar_t name[64]{};
+        GetClassNameW(window, name, 64);
+        if (!std::wcscmp(name, result->first) && IsWindowVisible(window)) {
+            *result->second = window;
+            return FALSE;
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&search));
+    return visible;
 }
 void require(bool ok, const char *name) {
     if (!ok) {
@@ -906,12 +923,108 @@ void runEditTests(ITfKeyEventSink *keys) {
 }
 
 namespace chengyin::test {
-class Manager final : public ThreadStub, public KeystrokeStub, public ITfSource, public ITfUIElementMgr {
+// The two global mode compartments, so the external-switch path (language bar /
+// OPENCLOSE / conversion mode) can be driven without a real thread manager.
+class Compartment final : public ITfCompartment, public ITfSource {
+  public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **out) override {
+        *out = nullptr;
+        if (iid == IID_IUnknown || iid == IID_ITfCompartment)
+            *out = static_cast<ITfCompartment *>(this);
+        else if (iid == IID_ITfSource)
+            *out = static_cast<ITfSource *>(this);
+        else
+            return E_NOINTERFACE;
+        AddRef();
+        return S_OK;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++refs; }
+    ULONG STDMETHODCALLTYPE Release() override {
+        const ULONG n = --refs;
+        if (!n) delete this;
+        return n;
+    }
+    HRESULT STDMETHODCALLTYPE GetValue(VARIANT *out) override {
+        if (!out) return E_POINTER;
+        out->vt = VT_I4;
+        out->lVal = value;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE SetValue(TfClientId, const VARIANT *in) override {
+        if (!in || in->vt != VT_I4) return E_INVALIDARG;
+        value = in->lVal;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE AdviseSink(REFIID iid, IUnknown *sinkValue, DWORD *cookie) override {
+        require(iid == IID_ITfCompartmentEventSink && !sink, "one compartment sink per compartment");
+        *cookie = 99;
+        return query(sinkValue, IID_ITfCompartmentEventSink, sink);
+    }
+    HRESULT STDMETHODCALLTYPE UnadviseSink(DWORD cookie) override {
+        require(cookie == 99 && sink, "compartment sink released once");
+        sink.reset();
+        return S_OK;
+    }
+    // As a real compartment does when another application changes the mode.
+    void dispatch() {
+        if (sink)
+            sink->OnChange(guid);
+    }
+    GUID guid{};
+    LONG value = 1;
+    ULONG refs = 1;
+    Ptr<ITfCompartmentEventSink> sink;
+};
+class CompartmentManager final : public ITfCompartmentMgr {
+  public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **out) override {
+        *out = nullptr;
+        if (iid != IID_IUnknown && iid != IID_ITfCompartmentMgr)
+            return E_NOINTERFACE;
+        *out = static_cast<ITfCompartmentMgr *>(this);
+        AddRef();
+        return S_OK;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++refs; }
+    ULONG STDMETHODCALLTYPE Release() override {
+        const ULONG n = --refs;
+        if (!n) delete this;
+        return n;
+    }
+    HRESULT STDMETHODCALLTYPE GetCompartment(REFGUID guid, ITfCompartment **out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        // One stable instance per GUID, so subscribeMode and setInputMode reach
+        // the same compartment an external switch would arrive on.
+        Ptr<Compartment> &slot = guid == kConversionMode ? conversion : open;
+        if (!slot) {
+            auto *created = new (std::nothrow) Compartment;
+            if (!created) return E_OUTOFMEMORY;
+            created->guid = guid;
+            // Chinese mode is the same lVal convention setInputMode writes.
+            created->value = 1;
+            slot.attach(created);
+        }
+        *out = slot.get();
+        (*out)->AddRef();
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE ClearCompartment(TfClientId, REFGUID) override { return E_NOTIMPL; }
+    HRESULT STDMETHODCALLTYPE EnumCompartments(IEnumGUID **) override { return E_NOTIMPL; }
+    Ptr<Compartment> open, conversion;
+    ULONG refs = 1;
+};
+}
+namespace chengyin::test {
+class Manager final : public ThreadStub, public KeystrokeStub, public ITfSource, public ITfUIElementMgr,
+    public ITfCompartmentMgr {
   public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **out) override {
         *out = nullptr;
         if (iid == IID_IUnknown || iid == IID_ITfThreadMgr)
             *out = static_cast<ITfThreadMgr *>(this);
+        else if (iid == IID_ITfCompartmentMgr)
+            *out = static_cast<ITfCompartmentMgr *>(this);
         else if (iid == IID_ITfKeystrokeMgr)
             *out = static_cast<ITfKeystrokeMgr *>(this);
         else if (iid == IID_ITfSource)
@@ -1002,6 +1115,16 @@ class Manager final : public ThreadStub, public KeystrokeStub, public ITfSource,
     HRESULT STDMETHODCALLTYPE EnumUIElements(IEnumTfUIElements **) override {
         return E_NOTIMPL;
     }
+    HRESULT STDMETHODCALLTYPE GetCompartment(REFGUID guid, ITfCompartment **out) override {
+        return compartments.GetCompartment(guid, out);
+    }
+    HRESULT STDMETHODCALLTYPE ClearCompartment(TfClientId, REFGUID) override {
+        return E_NOTIMPL;
+    }
+    HRESULT STDMETHODCALLTYPE EnumCompartments(IEnumGUID **) override {
+        return E_NOTIMPL;
+    }
+    CompartmentManager compartments;
     bool deactivateOnUpdate = false;
     ProcessorEx *processor = nullptr;
     bool uiEnabled = false;
@@ -1213,6 +1336,76 @@ void runServiceTests(chengyin::ProcessorEx *service, ITfKeyEventSink *keys) {
     BOOL lateRelease = TRUE;
     keys->OnTestKeyUp(modern.get(), 'I', 0, &lateRelease);
     require(!lateRelease, "reentrant deactivation cannot carry consumed keyup into a later context");
+    // The 中/英 mode hint: all three trigger paths must reach the popup, and the
+    // inert paths (activation, defaultEnglish, focus) must not.
+    manager->uiEnabled = true;
+    require(service->ActivateEx(manager.get(), 7, TF_TMAE_UIELEMENTENABLEDONLY) == S_OK,
+            "mode hint test activation");
+    {
+        Ptr<ConfigurationTest> configuration;
+        require(SUCCEEDED(query(service, kConfigurationTest, configuration)), "mode hint test interface");
+        Ptr<Context> hintContext;
+        hintContext.attach(new Context);
+        hintContext->doc.owner = CreateWindowW(L"STATIC", L"Mode hint fixture", WS_OVERLAPPEDWINDOW,
+                                               0, 0, 300, 200, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+        require(hintContext->doc.owner != nullptr, "mode hint owner window");
+        SetForegroundWindow(hintContext->doc.owner);
+        hintContext->externalMove(0);
+        // 4. Activation and defaultEnglish initialisation must stay silent.
+        require(testVisibleWindow(kModeHintClass) == nullptr, "activation alone shows no mode hint");
+        BOOL eaten = FALSE;
+        // Path 1: the preserved toggle key, which is what Ctrl+Space and the
+        // language bar both route to.
+        require(SUCCEEDED(keys->OnPreservedKey(hintContext.get(), kToggleKey, &eaten)) && eaten,
+                "preserved key switches to English");
+        HWND hint = testVisibleWindow(kModeHintClass);
+        require(hint != nullptr, "preserved-key switch shows the mode hint");
+        // 5. It must never become the foreground or the focused window.
+        require(GetForegroundWindow() != hint, "mode hint is not foreground");
+        require(GetFocus() != hint, "mode hint is not focused");
+        require((GetWindowLongPtrW(hint, GWL_EXSTYLE) & WS_EX_NOACTIVATE) != 0,
+                "mode hint cannot be activated");
+        // Path 2: the Shift-click release path.
+        hintContext->externalMove(0);
+        const LPARAM left = static_cast<LPARAM>(0x2a) << 16;
+        keys->OnKeyDown(hintContext.get(), VK_SHIFT, left, &eaten);
+        require(SUCCEEDED(keys->OnKeyUp(hintContext.get(), VK_SHIFT, left, &eaten)) && eaten,
+                "Shift release switches back to Chinese");
+        require(testVisibleWindow(kModeHintClass) != nullptr, "Shift switch keeps the mode hint up");
+        // Path 3: an external compartment change, as the language bar or another
+        // application's OPENCLOSE / conversion-mode write produces. lVal 0 is
+        // English — the same convention setInputMode writes.
+        hintContext->externalMove(0);
+        manager->compartments.open->value = 0;
+        manager->compartments.open->dispatch();
+        require(testVisibleWindow(kModeHintClass) != nullptr, "external switch shows the mode hint");
+        // While the badge would be up, entering a composition retires it. The
+        // external switch left English on, so switch back before typing pinyin.
+        manager->compartments.open->value = 1;
+        manager->compartments.open->dispatch();
+        type(keys, hintContext.get(), "nihao");
+        require(testVisibleWindow(kModeHintClass) == nullptr, "composing hides the mode hint");
+        require(key(keys, hintContext.get(), VK_ESCAPE), "composition cancelled");
+        // 3. With the preference off nothing is created or shown. This is a real
+        // notification being suppressed, so it asserts absence after the switch
+        // rather than only before it.
+        require(SUCCEEDED(configuration->Hint(FALSE)), "disable the mode hint");
+        manager->compartments.open->value = 0;
+        manager->compartments.open->dispatch();
+        require(testVisibleWindow(kModeHintClass) == nullptr, "disabled mode hint never shows");
+        require(SUCCEEDED(configuration->Hint(TRUE)), "re-enable the mode hint");
+        manager->compartments.open->value = 1;
+        manager->compartments.open->dispatch();
+        require(testVisibleWindow(kModeHintClass) != nullptr, "re-enabled mode hint shows again");
+        // A focus change retires the badge rather than leaving it over another host.
+        keys->OnSetFocus(FALSE);
+        require(testVisibleWindow(kModeHintClass) == nullptr, "focus loss hides the mode hint");
+        hintContext->doc.owner = nullptr;
+        DestroyWindow(FindWindowW(L"STATIC", L"Mode hint fixture"));
+    }
+    require(service->Deactivate() == S_OK, "mode hint test deactivation");
+    require(testVisibleWindow(kModeHintClass) == nullptr, "deactivation releases the mode hint");
+    manager->uiEnabled = false;
     SetKeyboardState(previous);
     std::puts("PASS: 100 activation/input/deactivation cycles.");
 }

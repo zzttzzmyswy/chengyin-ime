@@ -184,6 +184,20 @@ void CALLBACK inspect(HWND, UINT, UINT_PTR timer, DWORD) {
         checkFonts(window);
         const int expected[] {204, 301, 303, 401, 501, 701, 601, 801};
         require(GetDlgItem(pane, expected[stage]), "all settings groups available");
+        if (stage == 0) {
+            // The mode-hint checkbox lives on the input page and toggles the draft.
+            HWND hint = GetDlgItem(pane, 205);
+            require(hint != nullptr, "mode hint switch available");
+            require(SendMessageW(hint, BM_GETCHECK, 0, 0) == BST_CHECKED, "mode hint defaults on");
+            SendMessageW(hint, BM_SETCHECK, BST_UNCHECKED, 0);
+            SendMessageW(pane, WM_COMMAND, MAKEWPARAM(205, BN_CLICKED), reinterpret_cast<LPARAM>(hint));
+            choosePage(window, 1);
+            choosePage(window, 0);
+            require(SendMessageW(GetDlgItem(pane, 205), BM_GETCHECK, 0, 0) == BST_UNCHECKED,
+                    "mode hint draft survives a tab switch");
+            SendMessageW(GetDlgItem(pane, 205), BM_SETCHECK, BST_CHECKED, 0);
+            SendMessageW(pane, WM_COMMAND, MAKEWPARAM(205, BN_CLICKED), reinterpret_cast<LPARAM>(hint));
+        }
         if (stage==7) {
             for (int id : {801,811,820,823}) {
                 HWND check=GetDlgItem(pane,id); require(check!=nullptr,"fuzzy and error switches available");
