@@ -1,5 +1,12 @@
 # 项目状态
 
+## Fcitx5 跨版本兼容 I08 · 2026-10-07
+
+PR #13：修复 Fcitx ≥5.1.13 下 `fcitx::StandardPath` 未声明导致插件无法编译；按 CMake 解析的 `Fcitx5Core_VERSION` 选择 `StandardPaths`（≥5.1.13）或 `StandardPath`（<5.1.13）。
+实测 Fcitx 5.1.7（Ubuntu 24.04）/5.1.12（Debian trixie）/5.1.23（Arch）构建 + CTest 2/2；`-Werror` 未放宽；`scripts/check.sh` 全绿；PR 的 fcitx5/windows-tsf CI 通过。
+设计文档遗留的 `Found 0 input method(s)` 判定为探针未安装 `inputmethod/myswy.conf`，`cmake --install` 后 IM 注册通过。
+遗留：新版 Fcitx（Arch 容器）CI 矩阵作业补丁因 token 缺 `workflow` scope 未入库，待有权限凭据应用。均为自动化结果，未做 Fcitx 实机会话验收。
+
 ## 预设词库翻倍 I05 · 2026-10-07
 
 PR #9：内置词库 87,540 → 184,173 条（2.10×），`.mswydict` 25.7 MiB，未改 v2 格式与 250,000 条 / 64 MiB 上限。
