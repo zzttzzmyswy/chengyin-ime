@@ -31,4 +31,4 @@ binary for all Debian/Ubuntu releases. No maintainer scripts are installed.
 Desktop X11/Wayland validation and production vocabulary/whole-sentence decoding
 are still pending. Keep an existing input method available during testing.
 
-Project: https://github.com/zzttzzmyswy/myswyIm
+Project: https://github.com/zzttzzmyswy/chengyin-ime

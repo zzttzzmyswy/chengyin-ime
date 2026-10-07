@@ -252,10 +252,10 @@ DISPLAY=:97 fcitx5 -d --enable=chengyin -r    # 断言日志含 "Loaded addon ch
 - CI 六作业（`msrv` / `rust` / `portable-core` / `windows-tsf` / `fcitx5`）**只 `upload-artifact`，没有 tag 触发、没有 Release 作业**。
 - 远端 `releases` = `[]`，`tags` = `[]`——**从未发过 Release**。
 - 但 Windows 更新器**已经实现并绑定**了发布契约（`platforms/windows/update.cpp`）：
-  - 轮询 `api.github.com/repos/zzttzzmyswy/myswyIm/releases?per_page=20`
+  - 轮询 `api.github.com/repos/zzttzzmyswy/chengyin-ime/releases?per_page=20`
   - 只认 `draft == false`
   - 资产名必须恰为 `chengyin-windows-x64-<tag>-msvc.exe`（`v` 前缀会被剥离）
-  - URL 必须恰为 `https://github.com/zzttzzmyswy/myswyIm/releases/download/<tag>/<同名文件>`
+  - URL 必须恰为 `https://github.com/zzttzzmyswy/chengyin-ime/releases/download/<tag>/<同名文件>`
   - `digest` 必须 `sha256:` + 64 位小写十六进制
   - 标签必须解析成比当前更新的版本
 

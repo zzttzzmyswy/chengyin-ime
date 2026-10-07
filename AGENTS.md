@@ -23,7 +23,7 @@ Windows, Linux X11, Linux Wayland, and Android.
   distinct evidence. Update status honestly after each usable development slice.
 - Run relevant checks (`scripts/check.sh` for Linux core/ABI; CMake/CTest for
   Fcitx changes; Windows CMake/CTest for TSF changes). Do not make tests depend on a user's real input history.
-- Current repo: https://github.com/zzttzzmyswy/myswyIm, main branch. Read
+- Current repo: https://github.com/zzttzzmyswy/chengyin-ime, main branch. Read
   docs/WINDOWS_TASKLIST.md and docs/DEVELOPMENT.md for historical preview7: classic native
   tabs, embedded input tests, configuration notifications, language-bar mode and
   Chinese punctuation. Keep the standalone test app removed. The settings

@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     // bumping the version cannot leave this fixture testing a stale tag.
     const std::string futureTag = CHENGYIN_FUTURE_TAG_UTF8;
     const std::string assetName = "chengyin-windows-x64-" + futureTag + "-msvc.exe";
-    const std::string assetUrl = "https://github.com/zzttzzmyswy/myswyIm/releases/download/v"
+    const std::string assetUrl = "https://github.com/zzttzzmyswy/chengyin-ime/releases/download/v"
         + futureTag + "/" + assetName;
     std::string fixture = R"([{"draft":false,"tag_name":"v@TAG@","body":"New\n\u4e2d\u6587","assets":[{"name":"@ASSET@","browser_download_url":"@URL@","digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}]}])";
     for (const auto &[token, value] : {std::pair{"@TAG@", futureTag}, std::pair{"@ASSET@", assetName},

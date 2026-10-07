@@ -158,7 +158,7 @@ bool fetch(const std::wstring &url, std::vector<uint8_t> &out, size_t maximum) {
     }
 }
 bool validAsset(const ReleaseUpdate &release) {
-    const std::wstring prefix = L"https://github.com/zzttzzmyswy/myswyIm/releases/download/";
+    const std::wstring prefix = L"https://github.com/zzttzzmyswy/chengyin-ime/releases/download/";
     Version parsed{};
     if (!version(release.version, parsed)) return false;
     const auto tag = !release.version.empty() && release.version[0] == L'v'
@@ -206,7 +206,7 @@ bool parseReleases(const std::vector<uint8_t> &bytes, ReleaseUpdate &out) {
 }
 ReleaseUpdate checkReleaseUpdate() {
     ReleaseUpdate result; std::vector<uint8_t> bytes;
-    if (!fetch(L"https://api.github.com/repos/zzttzzmyswy/myswyIm/releases?per_page=20", bytes, 2 * 1024 * 1024) || !parseReleases(bytes, result))
+    if (!fetch(L"https://api.github.com/repos/zzttzzmyswy/chengyin-ime/releases?per_page=20", bytes, 2 * 1024 * 1024) || !parseReleases(bytes, result))
         result.message = L"无法检查更新，请检查网络或打开发行页面。离线输入仍可使用。";
     return result;
 }

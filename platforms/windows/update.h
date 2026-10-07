@@ -4,8 +4,8 @@
 #include <vector>
 #include <cstdint>
 namespace chengyin {
-inline constexpr wchar_t kRepository[] = L"https://github.com/zzttzzmyswy/myswyIm";
-inline constexpr wchar_t kReleases[] = L"https://github.com/zzttzzmyswy/myswyIm/releases";
+inline constexpr wchar_t kRepository[] = L"https://github.com/zzttzzmyswy/chengyin-ime";
+inline constexpr wchar_t kReleases[] = L"https://github.com/zzttzzmyswy/chengyin-ime/releases";
 struct ReleaseUpdate {
     bool available = false;
     std::wstring version, notes, url, digest, message;

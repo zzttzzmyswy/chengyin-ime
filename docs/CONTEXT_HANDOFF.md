@@ -8,7 +8,7 @@ Windows立即分段模式保护完整拼音的准确多音节词组前缀，完�
 首选现在开始吧，当前页现在开始消费13字节、ba重匹配。默认staged/C ABI行为不变，无平台IO，个人历史不参与测试。
 102RustRelease/fmt/Clippy/零按键分配64KiB/C ABI/8CTest38.61s通过，新增TSF host接受前缀+取消余拼音回归。
 quality_report --incremental覆盖实际Windows路径，旧/新488条总体/分类/半集汇总一致，Top1/Top9/可达92.0/97.7/98.8%。
-version.json23、头文件与模拟bump通过，CI包名自动派生；源码 `2fc0fa3` 的 [Actions 37453639077](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37453639077) 六作业成功，含 Windows 隔离安装、升级、回滚、卸载。
+version.json23、头文件与模拟bump通过，CI包名自动派生；源码 `2fc0fa3` 的 [Actions 37453639077](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37453639077) 六作业成功，含 Windows 隔离安装、升级、回滚、卸载。
 本机交付 chengyin-windows-x64-0.1.0-preview23-msvc.exe，5135063 bytes，SHA256 `628a33c65c765c74a11edd6c9870cb6ff3ca16c9068111f6b2fceeb58f44e126`。
 PE/7-Zip/全负载SHA/COM/生产字节一致/22项许可与插画署名CRC通过，已复制主目录。
 见WINDOWS_PREVIEW23_TASKLIST、PERFORMANCE、DEVELOPMENT与build/delivery-preview23.json。
@@ -28,7 +28,7 @@ version.json 单版本源 preview22，CI 安装包名动态派生，模拟 bump 
 本机安装包5104648 bytes，SHA256 110e733b16b1a7a1ef77de40abde114988a66d52ba93b118e6491e2242a6786c，主目录副本一致。
 包PE/全负载SHA/COM/生产字节一致/22项许可与插画署名CRC通过；见 preview22 tasklist 和 build/delivery-preview22.json。
 合并前未交付的旧preview22构建已移到 build/archive/preview22-before-integration；不能与最终包混淆。
-源码 `40fec9d` 的 [Actions 37445555758](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37445555758) 六作业全部成功，含 Windows 隔离安装、升级、回滚、卸载。
+源码 `40fec9d` 的 [Actions 37445555758](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37445555758) 六作业全部成功，含 Windows 隔离安装、升级、回滚、卸载。
 真实升级宿主与物理混合DPI待集中验证，不自动操作UAC。
 
 ## 当前追加：候选皮肤 · preview21

@@ -78,7 +78,7 @@ def build(args):
             f"Package: {PACKAGE}\nVersion: {version}\nArchitecture: {architecture}\n"
             f"Maintainer: {args.maintainer}\nSection: utils\nPriority: optional\n"
             f"Installed-Size: {installed_size}\nDepends: fcitx5 (>= 5.1), {match[1]}\n"
-            "Recommends: fcitx5-config-qt\nHomepage: https://github.com/zzttzzmyswy/myswyIm\n"
+            "Recommends: fcitx5-config-qt\nHomepage: https://github.com/zzttzzmyswy/chengyin-ime\n"
             "Description: Chengyin full-pinyin Fcitx 5 development preview\n"
             " Shared Rust input core with background custom TSV dictionary loading.\n"
             " Includes a small demo vocabulary; real desktop validation is pending.\n"

@@ -222,7 +222,7 @@ static IBusComponent *build_component(const gchar *exec) {
                                                   "0.1.0",
                                                   "MIT",
                                                   "Chengyin IME contributors",
-                                                  "https://github.com/zzttzzmyswy/myswyIm",
+                                                  "https://github.com/zzttzzmyswy/chengyin-ime",
                                                   exec,
                                                   "chengyin");
     IBusEngineDesc *description = ibus_engine_desc_new(CHENGYIN_ENGINE_NAME,

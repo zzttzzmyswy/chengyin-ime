@@ -207,7 +207,7 @@ Wine 10 + Xvfb 的六个 CTest 覆盖原子词库导入、按键/UTF-16/候选�
 
 安装器回归覆盖安装/修复/升级/回滚/卸载、文件校验、外来注册、占用 DLL、
 词库/设置/学习文件保留和旧 ZIP 布局迁移。原生 MSVC 构建、七个 CTest 和隔离安装回归
-由 [GitHub Actions](https://github.com/zzttzzmyswy/myswyIm/actions/workflows/ci.yml) 执行，
+由 [GitHub Actions](https://github.com/zzttzzmyswy/chengyin-ime/actions/workflows/ci.yml) 执行，
 每次提交的实际结果见对应运行记录及源码 `docs/STATUS.md`。
 只有 x64 DLL；ARM64、32 位应用、安全模式、实际 WinUI/UWP、RDP、管理员应用
 仍待专门验收。核心零分配和 Linux 微基准不等同于 Windows 端到端延迟。

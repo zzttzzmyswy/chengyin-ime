@@ -50,7 +50,7 @@ SHA-256 `6b68ee3ad027b4e25f8957d194f49529d98c1e48ecb0210329f9a18eac643b41`，已
 `ui-test-preview20.txt`、`ui-preview20/`、`package-preview20.txt`、`delivery-preview20.json`。
 尝试启动该经过校验的安装器时，Windows 提权返回“操作已被用户取消”，安装没有完成。
 当前调用进程没有管理员权限，不重复触发 UAC；已准备好安装包，等待后续手动安装后继续实机验证。
-preview19 的 [Actions 37318044390](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37318044390)
+preview19 的 [Actions 37318044390](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37318044390)
 六作业及隔离安装生命周期已确认通过；不能算作 preview20 的 CI 证据。
 不能用模拟 TSF、旧 DLL 或声明能力类别替代新版真实控件验收。
 后续代码审查 B–E 排期保持，优先普通学习 revision 同步与 writer 有界重试。
