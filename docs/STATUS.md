@@ -3,7 +3,7 @@
 ## 中英文切换光标提示 I11（preview26）· 2026-10-07
 
 新增 `platforms/windows/mode_hint.{h,cpp}`：切换中/英文时在文本光标附近显示约 0.9 秒的「中」/「英」提示，随后自动隐藏。窗口为 `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT`，不激活、不改变前台窗口、点击穿透；不抢焦点、不做阻塞或 COM 调用，线程模型与候选窗一致（TSF 线程内创建与销毁）。
-三条切换路径（左 Shift 单击、Ctrl+Space 保留键、语言栏/OPENCLOSE/转换模式外部切换）汇入唯一 `Service::notifyModeChanged()`，一次切换只弹一次；启动、焦点切换、`defaultEnglish` 初始化与 `english_=false` 重置均不弹。
+用户主动切换的四个入口（左 Shift 单击、Ctrl+Space（TSF 保留键与键翻译两条路由）、语言栏按钮、OPENCLOSE / 转换模式外部切换）全部汇入唯一 `Service::notifyModeChanged()`，一次切换只弹一次；启动、焦点切换、`defaultEnglish` 初始化与 `english_=false` 重置均不弹。
 定位复用候选窗的光标矩形来源（组合锚点 → 系统光标 → 输入视图角）与 `placeCandidates` 的翻边规则，越界时翻到光标上方并保证完全落在工作区内；尺寸随 DPI 缩放，取色沿用 `palette()`/`drawThemeSurface`。
 新增 `Preferences::modeHint`（默认 true，`preferences.ini` 读写、`validPreferences`、设置页「切换中/英文时在光标附近显示提示」复选框）；旧 `preferences.ini` 缺该键按默认 true 加载，不重写用户文件。
 新增原生 CTest `windows_mode_hint_test`（第 9 项）覆盖提示文字与目标模式一致、计时到期隐藏与再次切换重置、`modeHint=false` 不显示、旧配置缺键迁移、不可激活与不改前台、屏幕边缘翻边；`chengyin_probe --edits` 增加三条触发路径与"组合/失焦立即隐藏"的服务级断言。
