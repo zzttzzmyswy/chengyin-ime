@@ -84,6 +84,22 @@ IBus 引擎按 `process_key_event` 收 `(keyval, keycode, state)` 返回 `gboole
 - **I-IBus-2**：配置持久化（对齐 Windows/Fcitx 的语义）、词典热切换、component XML + 两种包。
 - **I-IBus-3**：无头回归（真实 daemon 端到端）+ 实机验收清单。
 
+**I09 已落地 I-IBus-1（2026-10-07）**，与本节设想的差别有三处，都记在下面：
+
+| 项 | 结果 |
+| --- | --- |
+| `platforms/common/` 抽取 | `dictionary_loader.{h,cpp}` 原样迁入，Fcitx5 改为引用 common；行为不变（CTest 2/2） |
+| 引擎可测性 | 按键映射/提交/文本协议/光标换算放进**不依赖 GLib 的** `engine.c`，`ibus_engine.c` 只做 IBus 桥接；A 档 CTest 因此可直接驱动 |
+| 无头端到端 | `platforms/ibus/e2e.sh` 复用 §2.3 方法（隔离 HOME + `--single`），断言 `PREEDIT: ni` 与 `COMMIT: 你` |
+
+两处实现期发现的坑（设计阶段未预见，已写入代码注释）：
+
+1. **libibus 的浮引渡让语义**：`ibus_text_new_from_string` / `ibus_lookup_table_new` 返回 floating 引用，而 `ibus_engine_commit_text` / `update_preedit_text` / `update_auxiliary_text` / `update_lookup_table` / `lookup_table_append_candidate` **会 sink 掉它**（接管所有权）。调用后再 `g_object_unref` 会二次释放，实测表现为 `ibus_serializable_serialize_object: assertion failed` 后段错误。同理 `ibus_component_add_engine` 与 `ibus_bus_register_component` 接管 component/desc。
+2. **组件查找路径不是 `XDG_DATA_HOME`**：`ibus-daemon` 只扫 `IBUS_COMPONENT_PATH`（默认 `/usr/share/ibus/component`），并把扫描结果缓存在 `$XDG_CACHE_HOME/ibus/bus/registry`。本迭代按范围不产出 XML，端到端直接拉起引擎进程（引擎启动时自行在总线上注册组件），符合 §1.4 把 XML 留给 I10 的划分。
+
+可测性的边界同 §3.2 的 A 档：引擎逻辑、协议编解码、提交语义已覆盖；焦点路由、候选窗定位、compositor 协议仍留实机。
+
+
 ---
 
 ## 2. 已实测证据（IBus 可行性）
