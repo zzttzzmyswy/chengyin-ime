@@ -204,7 +204,7 @@ platforms/fcitx5/engine.cpp:27: error: 'StandardPathTempFile' 在命名空间 'f
 | --- | --- | --- |
 | A. 单元/事件级（现有 CTest） | InputContext 事件转换、UTF-8 上屏、会话隔离、陈旧候选、reset/敏感字段、词典热切换 | 焦点路由、光标定位、真实候选窗 |
 | B. 无头集成（**本设计新增**） | **已实测**：Xvfb 下插件加载（`Loaded addon chengyin`）；IBus 真实 daemon 端到端提交。**待打通**：addon/IM 注册（§3.2 未定论）、Xvfb 下"真实 X 按键 → 上屏"闭合（需装到正规路径后压键，本设计未做） | compositor 协议（text-input-v3 / input-method-v2） |
-| C. 实机（**必须 CHENGYIN**） | KDE/GNOME/sway 的 Wayland 协议、GTK/Qt immodule、候选窗定位、多屏/分数缩放 | — |
+| C. 实机（**必须 MYSWY**） | KDE/GNOME/sway 的 Wayland 协议、GTK/Qt immodule、候选窗定位、多屏/分数缩放 | — |
 
 **B 档能做但 C 档绝不能省的**，原因就是 §3.2 那条：headless compositor 没有 input-method 协议，谁也没法在 13.24 上"模拟"出 KWin 的 text-input-v3 行为。不要用 B 档结果声称 Wayland 支持。
 
@@ -328,7 +328,7 @@ chengyin-<tag>-arch-x86_64.pkg.tar.zst     # 建议（PKGBUILD 产出）
 
 沿用「同一时间只做一个开发迭代」。建议拆分（依赖顺序）：
 
-| 子迭代 | 内容 | 验收命令 | 需要 CHENGYIN |
+| 子迭代 | 内容 | 验收命令 | 需要 MYSWY |
 | --- | --- | --- | --- |
 | **I08** | Fcitx5 跨版本兼容（§3.1）：版本化适配 `StandardPaths`/`StandardPath`，修 5.1.13+ 构建 | 三方构建+CTest 全绿（trixie/ubuntu24.04/Arch）；`scripts/check.sh` 不变绿 | 否 |
 | **I09** | `platforms/common/` 抽取 + IBus 引擎骨架（§1） | 编译 `-Werror`；无头 daemon 端到端断言 `COMMIT: 你`；A 档 CTest | 否 |
