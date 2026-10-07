@@ -4,6 +4,24 @@ include(GNUInstallDirs)
 include(CTest)
 find_package(Fcitx5Core 5.1 REQUIRED)
 find_package(Threads REQUIRED)
+
+# Fcitx exports no version macro to the preprocessor, so the source cannot tell
+# the two incompatible StandardPath generations apart on its own. Encode the
+# numeric form CMake already knows (5.1.12 -> 50112) for engine.cpp's #if.
+if(NOT Fcitx5Core_VERSION)
+  message(FATAL_ERROR "Fcitx5Core reports no version; cannot pick the StandardPath API generation")
+endif()
+string(REPLACE "." ";" MYSWY_FCITX_VERSION_PARTS "${Fcitx5Core_VERSION}")
+list(GET MYSWY_FCITX_VERSION_PARTS 0 MYSWY_FCITX_VERSION_MAJOR)
+list(GET MYSWY_FCITX_VERSION_PARTS 1 MYSWY_FCITX_VERSION_MINOR)
+list(LENGTH MYSWY_FCITX_VERSION_PARTS MYSWY_FCITX_VERSION_COUNT)
+if(MYSWY_FCITX_VERSION_COUNT GREATER 2)
+  list(GET MYSWY_FCITX_VERSION_PARTS 2 MYSWY_FCITX_VERSION_PATCH)
+else()
+  set(MYSWY_FCITX_VERSION_PATCH 0)
+endif()
+math(EXPR MYSWY_FCITX_VERSION
+  "${MYSWY_FCITX_VERSION_MAJOR} * 10000 + ${MYSWY_FCITX_VERSION_MINOR} * 100 + ${MYSWY_FCITX_VERSION_PATCH}")
 get_filename_component(MYSWY_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 set(MYSWY_RUST_LIBRARY "${MYSWY_ROOT}/target/release/libmyswy_ime.a" CACHE FILEPATH "Rust static library")
 if(NOT EXISTS "${MYSWY_RUST_LIBRARY}")
@@ -13,6 +31,7 @@ add_library(myswy-engine STATIC engine.cpp dictionary_loader.cpp)
 set_target_properties(myswy-engine PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_features(myswy-engine PUBLIC cxx_std_17)
 target_include_directories(myswy-engine PUBLIC "${MYSWY_ROOT}/include" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(myswy-engine PRIVATE MYSWY_FCITX_VERSION=${MYSWY_FCITX_VERSION})
 target_compile_options(myswy-engine PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(myswy-engine PUBLIC Fcitx5::Core Fcitx5::Config "${MYSWY_RUST_LIBRARY}" Threads::Threads ${CMAKE_DL_LIBS} m)
 

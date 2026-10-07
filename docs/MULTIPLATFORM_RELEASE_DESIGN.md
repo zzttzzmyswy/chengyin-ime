@@ -158,6 +158,16 @@ platforms/fcitx5/engine.cpp:27: error: 'StandardPathTempFile' 在命名空间 'f
 
 > 注意：5.1.23 下 `StandardPath` 是 deprecated，`-Werror` 会因 `-Wdeprecated-declarations` 失败。所以**只加 include 还不够**，还要决定策略：迁移到 `StandardPaths`（新 API，但 5.1.13 以下没有），或对这两个符号局部抑制弃用告警。建议子迭代里做**版本化适配**：`#if FCITX_VERSION >= 5.1.13` 走新 API，否则走旧 API；这样两代都能用且无告警。这是需要单独设计与测试的活，不塞进本设计。
 
+**I08 已按上述"版本化适配"落地（2026-10-07）**，与本节设想的唯一差别是版本来源：Fcitx 头文件**不导出**版本宏（`FCITX_VERSION` 在 5.1.23 头文件里不存在），改由 CMake 的 `Fcitx5Core_VERSION` 生成 `MYSWY_FCITX_VERSION`（数值化，`5.1.12 → 50112`）传给 `engine.cpp`。三方复测结果：
+
+| 环境 | Fcitx | 派生的宏 | `iniparser.h` 引入 | 构建 | CTest |
+| --- | --- | --- | --- | --- | --- |
+| Ubuntu 24.04 容器 | 5.1.7 | 50107 | `standardpath.h` | ✅ | ✅ 2/2 |
+| Debian trixie 容器 | 5.1.12 | 50112 | `standardpath.h` | ✅ | ✅ 2/2 |
+| Arch 13.24 本机 | 5.1.23 | 50123 | `standardpaths.h` | ✅ | ✅ 2/2 |
+
+弃用告警不需要抑制：走新 API 分支时不再引用 `StandardPath`/`StandardPathTempFile`。CI 新增 `fcitx5-cross-version` 作业固定 5.1.12/5.1.23 两侧。
+
 ### 3.2 Wayland 与 X11 的可自动化边界
 
 已实测：
@@ -167,6 +177,10 @@ platforms/fcitx5/engine.cpp:27: error: 'StandardPathTempFile' 在命名空间 'f
 - **Fcitx5 插件在 Xvfb 下真实加载成功**：日志出现 `Loaded addon myswy`（`OnDemand=False` 时）。
 
 ⚠️ **一处未定论，不要当结论用**：探针日志同时出现 `Found 0 input method(s) in addon myswy`。查上游 `inputmethodmanager.cpp:196` 可知该行来自 `engine->listInputMethods()`，即插件**自己的** `Engine::listInputMethods()` 返回值。本次探针用的 `myswy.so` 是**直接拷贝的构建产物**，没有走 `cmake --install`，其 inputmethod conf 未被 Fcitx 正常发现——**尚不能区分**"插件实现有问题"和"探针装配不完整"。因此本设计**不主张**"IM 注册已通过"；该项留到 I08/I09 用正规 `cmake --install` 流程验证。这也是把它列为待办而非既成事实的原因。
+
+**I08 已用正规 `cmake --install` 判定（2026-10-07，Fcitx 5.1.23）：IM 注册通过，"Found 0" 属探针装配问题。** 做法：`cmake --install` 到独立 `CMAKE_INSTALL_PREFIX`（走 `$HOME/.local/lib/fcitx5` 与 `share/fcitx5/{addon,inputmethod}`），再用框架自己的 `AddonManager` + `InputMethodManager` 枚举——`addonInfo("myswy")` 存在、`foreachEntries` 枚举到 `name=Chengyin Pinyin (Prototype) addon=myswy label=拼`；删掉安装出来的 `addon/`、`inputmethod/` 后同一探针立刻变 NO（阴性对照成立）。
+
+根因（上游可查）：`inputmethodmanager.cpp` 的 `Found N input method(s) in addon X` 只对**非 OnDemand** addon 打印（`loadDynamicEntries` 开头即 `if (!addonInfo || addonInfo->onDemand()) continue;`）。本插件的 `myswy-addon.conf` 是 `OnDemand=True`，其入口按设计由 `inputmethod/*.conf` 静态注册，本来就不经 `listInputMethods()`，所以那行 `Found 0` 与插件实现无关。原探针只是把 `myswy.so` 拷进构建目录、没安装 `inputmethod/myswy.conf`，于是两侧都没有入口。
 
 因此自动化能力分三档：
 
