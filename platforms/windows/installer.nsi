@@ -373,6 +373,11 @@ Section "输入法" Install
       !insertmacro RemoveLinks "$OldMenu"
     ${EndIf}
     !insertmacro RemoveKnown "$OldDir"
+    ; RemoveKnown clears the version directory; drop the former-name root too
+    ; once it is empty, so an upgraded install leaves no stale product folder.
+    ${If} $OldRoot != "${ROOT}"
+      RMDir "$OldRoot"
+    ${EndIf}
     ; The former-name uninstall entry is now obsolete; the new key owns it.
     ${If} $OldArpKey != "${ARP}"
       DeleteRegKey HKLM "${LEGACY_ARP}"
