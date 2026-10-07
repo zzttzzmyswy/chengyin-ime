@@ -36,16 +36,16 @@ Windows 原生构建文件为 `chengyin-windows-x64-0.1.0-preview23-msvc.exe`；
 交叉构建以 `-gnu.exe` 结尾。安装包自包含，不需要用户安装 Rust、Python 或额外运行库。
 安装后注销并重新登录，Win+Space 选择澄音；开始菜单打开设置。
 使用、升级、卸载和集中实测步骤见 [Windows 指南](platforms/windows/README.md)。
-构建产物不提交到源码库；[GitHub Actions](https://github.com/zzttzzmyswy/myswyIm/actions/workflows/ci.yml)
+构建产物不提交到源码库；[GitHub Actions](https://github.com/zzttzzmyswy/chengyin-ime/actions/workflows/ci.yml)
 通过 Windows 构建及安装回归后保存安装 EXE，可在对应运行的 Artifacts 中下载。
 preview22 将原鲸鱼娘主题更换为首页全身形象的“Q 版大肥鱼”，操作与文件格式见 [皮肤指南](docs/SKINS.md)。
 安装后须重开加载旧 DLL 的应用；新版资源管理器地址栏/搜索框的实装验收仍待完成。
 Windows preview8–16 阶段已结项；preview17 修复声母缩写优先级，preview18 修复代码审查发现的边界与数据隔离问题，77 项 Rust 与七项原生 Windows 测试通过。
 交付、源码整理及后续验收范围见 [结项记录](docs/WINDOWS_PHASE_WRAPUP.md)和[最新状态](docs/STATUS.md)。
 最终安装包位于 `build/packages/`，旧交付与测试记录保存在本地 `build/archive/`。
-preview17 的[已通过构建](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37309334271)
+preview17 的[已通过构建](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37309334271)
 包含六项作业及隔离安装生命周期；preview18 源码 ad84c9d 的
-[CI](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37314439254) 六作业及安装/升级/回滚/卸载也已通过。
+[CI](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37314439254) 六作业及安装/升级/回滚/卸载也已通过。
 详细[代码审查](docs/CODE_REVIEW_2026-10-05.md)与[修复计划](docs/REVIEW_REPAIR_PLAN.md)记录了已修复和待修复项。
 新版本安装后应用矩阵、物理混合 DPI 多屏仍待验收。
 
@@ -57,9 +57,9 @@ Linux 安装与构建见 [Fcitx 5 指南](platforms/fcitx5/README.md)。
 
 ```sh
 cargo test --workspace --locked
-cargo run --release -p myswy-cli -- --dict data/daily.mswydict --query woxihuanzhongwen
-cargo run --release -p myswy-cli -- --dict data/daily.mswydict --query wxhzw
-cargo run --release -p myswy-cli -- --dict data/daily.mswydict --query "xi'an"
+cargo run --release -p chengyin-cli -- --dict data/daily.mswydict --query woxihuanzhongwen
+cargo run --release -p chengyin-cli -- --dict data/daily.mswydict --query wxhzw
+cargo run --release -p chengyin-cli -- --dict data/daily.mswydict --query "xi'an"
 # Linux：格式、静态检查、测试、release 与 C ABI 检查
 bash scripts/check.sh
 ```
@@ -76,7 +76,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platforms\windows\Buil
 - [开发指南](docs/DEVELOPMENT.md)：目录、构建、回归、配置通知、输入与资源生命周期。
 - [环境与复现](docs/ENVIRONMENT.md)：本次云环境、工具版本、验证边界。
 - [当前状态](docs/STATUS.md)、[本轮任务清单](docs/WINDOWS_TASKLIST.md)、[长期路线](docs/ROADMAP.md)。
-- [架构](docs/ARCHITECTURE.md)、[C ABI](include/myswy_ime.h)、[搜狗格式兼容](docs/SOGOU_COMPATIBILITY.md)。
+- [架构](docs/ARCHITECTURE.md)、[C ABI](include/chengyin_ime.h)、[搜狗格式兼容](docs/SOGOU_COMPATIBILITY.md)。
 - [词库来源](data/README.md)、[第三方许可](platforms/windows/THIRD_PARTY.md)、[集中实测门槛](docs/WINDOWS_RELEASE_GATE.md)。
 
 代码采用 [MIT License](LICENSE)。词库分别使用 Apache-2.0 与 MIT，转换来源、固定修订和原始许可

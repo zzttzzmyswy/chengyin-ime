@@ -9,7 +9,7 @@
 //! Scope is limited to corpus structure. Accuracy numbers live in
 //! `docs/QUALITY_BASELINE.md`, produced by the `quality_report` example.
 
-use myswy_core::{Dictionary, Key, Modifiers, Profile, Session};
+use chengyin_core::{Dictionary, Key, Modifiers, Profile, Session};
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
@@ -129,7 +129,7 @@ fn declared_flags_stay_within_the_supported_matching_mask() {
     let mut seen = BTreeSet::new();
     for row in &rows {
         assert_eq!(
-            row.flags & !myswy_core::fuzzy::OPTIONS_MASK,
+            row.flags & !chengyin_core::fuzzy::OPTIONS_MASK,
             0,
             "{}: unsupported flag bits {}",
             row.input,

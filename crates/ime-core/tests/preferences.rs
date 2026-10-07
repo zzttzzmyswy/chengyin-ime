@@ -1,4 +1,4 @@
-use myswy_core::{demo_dictionary, Dictionary, Key, Modifiers, Profile, Session};
+use chengyin_core::{demo_dictionary, Dictionary, Key, Modifiers, Profile, Session};
 use std::sync::Arc;
 fn type_keys(s: &mut Session, input: &str) {
     for c in input.chars() {

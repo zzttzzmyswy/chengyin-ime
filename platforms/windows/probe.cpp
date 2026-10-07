@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <cwchar>
 #include "package_verify.h"
-void runServiceTests(myswy::ProcessorEx *service, ITfKeyEventSink *keys);
+void runServiceTests(chengyin::ProcessorEx *service, ITfKeyEventSink *keys);
 
 namespace {
 int printRegistryString(const wchar_t *key, const wchar_t *value) {
@@ -80,8 +80,8 @@ int wmain(int argc, wchar_t **argv) {
         return ok ? 0 : 2;
     }
     if (argc == 2 && std::wcscmp(argv[1], L"--check-registry") == 0) {
-        return readableRegistration(myswy::kClsidPath, L"InprocServer32", nullptr) &&
-               readableRegistration(L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\MyswyIME",
+        return readableRegistration(chengyin::kClsidPath, L"InprocServer32", nullptr) &&
+               readableRegistration(L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ChengyinIME",
                                     nullptr, L"InstallLocation") ? 0 : 1;
     }
     if (argc == 3 && std::wcscmp(argv[1], L"--uninstall-exe") == 0) {
@@ -112,7 +112,7 @@ int wmain(int argc, wchar_t **argv) {
         return ok ? 0 : 1;
     }
     if (argc != 2 && argc != 3) {
-        std::fputs("Usage: myswy_probe.exe <absolute DLL path> [--edits|--registered]\n", stderr);
+        std::fputs("Usage: chengyin_probe.exe <absolute DLL path> [--edits|--registered]\n", stderr);
         return 2;
     }
     const bool editTests = argc == 3 && std::wcscmp(argv[2], L"--edits") == 0;
@@ -131,28 +131,28 @@ int wmain(int argc, wchar_t **argv) {
     }
     using GetClass = HRESULT(WINAPI *)(REFCLSID, REFIID, void **);
     using Unload = HRESULT(WINAPI *)();
-    auto getClass = myswy::procedureAddress<GetClass>(module, "DllGetClassObject");
-    auto canUnload = myswy::procedureAddress<Unload>(module, "DllCanUnloadNow");
+    auto getClass = chengyin::procedureAddress<GetClass>(module, "DllGetClassObject");
+    auto canUnload = chengyin::procedureAddress<Unload>(module, "DllCanUnloadNow");
     if (!getClass || !canUnload || !GetProcAddress(module, "DllRegisterServer")
             || !GetProcAddress(module, "DllUnregisterServer"))
         return 1;
     check(canUnload(), S_OK, "initial unload");
     {
-        myswy::Ptr<IClassFactory> factory;
+        chengyin::Ptr<IClassFactory> factory;
         check(getClass(CLSID_NULL, IID_IClassFactory, reinterpret_cast<void **>(factory.put())),
               CLASS_E_CLASSNOTAVAILABLE, "unknown class");
-        check(getClass(myswy::kService, IID_IClassFactory, nullptr), E_POINTER, "null output");
-        check(getClass(myswy::kService, IID_IClassFactory, reinterpret_cast<void **>(factory.put())), S_OK,
+        check(getClass(chengyin::kService, IID_IClassFactory, nullptr), E_POINTER, "null output");
+        check(getClass(chengyin::kService, IID_IClassFactory, reinterpret_cast<void **>(factory.put())), S_OK,
               "factory");
         check(canUnload(), S_FALSE, "factory lifetime");
-        myswy::Ptr<myswy::ProcessorEx> service;
-        check(factory->CreateInstance(factory.get(), myswy::kProcessorEx, reinterpret_cast<void **>(service.put())),
+        chengyin::Ptr<chengyin::ProcessorEx> service;
+        check(factory->CreateInstance(factory.get(), chengyin::kProcessorEx, reinterpret_cast<void **>(service.put())),
               CLASS_E_NOAGGREGATION, "aggregation");
-        check(factory->CreateInstance(nullptr, myswy::kProcessorEx, reinterpret_cast<void **>(service.put())), S_OK,
+        check(factory->CreateInstance(nullptr, chengyin::kProcessorEx, reinterpret_cast<void **>(service.put())), S_OK,
               "processor");
-        myswy::Ptr<ITfKeyEventSink> keys;
-        check(myswy::query(service.get(), IID_ITfKeyEventSink, keys), S_OK, "key sink");
-        if (!myswy::same(service.get(), keys.get()))
+        chengyin::Ptr<ITfKeyEventSink> keys;
+        check(chengyin::query(service.get(), IID_ITfKeyEventSink, keys), S_OK, "key sink");
+        if (!chengyin::same(service.get(), keys.get()))
             return 1;
         BOOL eaten = TRUE;
         check(keys->OnTestKeyDown(nullptr, 'N', 0, &eaten), S_OK, "inactive test");
@@ -163,32 +163,32 @@ int wmain(int argc, wchar_t **argv) {
             return 1;
         check(service->Deactivate(), S_OK, "inactive deactivate");
         check(service->ActivateEx(nullptr, 1, 0), E_INVALIDARG, "invalid manager");
-        myswy::Ptr<ITfThreadMgr> manager;
+        chengyin::Ptr<ITfThreadMgr> manager;
         check(CoCreateInstance(CLSID_TF_ThreadMgr, nullptr, CLSCTX_INPROC_SERVER, IID_ITfThreadMgr,
                                reinterpret_cast<void **>(manager.put())), S_OK, "thread manager");
         TfClientId client = TF_CLIENTID_NULL;
         // File/fixture probes must not activate the user's installed TIP. That
         // would test another DLL and access personal profile state. Registered
         // lifecycle validation intentionally retains the installed activation.
-        myswy::Ptr<myswy::ThreadManagerEx> isolated;
+        chengyin::Ptr<chengyin::ThreadManagerEx> isolated;
         if(registered) check(manager->Activate(&client), S_OK, "installed thread activation");
         else {
-            check(myswy::query(manager.get(),myswy::kThreadManagerEx,isolated),S_OK,"isolated thread manager");
+            check(chengyin::query(manager.get(),chengyin::kThreadManagerEx,isolated),S_OK,"isolated thread manager");
             check(isolated->ActivateEx(&client,1 /* TF_TMAE_NOACTIVATETIP */),S_OK,"isolated thread activation");
         }
         // Application client IDs are not service IDs. The OS activates installed TIPs.
         if (editTests)
             runServiceTests(service.get(), keys.get());
         if (registered) {
-            myswy::Ptr<ITfTextInputProcessor> installed;
-            check(CoCreateInstance(myswy::kService, nullptr, CLSCTX_INPROC_SERVER,
+            chengyin::Ptr<ITfTextInputProcessor> installed;
+            check(CoCreateInstance(chengyin::kService, nullptr, CLSCTX_INPROC_SERVER,
                                    IID_ITfTextInputProcessor, reinterpret_cast<void **>(installed.put())), S_OK, "registered COM processor");
-            myswy::Ptr<ITfInputProcessorProfiles> profiles;
+            chengyin::Ptr<ITfInputProcessorProfiles> profiles;
             check(CoCreateInstance(CLSID_TF_InputProcessorProfiles, nullptr, CLSCTX_INPROC_SERVER,
                                    IID_ITfInputProcessorProfiles, reinterpret_cast<void **>(profiles.put())), S_OK, "installed profile manager");
             BSTR description = nullptr;
-            HRESULT described = profiles->GetLanguageProfileDescription(myswy::kService, myswy::kLanguage,
-                                myswy::kProfile, &description);
+            HRESULT described = profiles->GetLanguageProfileDescription(chengyin::kService, chengyin::kLanguage,
+                                chengyin::kProfile, &description);
             if (described == E_NOTIMPL && GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "wine_get_version")) {
                 // Wine 10 stores AddLanguageProfile's description but leaves the
                 // getter unimplemented. Verify that exact stored value instead;
@@ -206,15 +206,15 @@ int wmain(int argc, wchar_t **argv) {
                 std::puts("Wine: profile Description checked in registry; public TSF getter is unimplemented.");
             }
             check(described, S_OK, "installed profile description");
-            const bool brand = description && std::wcscmp(description, myswy::kName) == 0;
+            const bool brand = description && std::wcscmp(description, chengyin::kName) == 0;
             SysFreeString(description);
             check(brand ? S_OK : E_FAIL, S_OK, "installed Chengyin input method name");
-            myswy::Ptr<ITfCategoryMgr> categories;
+            chengyin::Ptr<ITfCategoryMgr> categories;
             check(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
                                    IID_ITfCategoryMgr, reinterpret_cast<void **>(categories.put())),
                   S_OK, "installed category manager");
-            myswy::Ptr<IEnumGUID> enumeration;
-            check(categories->EnumCategoriesInItem(myswy::kService, enumeration.put()),
+            chengyin::Ptr<IEnumGUID> enumeration;
+            check(categories->EnumCategoriesInItem(chengyin::kService, enumeration.put()),
                   S_OK, "enumerate installed TIP capabilities");
             bool restricted = false, immersive = false, comless = false, hostUI = false;
             GUID category{};
@@ -222,9 +222,9 @@ int wmain(int argc, wchar_t **argv) {
             HRESULT next = S_OK;
             while ((next = enumeration->Next(1, &category, &fetched)) == S_OK && fetched == 1) {
                 restricted |= category == GUID_TFCAT_TIPCAP_SECUREMODE;
-                immersive |= category == myswy::kImmersiveCategory;
-                comless |= category == myswy::kComlessCategory;
-                hostUI |= category == myswy::kUIElementCategory;
+                immersive |= category == chengyin::kImmersiveCategory;
+                comless |= category == chengyin::kComlessCategory;
+                hostUI |= category == chengyin::kUIElementCategory;
             }
             check(next, S_FALSE, "installed category enumeration complete");
             check(restricted && immersive && comless && hostUI ? S_OK : E_FAIL,

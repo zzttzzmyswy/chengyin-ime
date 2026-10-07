@@ -66,18 +66,18 @@ def load() -> Version:
 
 def render_header(current: Version) -> str:
     # Plain macros, not constexpr arrays: a release string must stay usable in
-    # wide literal concatenation (L"版本：" MYSWY_VERSION), which an array is not.
+    # wide literal concatenation (L"版本：" CHENGYIN_VERSION), which an array is not.
     return f"""// {GENERATED_MARKER} from version.json. Do not edit by hand.
 #pragma once
-#define MYSWY_VERSION L"{current.tag}"
-#define MYSWY_VERSION_NUMERIC L"{current.numeric}"
-#define MYSWY_REVISION {current.preview}
+#define CHENGYIN_VERSION L"{current.tag}"
+#define CHENGYIN_VERSION_NUMERIC L"{current.numeric}"
+#define CHENGYIN_REVISION {current.preview}
 // The next release an update check may legitimately offer. Update fixtures derive
 // from this, so bumping the version cannot leave them testing a stale tag (R13).
-#define MYSWY_FUTURE_VERSION L"{current.future_tag}"
+#define CHENGYIN_FUTURE_VERSION L"{current.future_tag}"
 // Narrow forms used to build fixture text (JSON release responses, file names).
-#define MYSWY_CURRENT_TAG_UTF8 "{current.tag}"
-#define MYSWY_FUTURE_TAG_UTF8 "{current.future_tag}"
+#define CHENGYIN_CURRENT_TAG_UTF8 "{current.tag}"
+#define CHENGYIN_FUTURE_TAG_UTF8 "{current.future_tag}"
 """
 
 
@@ -101,10 +101,10 @@ def verify_bump(current: Version) -> int:
         if original:
             GENERATED_HEADER.write_text(original, encoding="utf-8", newline="\n")
     checks = {
-        "tag": f'#define MYSWY_VERSION L"{bumped.tag}"' in rendered,
-        "numeric": f'#define MYSWY_VERSION_NUMERIC L"{bumped.numeric}"' in rendered,
-        "revision": f"#define MYSWY_REVISION {bumped.preview}" in rendered,
-        "future-tag": f'#define MYSWY_FUTURE_TAG_UTF8 "{bumped.future_tag}"' in rendered,
+        "tag": f'#define CHENGYIN_VERSION L"{bumped.tag}"' in rendered,
+        "numeric": f'#define CHENGYIN_VERSION_NUMERIC L"{bumped.numeric}"' in rendered,
+        "revision": f"#define CHENGYIN_REVISION {bumped.preview}" in rendered,
+        "future-tag": f'#define CHENGYIN_FUTURE_TAG_UTF8 "{bumped.future_tag}"' in rendered,
         "changed": bumped.tag != current.tag,
     }
     failed = [name for name, ok in checks.items() if not ok]

@@ -9,13 +9,13 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include "myswy_ime.h"
+#include "chengyin_ime.h"
 
-namespace myswy {
+namespace chengyin {
 struct DictionarySnapshot {
-    DictionarySnapshot(MyswyDictionary *handle, std::string source)
-        : dictionary(handle, myswy_dictionary_free), path(std::move(source)) {}
-    std::unique_ptr<MyswyDictionary, decltype(&myswy_dictionary_free)> dictionary;
+    DictionarySnapshot(ChengyinDictionary *handle, std::string source)
+        : dictionary(handle, chengyin_dictionary_free), path(std::move(source)) {}
+    std::unique_ptr<ChengyinDictionary, decltype(&chengyin_dictionary_free)> dictionary;
     const std::string path;
 };
 using DictionaryPtr = std::shared_ptr<const DictionarySnapshot>;
@@ -45,4 +45,4 @@ private:
     std::atomic<bool> stopping_{false};
     std::thread worker_;
 };
-} // namespace myswy
+} // namespace chengyin

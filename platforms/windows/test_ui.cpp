@@ -13,7 +13,7 @@
 #include <cwchar>
 #include <string>
 #include <vector>
-namespace myswy {
+namespace chengyin {
 HINSTANCE module = nullptr;
 LONG objects = 0;
 }
@@ -32,15 +32,15 @@ HMODULE bindFixtureTip(DWORD &cookie) {
     wchar_t executable[32768]{};
     require(GetModuleFileNameW(nullptr,executable,32768)!=0,"fixture module location");
     std::wstring path=executable;
-    path=path.substr(0,path.find_last_of(L'\\')+1)+L"myswy_tsf_fixture.dll";
+    path=path.substr(0,path.find_last_of(L'\\')+1)+L"chengyin_tsf_fixture.dll";
     HMODULE module=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
     require(module!=nullptr,"load isolated TSF implementation");
     using GetClass=HRESULT(WINAPI *)(REFCLSID,REFIID,void **);
-    auto getClass=myswy::procedureAddress<GetClass>(module,"DllGetClassObject");
+    auto getClass=chengyin::procedureAddress<GetClass>(module,"DllGetClassObject");
     require(getClass!=nullptr,"fixture class factory export");
-    myswy::Ptr<IClassFactory> factory;
-    require(SUCCEEDED(getClass(myswy::kService,IID_IClassFactory,reinterpret_cast<void **>(factory.put()))),"fixture class factory");
-    require(SUCCEEDED(CoRegisterClassObject(myswy::kService,factory.get(),CLSCTX_INPROC_SERVER,
+    chengyin::Ptr<IClassFactory> factory;
+    require(SUCCEEDED(getClass(chengyin::kService,IID_IClassFactory,reinterpret_cast<void **>(factory.put()))),"fixture class factory");
+    require(SUCCEEDED(CoRegisterClassObject(chengyin::kService,factory.get(),CLSCTX_INPROC_SERVER,
                         REGCLS_MULTIPLEUSE,&cookie)),"process-local fixture COM binding");
     return module;
 }
@@ -165,11 +165,11 @@ void CALLBACK inspect(HWND, UINT, UINT_PTR timer, DWORD) {
     HWND window = nullptr;
     EnumThreadWindows(GetCurrentThreadId(), [](HWND candidate, LPARAM target) -> BOOL {
         wchar_t name[64] {}; GetClassNameW(candidate, name, 64);
-        if (!std::wcscmp(name, L"Myswy.Settings")) *reinterpret_cast<HWND *>(target) = candidate;
+        if (!std::wcscmp(name, L"Chengyin.Settings")) *reinterpret_cast<HWND *>(target) = candidate;
         return TRUE;
     }, reinterpret_cast<LPARAM>(&window));
     require(window != nullptr, "settings created");
-    HWND pane = FindWindowExW(window, nullptr, L"Myswy.Settings.Content", nullptr);
+    HWND pane = FindWindowExW(window, nullptr, L"Chengyin.Settings.Content", nullptr);
     require(pane && GetDlgItem(window, 100) && GetDlgItem(window, 101), "apply and defaults available");
     require(IsWindowVisible(pane), "content pane is visible");
     RECT paneRect{};
@@ -279,10 +279,10 @@ void inspectTestpad() {
             auto *search = reinterpret_cast<Search *>(target);
             DWORD pid = 0; GetWindowThreadProcessId(window, &pid);
             wchar_t name[64] {}; GetClassNameW(window, name, 64);
-            if (pid == search->process && std::wcscmp(name, L"Myswy.Settings") == 0) search->window = window;
+            if (pid == search->process && std::wcscmp(name, L"Chengyin.Settings") == 0) search->window = window;
             return TRUE;
         }, reinterpret_cast<LPARAM>(&search));
-        HWND pane = search.window ? FindWindowExW(search.window, nullptr, L"Myswy.Settings.Content",
+        HWND pane = search.window ? FindWindowExW(search.window, nullptr, L"Chengyin.Settings.Content",
                     nullptr) : nullptr;
         if (pane && IsWindowVisible(search.window) && GetDlgItem(pane, 701) && GetDlgItem(pane, 702)
                 && GetDlgItem(pane, 703))
@@ -290,7 +290,7 @@ void inspectTestpad() {
         if (WaitForSingleObject(process.hProcess, 25) == WAIT_OBJECT_0)
             break;
     }
-    HWND pane = search.window ? FindWindowExW(search.window, nullptr, L"Myswy.Settings.Content",
+    HWND pane = search.window ? FindWindowExW(search.window, nullptr, L"Chengyin.Settings.Content",
                 nullptr) : nullptr;
     bool valid = pane && IsWindowVisible(search.window) && GetDlgItem(pane, 701) && GetDlgItem(pane, 702)
                  && GetDlgItem(pane, 703)
@@ -317,7 +317,7 @@ void inspectTestpad() {
             for(DWORD i=0;i<std::min<DWORD>(needed/sizeof(HMODULE),256);++i) {
                 wchar_t modulePath[32768]{};
                 if(K32GetModuleFileNameExW(process.hProcess,modules[i],modulePath,32768)
-                    && std::wcsstr(modulePath,L"myswy_tsf"))
+                    && std::wcsstr(modulePath,L"chengyin_tsf"))
                 {
                     char utf8[98304]{};WideCharToMultiByte(CP_UTF8,0,modulePath,-1,utf8,sizeof(utf8),nullptr,nullptr);
                     std::fprintf(stderr,"Unexpected installed TIP in UI fixture: %s\n",utf8);
@@ -337,20 +337,20 @@ void inspectTestpad() {
 int wmain(int argc, wchar_t **argv) {
     // UI geometry fixtures do not route physical input through installed IMEs.
     ImmDisableIME(static_cast<DWORD>(-1));
-    myswy::module = GetModuleHandleW(nullptr);
+    chengyin::module = GetModuleHandleW(nullptr);
     // Run the same settings pane in an isolated child, without activating the
     // user's registered input method or reading personal settings/history.
     // Real installed TSF input remains desktop validation, not this UI fixture.
     if (argc == 2 && std::wcscmp(argv[1], L"--input-test-fixture") == 0) {
         require(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)), "child UI COM initialization");
         DWORD fixtureCookie=0;HMODULE fixtureModule=bindFixtureTip(fixtureCookie);
-        myswy::Ptr<myswy::ThreadManagerEx> manager;
-        require(SUCCEEDED(CoCreateInstance(CLSID_TF_ThreadMgr,nullptr,CLSCTX_INPROC_SERVER,myswy::kThreadManagerEx,
+        chengyin::Ptr<chengyin::ThreadManagerEx> manager;
+        require(SUCCEEDED(CoCreateInstance(CLSID_TF_ThreadMgr,nullptr,CLSCTX_INPROC_SERVER,chengyin::kThreadManagerEx,
                         reinterpret_cast<void **>(manager.put()))),"child isolated thread manager");
         TfClientId client=TF_CLIENTID_NULL;
         require(SUCCEEDED(manager->ActivateEx(&client,1 /* TF_TMAE_NOACTIVATETIP */)),"child isolated activation");
         HMODULE richEdit = LoadLibraryW(L"Msftedit.dll");
-        int result = myswy::runSettings(myswy::module, SW_SHOW, nullptr, nullptr, 5, false);
+        int result = chengyin::runSettings(chengyin::module, SW_SHOW, nullptr, nullptr, 5, false);
         manager->Deactivate();manager.reset();
         CoRevokeClassObject(fixtureCookie);
         CoUninitialize();
@@ -364,8 +364,8 @@ int wmain(int argc, wchar_t **argv) {
     }
     require(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)), "UI COM initialization");
     DWORD fixtureCookie=0;HMODULE fixtureModule=bindFixtureTip(fixtureCookie);
-    myswy::Ptr<myswy::ThreadManagerEx> isolatedManager;
-    require(SUCCEEDED(CoCreateInstance(CLSID_TF_ThreadMgr,nullptr,CLSCTX_INPROC_SERVER,myswy::kThreadManagerEx,
+    chengyin::Ptr<chengyin::ThreadManagerEx> isolatedManager;
+    require(SUCCEEDED(CoCreateInstance(CLSID_TF_ThreadMgr,nullptr,CLSCTX_INPROC_SERVER,chengyin::kThreadManagerEx,
                     reinterpret_cast<void **>(isolatedManager.put()))),"UI isolated thread manager");
     TfClientId isolatedClient=TF_CLIENTID_NULL;
     require(SUCCEEDED(isolatedManager->ActivateEx(&isolatedClient,1 /* TF_TMAE_NOACTIVATETIP */)),"UI isolated activation");
@@ -374,13 +374,13 @@ int wmain(int argc, wchar_t **argv) {
         auto scale = [dpi](int value) { return MulDiv(value,static_cast<int>(dpi),96); };
         HDC screen = GetDC(nullptr), dc = CreateCompatibleDC(screen);
         HBITMAP bitmap = CreateCompatibleBitmap(screen,scale(260),scale(180)); auto previous = SelectObject(dc,bitmap);
-        myswy::Preferences preferences;preferences.theme=theme;preferences.skin=myswy::builtinSkin(theme);
-        const auto colors = myswy::palette(preferences);
-        const int style = myswy::visualTheme(theme);
+        chengyin::Preferences preferences;preferences.theme=theme;preferences.skin=chengyin::builtinSkin(theme);
+        const auto colors = chengyin::palette(preferences);
+        const int style = chengyin::visualTheme(theme);
         RECT surface{0,0,scale(260),scale(180)}, row{scale(3),scale(60),scale(257),scale(87)}, badge{scale(6),scale(60),scale(20),scale(87)};
-        myswy::drawSkinSurface(dc,surface,colors,preferences,dpi,myswy::skinRail(preferences,dpi));
-        myswy::drawThemeSelection(dc,row,colors,style,dpi,true,false);
-        myswy::drawThemeBadge(dc,badge,colors,style,dpi,true);
+        chengyin::drawSkinSurface(dc,surface,colors,preferences,dpi,chengyin::skinRail(preferences,dpi));
+        chengyin::drawThemeSelection(dc,row,colors,style,dpi,true,false);
+        chengyin::drawThemeBadge(dc,badge,colors,style,dpi,true);
         GdiFlush();
         const COLORREF center = GetPixel(dc,scale(120),scale(73)), outside = GetPixel(dc,scale(120),scale(100));
         require(center != CLR_INVALID && outside != CLR_INVALID && center != outside,
@@ -389,17 +389,17 @@ int wmain(int argc, wchar_t **argv) {
     }
     HMODULE richEdit = LoadLibraryW(L"Msftedit.dll");
     require(SetTimer(nullptr, 0, 100, inspect) != 0, "UI inspection timer");
-    require(myswy::runSettings(myswy::module, SW_SHOW, nullptr, nullptr, 0, false) == 0 && stage == 41, "all settings pages painted");
+    require(chengyin::runSettings(chengyin::module, SW_SHOW, nullptr, nullptr, 0, false) == 0 && stage == 41, "all settings pages painted");
     HWND owner = CreateWindowW(L"STATIC", L"澄音 visual regression", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                               10, 10, 400, 200, nullptr, nullptr, myswy::module, nullptr);
-    MyswySession *session = myswy_session_new();
+                               10, 10, 400, 200, nullptr, nullptr, chengyin::module, nullptr);
+    ChengyinSession *session = chengyin_session_new();
     require(owner && session, "candidate fixture");
-    require(myswy_session_configure(session, 5, 3) == 0, "five candidate layout");
+    require(chengyin_session_configure(session, 5, 3) == 0, "five candidate layout");
     for (char c : std::string("zhongguo"))
-        myswy_session_process(session, static_cast<uint32_t>(c), 0);
+        chengyin_session_process(session, static_cast<uint32_t>(c), 0);
     {
-        myswy::CandidateWindow candidates;
-        myswy::Preferences prefs;
+        chengyin::CandidateWindow candidates;
+        chengyin::Preferences prefs;
         candidates.show(session, owner, RECT{100, 150, 101, 170}, false, nullptr, nullptr, 1, prefs);
         HWND popup = candidates.handle();
         require(popup && IsWindowVisible(popup), "vertical candidate layout paints");
@@ -443,20 +443,20 @@ int wmain(int argc, wchar_t **argv) {
             prefs.layout = 0; prefs.fontSize = 18;
         }
     }
-    myswy_session_free(session);
+    chengyin_session_free(session);
     const char spelling[]="zhang\t\xe5\xbc\xa0\t1000\n";
-    auto dictionary=myswy_dictionary_new_tsv(reinterpret_cast<const uint8_t *>(spelling),sizeof(spelling)-1);
+    auto dictionary=chengyin_dictionary_new_tsv(reinterpret_cast<const uint8_t *>(spelling),sizeof(spelling)-1);
     require(dictionary!=nullptr,"correction rendering fixture dictionary");
-    session=myswy_session_new_with_dictionary(dictionary); myswy_dictionary_free(dictionary);
-    require(session && myswy_session_configure_matching(session,MYSWY_MATCHING_MASK)==0,"correction rendering options");
+    session=chengyin_session_new_with_dictionary(dictionary); chengyin_dictionary_free(dictionary);
+    require(session && chengyin_session_configure_matching(session,CHENGYIN_MATCHING_MASK)==0,"correction rendering options");
     {
-        myswy::CandidateWindow candidates;
-        myswy::Preferences prefs; prefs.density=0; prefs.candidatePinyin=true;
+        chengyin::CandidateWindow candidates;
+        chengyin::Preferences prefs; prefs.density=0; prefs.candidatePinyin=true;
         for (const char *raw : {"zhnag","zhng","zhsng","zhaang","zang"}) {
-            myswy_session_reset(session);
-            for (const char *c=raw;*c;++c) myswy_session_process(session,static_cast<uint32_t>(*c),0);
+            chengyin_session_reset(session);
+            for (const char *c=raw;*c;++c) chengyin_session_process(session,static_cast<uint32_t>(*c),0);
             uint8_t marks[256]{};
-            require(myswy_session_candidate_marks(session,0,marks,256)>0 &&
+            require(chengyin_session_candidate_marks(session,0,marks,256)>0 &&
                 std::any_of(marks,marks+256,[](uint8_t mark){return mark!=0;}),"corrected candidate marks reach renderer");
             for (int layout=0;layout<2;++layout) {
                 prefs.layout=layout;
@@ -465,13 +465,13 @@ int wmain(int argc, wchar_t **argv) {
                 capture(candidates.handle(),name.c_str());
                 RECT shown{}, hidden{};
                 GetWindowRect(candidates.handle(), &shown);
-                const int selected = myswy_session_selected(session);
+                const int selected = chengyin_session_selected(session);
                 prefs.candidatePinyin = false;
                 candidates.refreshPreferences(session, prefs);
                 GetWindowRect(candidates.handle(), &hidden);
                 require(hidden.bottom - hidden.top < shown.bottom - shown.top || hidden.right - hidden.left < shown.right - shown.left,
                         "pinyin toggle hides corrected spelling and immediately shrinks visible popup");
-                require(myswy_session_selected(session) == selected, "appearance refresh preserves selection");
+                require(chengyin_session_selected(session) == selected, "appearance refresh preserves selection");
                 const auto hiddenName = name + L"-pinyin-off";
                 capture(candidates.handle(), hiddenName.c_str());
                 prefs.candidatePinyin = true;
@@ -479,28 +479,28 @@ int wmain(int argc, wchar_t **argv) {
             }
         }
     }
-    myswy_session_free(session);
+    chengyin_session_free(session);
     // The actual embedded production vocabulary, without reading personal files.
-    const HRSRC dailyResource = FindResourceW(myswy::module, MAKEINTRESOURCEW(101), RT_RCDATA);
-    const HGLOBAL dailyLoaded = dailyResource ? LoadResource(myswy::module, dailyResource) : nullptr;
+    const HRSRC dailyResource = FindResourceW(chengyin::module, MAKEINTRESOURCEW(101), RT_RCDATA);
+    const HGLOBAL dailyLoaded = dailyResource ? LoadResource(chengyin::module, dailyResource) : nullptr;
     const auto *dailyBytes = dailyLoaded ? static_cast<const uint8_t *>(LockResource(dailyLoaded)) : nullptr;
-    dictionary = dailyBytes ? myswy_dictionary_new_binary(dailyBytes, SizeofResource(myswy::module, dailyResource)) : nullptr;
+    dictionary = dailyBytes ? chengyin_dictionary_new_binary(dailyBytes, SizeofResource(chengyin::module, dailyResource)) : nullptr;
     require(dictionary != nullptr, "embedded production dictionary for mapping candidates");
-    session = myswy_session_new_with_dictionary(dictionary);
-    myswy_dictionary_free(dictionary);
-    require(session && myswy_session_configure_matching(session, MYSWY_MATCHING_MASK) == 0,
+    session = chengyin_session_new_with_dictionary(dictionary);
+    chengyin_dictionary_free(dictionary);
+    require(session && chengyin_session_configure_matching(session, CHENGYIN_MATCHING_MASK) == 0,
             "mapping candidate matching options");
     {
-        myswy::CandidateWindow candidates;
-        myswy::Preferences prefs; prefs.density = 0; prefs.candidatePinyin = true;
+        chengyin::CandidateWindow candidates;
+        chengyin::Preferences prefs; prefs.density = 0; prefs.candidatePinyin = true;
         for (const char *raw : {"yingshe", "yinshe", "yin'she", "paizhao", "pai'zhao"}) {
-            myswy_session_reset(session);
-            for (const char *c = raw; *c; ++c) myswy_session_process(session, static_cast<uint32_t>(*c), 0);
+            chengyin_session_reset(session);
+            for (const char *c = raw; *c; ++c) chengyin_session_process(session, static_cast<uint32_t>(*c), 0);
             const bool photo = std::strncmp(raw, "pai", 3) == 0;
             bool mapping = false;
-            for (int i = 0; i < myswy_session_candidate_count(session); ++i) {
+            for (int i = 0; i < chengyin_session_candidate_count(session); ++i) {
                 uint8_t text[257]{};
-                require(myswy_session_text(session, MYSWY_TEXT_CANDIDATE, i, text, sizeof(text)) > 0,
+                require(chengyin_session_text(session, CHENGYIN_TEXT_CANDIDATE, i, text, sizeof(text)) > 0,
                         "mapping candidate text");
                 const auto *word = reinterpret_cast<const char *>(text);
                 mapping |= std::strcmp(word, photo ? "拍照" : "映射") == 0;
@@ -511,7 +511,7 @@ int wmain(int argc, wchar_t **argv) {
                         "no unattested single character cross product in production vocabulary");
                 for (const char *unsupported : {"拍找", "派找", "排找", "牌找", "拍赵"})
                     require(std::strcmp(word, unsupported) != 0, "no unsupported photo character pair");
-                require(myswy_session_candidate_consumed(session, i) == static_cast<int>(std::strlen(raw)),
+                require(chengyin_session_candidate_consumed(session, i) == static_cast<int>(std::strlen(raw)),
                         "whole word line does not consume just a prefix character");
             }
             require(mapping, "mapping is visible in exact and fuzzy first pages");
@@ -520,41 +520,41 @@ int wmain(int argc, wchar_t **argv) {
             capture(candidates.handle(), name.c_str());
             if (photo) {
                 uint8_t text[257]{};
-                myswy_session_process(session, MYSWY_KEY_SELECT_1, 0);
-                require(myswy_session_text(session, MYSWY_TEXT_COMMIT, 0, text, sizeof(text)) > 0
+                chengyin_session_process(session, CHENGYIN_KEY_SELECT_1, 0);
+                require(chengyin_session_text(session, CHENGYIN_TEXT_COMMIT, 0, text, sizeof(text)) > 0
                     && std::strcmp(reinterpret_cast<const char *>(text), "拍照") == 0,
                     "photo selection commits the full word through ABI");
             }
         }
     }
-    myswy_session_free(session);
+    chengyin_session_free(session);
     // One-off wrong learned phrase must not displace the complete technical term.
-    dictionary = myswy_dictionary_new_binary(dailyBytes, SizeofResource(myswy::module, dailyResource));
+    dictionary = chengyin_dictionary_new_binary(dailyBytes, SizeofResource(chengyin::module, dailyResource));
     require(dictionary != nullptr, "embedded initials fixture dictionary");
-    session = myswy_session_new_with_dictionary(dictionary);
-    myswy_dictionary_free(dictionary);
-    require(session && myswy_session_configure(session, 5, 1) == 0
-        && myswy_session_configure_matching(session, MYSWY_MATCHING_MASK) == 0
-        && myswy_session_configure_incremental(session, 1) == 0, "production initials matching fixture");
+    session = chengyin_session_new_with_dictionary(dictionary);
+    chengyin_dictionary_free(dictionary);
+    require(session && chengyin_session_configure(session, 5, 1) == 0
+        && chengyin_session_configure_matching(session, CHENGYIN_MATCHING_MASK) == 0
+        && chengyin_session_configure_incremental(session, 1) == 0, "production initials matching fixture");
     {
-        myswy::CandidateWindow candidates;
-        myswy::Preferences prefs; prefs.candidatePinyin = true;
+        chengyin::CandidateWindow candidates;
+        chengyin::Preferences prefs; prefs.candidatePinyin = true;
         for (const char *raw : {"bao", "shi"}) {
-            myswy_session_reset(session);
-            for (const char *c = raw; *c; ++c) myswy_session_process(session, static_cast<uint32_t>(*c), 0);
-            for (size_t i = 0; i < myswy_session_candidate_count(session); ++i) {
+            chengyin_session_reset(session);
+            for (const char *c = raw; *c; ++c) chengyin_session_process(session, static_cast<uint32_t>(*c), 0);
+            for (size_t i = 0; i < chengyin_session_candidate_count(session); ++i) {
                 uint8_t text[257]{};
-                require(myswy_session_text(session, MYSWY_TEXT_CANDIDATE, i, text, sizeof(text)) > 0,
+                require(chengyin_session_text(session, CHENGYIN_TEXT_CANDIDATE, i, text, sizeof(text)) > 0,
                         "single syllable candidate text");
                 wchar_t wide[257]{};
                 require(MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
                             reinterpret_cast<const char *>(text), -1, wide, 257) == 2,
                         "complete syllable first page contains single characters");
-                require(myswy_session_candidate_consumed(session, i) == static_cast<int>(std::strlen(raw)),
+                require(chengyin_session_candidate_consumed(session, i) == static_cast<int>(std::strlen(raw)),
                         "single character consumes complete spelling");
             }
             uint8_t chosen[257]{}, committed[257]{};
-            myswy_session_text(session, MYSWY_TEXT_CANDIDATE, 0, chosen, sizeof(chosen));
+            chengyin_session_text(session, CHENGYIN_TEXT_CANDIDATE, 0, chosen, sizeof(chosen));
             for (int layout = 0; layout < 2; ++layout) {
                 prefs.layout = layout;
                 candidates.show(session, owner, RECT{100,150,101,170}, false, nullptr, nullptr, 410, prefs, true);
@@ -562,21 +562,21 @@ int wmain(int argc, wchar_t **argv) {
                     + L"-" + std::to_wstring(layout);
                 capture(candidates.handle(), name.c_str());
             }
-            myswy_session_process(session, MYSWY_KEY_SELECT_1, 0);
-            require(myswy_session_text(session, MYSWY_TEXT_COMMIT, 0, committed, sizeof(committed)) > 0
+            chengyin_session_process(session, CHENGYIN_KEY_SELECT_1, 0);
+            require(chengyin_session_text(session, CHENGYIN_TEXT_COMMIT, 0, committed, sizeof(committed)) > 0
                     && std::strcmp(reinterpret_cast<const char *>(committed), reinterpret_cast<const char *>(chosen)) == 0,
                     "single syllable commits the displayed character through ABI");
         }
         for (const char *raw : {"ssdd", "zgrm", "zhrm"}) {
-            myswy_session_reset(session);
-            for (const char *c = raw; *c; ++c) myswy_session_process(session, static_cast<uint32_t>(*c), 0);
+            chengyin_session_reset(session);
+            for (const char *c = raw; *c; ++c) chengyin_session_process(session, static_cast<uint32_t>(*c), 0);
             uint8_t text[257]{};
             const char *expected = std::strcmp(raw, "ssdd") == 0 ? "世世代代"
                 : std::strcmp(raw, "zgrm") == 0 ? "中国人民" : "走火入魔";
-            require(myswy_session_text(session, MYSWY_TEXT_CANDIDATE, 0, text, sizeof(text)) > 0
+            require(chengyin_session_text(session, CHENGYIN_TEXT_CANDIDATE, 0, text, sizeof(text)) > 0
                 && std::strcmp(reinterpret_cast<const char *>(text), expected) == 0,
                 "four-character initials term precedes shorter corrected words");
-            require(myswy_session_candidate_consumed(session, 0) == 4,
+            require(chengyin_session_candidate_consumed(session, 0) == 4,
                 "initials choice consumes all four heads");
             for (int layout = 0; layout < 2; ++layout) {
                 prefs.layout = layout;
@@ -585,40 +585,40 @@ int wmain(int argc, wchar_t **argv) {
                     + L"-" + std::to_wstring(layout);
                 capture(candidates.handle(), name.c_str());
             }
-            myswy_session_process(session, MYSWY_KEY_SELECT_1, 0);
-            require(myswy_session_text(session, MYSWY_TEXT_COMMIT, 0, text, sizeof(text)) > 0
+            chengyin_session_process(session, CHENGYIN_KEY_SELECT_1, 0);
+            require(chengyin_session_text(session, CHENGYIN_TEXT_COMMIT, 0, text, sizeof(text)) > 0
                 && std::strcmp(reinterpret_cast<const char *>(text), expected) == 0,
                 "initials selection commits the complete word through ABI");
         }
     }
-    myswy_session_free(session);
-    dictionary = myswy_dictionary_new_binary(dailyBytes, SizeofResource(myswy::module, dailyResource));
+    chengyin_session_free(session);
+    dictionary = chengyin_dictionary_new_binary(dailyBytes, SizeofResource(chengyin::module, dailyResource));
     require(dictionary != nullptr, "embedded regex fixture dictionary");
-    session = myswy_session_new_with_dictionary(dictionary);
-    myswy_dictionary_free(dictionary);
-    auto history = myswy_profile_new(nullptr, 0);
+    session = chengyin_session_new_with_dictionary(dictionary);
+    chengyin_dictionary_free(dictionary);
+    auto history = chengyin_profile_new(nullptr, 0);
     constexpr char regexRaw[] = "zhengzebiaodashi";
     constexpr char wrongRegex[] = "正则表达是";
-    require(session && history && myswy_profile_record(history,
+    require(session && history && chengyin_profile_record(history,
         reinterpret_cast<const uint8_t *>(regexRaw), sizeof(regexRaw) - 1,
         reinterpret_cast<const uint8_t *>(wrongRegex), sizeof(wrongRegex) - 1) == 0,
         "synthetic one-off regex history");
-    require(myswy_session_set_profile(session, history) == 0 && myswy_session_configure(session, 5, 3) == 0
-        && myswy_session_configure_matching(session, MYSWY_MATCHING_MASK) == 0, "regex history and matching fixture");
-    require(myswy_session_configure_incremental(session, 1) == 0, "production prefix candidate mode");
-    myswy_profile_free(history);
-    for (const char *c = regexRaw; *c; ++c) myswy_session_process(session, static_cast<uint32_t>(*c), 0);
+    require(chengyin_session_set_profile(session, history) == 0 && chengyin_session_configure(session, 5, 3) == 0
+        && chengyin_session_configure_matching(session, CHENGYIN_MATCHING_MASK) == 0, "regex history and matching fixture");
+    require(chengyin_session_configure_incremental(session, 1) == 0, "production prefix candidate mode");
+    chengyin_profile_free(history);
+    for (const char *c = regexRaw; *c; ++c) chengyin_session_process(session, static_cast<uint32_t>(*c), 0);
     uint8_t firstRegex[257]{};
-    require(myswy_session_text(session, MYSWY_TEXT_CANDIDATE, 0, firstRegex, sizeof(firstRegex)) > 0
+    require(chengyin_session_text(session, CHENGYIN_TEXT_CANDIDATE, 0, firstRegex, sizeof(firstRegex)) > 0
         && std::strcmp(reinterpret_cast<const char *>(firstRegex), "正则表达式") == 0,
         "technical term wins despite one wrong historical selection");
-    require(myswy_session_candidate_count(session) > 1, "complete term plus manual prefix choices");
-    for (size_t i = 1; i < myswy_session_candidate_count(session); ++i)
-        require(myswy_session_candidate_consumed(session, i) < static_cast<int>(sizeof(regexRaw) - 1),
+    require(chengyin_session_candidate_count(session) > 1, "complete term plus manual prefix choices");
+    for (size_t i = 1; i < chengyin_session_candidate_count(session); ++i)
+        require(chengyin_session_candidate_consumed(session, i) < static_cast<int>(sizeof(regexRaw) - 1),
                 "extra regex choices consume only an initial dictionary prefix");
     {
-        myswy::CandidateWindow candidates;
-        myswy::Preferences prefs; prefs.candidatePinyin = true;
+        chengyin::CandidateWindow candidates;
+        chengyin::Preferences prefs; prefs.candidatePinyin = true;
         for (int layout = 0; layout < 2; ++layout) {
             prefs.layout = layout;
             candidates.show(session, owner, RECT{100, 150, 101, 170}, false, nullptr, nullptr, 300, prefs, true);
@@ -626,23 +626,23 @@ int wmain(int argc, wchar_t **argv) {
         }
     }
     int prefixIndex = -1;
-    for (size_t i = 0; i < myswy_session_candidate_count(session); ++i) {
+    for (size_t i = 0; i < chengyin_session_candidate_count(session); ++i) {
         uint8_t word[257]{};
-        myswy_session_text(session, MYSWY_TEXT_CANDIDATE, i, word, sizeof(word));
+        chengyin_session_text(session, CHENGYIN_TEXT_CANDIDATE, i, word, sizeof(word));
         if (std::strcmp(reinterpret_cast<const char *>(word), "正则") == 0) prefixIndex = static_cast<int>(i);
     }
     require(prefixIndex >= 0, "regex first page has selectable prefix phrase");
-    require(myswy_session_process(session, MYSWY_KEY_SELECT_1 + prefixIndex, 0) > 0, "select regex prefix phrase");
+    require(chengyin_session_process(session, CHENGYIN_KEY_SELECT_1 + prefixIndex, 0) > 0, "select regex prefix phrase");
     uint8_t remaining[257]{};
-    require(myswy_session_text(session, MYSWY_TEXT_PREEDIT, 0, remaining, sizeof(remaining)) > 0
+    require(chengyin_session_text(session, CHENGYIN_TEXT_PREEDIT, 0, remaining, sizeof(remaining)) > 0
             && std::strcmp(reinterpret_cast<const char *>(remaining), "biaodashi") == 0, "regex prefix leaves only suffix pinyin");
     {
-        myswy::CandidateWindow candidates;
-        myswy::Preferences prefs; prefs.candidatePinyin = true;
+        chengyin::CandidateWindow candidates;
+        chengyin::Preferences prefs; prefs.candidatePinyin = true;
         candidates.show(session, owner, RECT{100,150,101,170}, false, nullptr, nullptr, 301, prefs, true);
         capture(candidates.handle(), L"candidate-regex-remaining");
     }
-    myswy_session_free(session);
+    chengyin_session_free(session);
     DestroyWindow(owner);
     inspectTestpad();
     if (richEdit)
@@ -651,7 +651,7 @@ int wmain(int argc, wchar_t **argv) {
     CoRevokeClassObject(fixtureCookie);
     CoUninitialize();
     FreeLibrary(fixtureModule);
-    require(myswy::objects == 0, "UI lifetimes released");
+    require(chengyin::objects == 0, "UI lifetimes released");
     std::puts("PASS: eight tabs, live fonts after hover/theme recreation, 96/120/144/192/288 DPI, narrow viewport/scroll, six candidate themes, letter correction marks, compact geometry and embedded test lifetime; no user settings written.");
     return 0;
 }

@@ -1,5 +1,5 @@
 #include "configuration.h"
-namespace myswy {
+namespace chengyin {
 namespace {
 constexpr UINT kReady = WM_APP + 57;
 struct FileStamp {

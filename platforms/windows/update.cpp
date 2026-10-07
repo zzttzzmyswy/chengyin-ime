@@ -9,7 +9,7 @@
 #include <map>
 #include <memory>
 #include <tuple>
-namespace myswy {
+namespace chengyin {
 namespace {
 struct Json {
     wchar_t kind = 0;
@@ -134,7 +134,7 @@ bool fetch(const std::wstring &url, std::vector<uint8_t> &out, size_t maximum) {
     std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
     std::wstring path(parts.lpszUrlPath, parts.dwUrlPathLength);
     if (parts.dwExtraInfoLength) path.append(parts.lpszExtraInfo, parts.dwExtraInfoLength);
-    Internet session{WinHttpOpen(L"Chengyin/" MYSWY_VERSION, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, nullptr, nullptr, 0)};
+    Internet session{WinHttpOpen(L"Chengyin/" CHENGYIN_VERSION, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, nullptr, nullptr, 0)};
     if (!session.h) return false;
     WinHttpSetTimeouts(session.h, 5000, 5000, 10000, 10000);
     Internet connection{WinHttpConnect(session.h, host.c_str(), parts.nPort, 0)};
@@ -158,7 +158,7 @@ bool fetch(const std::wstring &url, std::vector<uint8_t> &out, size_t maximum) {
     }
 }
 bool validAsset(const ReleaseUpdate &release) {
-    const std::wstring prefix = L"https://github.com/zzttzzmyswy/myswyIm/releases/download/";
+    const std::wstring prefix = L"https://github.com/zzttzzmyswy/chengyin-ime/releases/download/";
     Version parsed{};
     if (!version(release.version, parsed)) return false;
     const auto tag = !release.version.empty() && release.version[0] == L'v'
@@ -178,7 +178,7 @@ bool parseReleases(const std::vector<uint8_t> &bytes, ReleaseUpdate &out) {
     MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, reinterpret_cast<const char *>(bytes.data()), static_cast<int>(bytes.size()), text.data(), size);
     Json root;
     if (!Parser(text).parse(root) || root.kind != L'[') return false;
-    Version current{}, newest{}; version(MYSWY_VERSION, current); newest = current;
+    Version current{}, newest{}; version(CHENGYIN_VERSION, current); newest = current;
     for (const auto &release : root.array) {
         Version next{};
         if (release.kind != L'{' || release.get(L"draft").kind != L'f'
@@ -206,7 +206,7 @@ bool parseReleases(const std::vector<uint8_t> &bytes, ReleaseUpdate &out) {
 }
 ReleaseUpdate checkReleaseUpdate() {
     ReleaseUpdate result; std::vector<uint8_t> bytes;
-    if (!fetch(L"https://api.github.com/repos/zzttzzmyswy/myswyIm/releases?per_page=20", bytes, 2 * 1024 * 1024) || !parseReleases(bytes, result))
+    if (!fetch(L"https://api.github.com/repos/zzttzzmyswy/chengyin-ime/releases?per_page=20", bytes, 2 * 1024 * 1024) || !parseReleases(bytes, result))
         result.message = L"无法检查更新，请检查网络或打开发行页面。离线输入仍可使用。";
     return result;
 }

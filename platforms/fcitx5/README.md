@@ -8,16 +8,16 @@ Debian/Ubuntu 示例，发行版包名可能不同：
 
 ```sh
 sudo apt-get install build-essential cmake extra-cmake-modules libfcitx5core-dev fcitx5 fcitx5-config-qt
-cargo build --release -p myswy-ffi --locked
+cargo build --release -p chengyin-ffi --locked
 cmake -S platforms/fcitx5 -B build/fcitx5 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
 cmake --build build/fcitx5
 ctest --test-dir build/fcitx5 --output-on-failure
 DESTDIR="$PWD/build/stage" cmake --install build/fcitx5
 ```
 
-最后一步只把文件放在 `build/stage`，不修改系统。默认动态插件目录取自发行版 Fcitx SDK 的 `FCITX_INSTALL_ADDONDIR`；Debian amd64 通常为 `/usr/lib/x86_64-linux-gnu/fcitx5`。可用 `-DMYSWY_ADDON_DIR=...` 指定，但必须匹配框架实际查找目录。交叉编译时通过 `-DMYSWY_RUST_LIBRARY=/path/to/libmyswy_ime.a` 指向同一目标架构的 Rust 静态库。
+最后一步只把文件放在 `build/stage`，不修改系统。默认动态插件目录取自发行版 Fcitx SDK 的 `FCITX_INSTALL_ADDONDIR`；Debian amd64 通常为 `/usr/lib/x86_64-linux-gnu/fcitx5`。可用 `-DCHENGYIN_ADDON_DIR=...` 指定，但必须匹配框架实际查找目录。交叉编译时通过 `-DCHENGYIN_RUST_LIBRARY=/path/to/libchengyin_ime.a` 指向同一目标架构的 Rust 静态库。
 
-插件静态链接本项目 Rust 核心，动态依赖 Fcitx 框架；不需另装 `libmyswy_ime.so`。打包时保留 `LICENSE` 并列明平台依赖许可证。
+插件静态链接本项目 Rust 核心，动态依赖 Fcitx 框架；不需另装 `libchengyin_ime.so`。打包时保留 `LICENSE` 并列明平台依赖许可证。
 
 ## 在测试桌面安装
 
@@ -35,7 +35,7 @@ sudo cmake --install build/fcitx5
 
 在 Fcitx 配置工具中打开澄音的设置，填写“词典 TSV 绝对路径”。留空恢复内置演示词典。自定义词典是**替换**演示词典，而非合并；格式见 [词典说明](../../data/README.md)。路径不展开 `~` 或环境变量。
 
-也可编辑 `${XDG_CONFIG_HOME:-$HOME/.config}/fcitx5/conf/myswy.conf`，顶层字段如下：
+也可编辑 `${XDG_CONFIG_HOME:-$HOME/.config}/fcitx5/conf/chengyin.conf`，顶层字段如下：
 
 ```ini
 DictionaryPath=/absolute/path/to/my-dictionary.tsv
@@ -58,9 +58,9 @@ python3 scripts/test_deb.py build/packages/*.deb
 
 支持原生 Debian amd64/arm64 的打包路径；arm64 尚未实机验证。脚本从实际 ELF 链接关系生成运行依赖，缺少依赖元数据时停止。默认输出到 `build/packages`，已有同名文件不会覆盖；后续构建可传 `--version 0.1.0-2`。默认维护者地址是开发占位值，正式分发前应通过 `--maintainer 'Name <real-address>'` 配置真实维护者。
 
-历史开发包：`build/packages/fcitx5-myswy_0.1.0-1_amd64.deb`，基于 **Debian 13 amd64 / Fcitx 5.1.12**。该包早于本轮共享核心更新；本轮重建和回归了模块，没有覆盖历史包。依赖至少 libc6 2.39、Fcitx Core/Config/Utils 5.1.12、libstdc++6 13.1；不是面向任意 Debian/Ubuntu 版本的通用包。
+历史开发包：`build/packages/fcitx5-chengyin_0.1.0-1_amd64.deb`，基于 **Debian 13 amd64 / Fcitx 5.1.12**。该包早于本轮共享核心更新；本轮重建和回归了模块，没有覆盖历史包。依赖至少 libc6 2.39、Fcitx Core/Config/Utils 5.1.12、libstdc++6 13.1；不是面向任意 Debian/Ubuntu 版本的通用包。
 
-在匹配的测试桌面，用 `sudo apt install /absolute/path/to/fcitx5-myswy_0.1.0-1_amd64.deb` 安装；从配置工具移除该输入法后，用 `sudo apt remove fcitx5-myswy` 卸载。升级或回滚也通过安装对应版本包执行。包不自动重启 Fcitx，不更改当前输入法或全局环境变量，不删除用户词典和配置。
+在匹配的测试桌面，用 `sudo apt install /absolute/path/to/fcitx5-chengyin_0.1.0-1_amd64.deb` 安装；从配置工具移除该输入法后，用 `sudo apt remove fcitx5-chengyin` 卸载。升级或回滚也通过安装对应版本包执行。包不自动重启 Fcitx，不更改当前输入法或全局环境变量，不删除用户词典和配置。
 
 `test_deb.py` 在空临时根目录实际调用 dpkg，检查安装、重装、升级、回滚、移除和 purge；逐文件校验内容并确认用户配置保留。该文件布局测试有意跳过运行依赖，**不证明依赖安装成功或桌面输入可用**。
 

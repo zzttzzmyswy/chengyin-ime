@@ -7,17 +7,17 @@
 #include <fcitx-utils/eventdispatcher.h>
 #include "config.h"
 #include "dictionary_loader.h"
-#include "myswy_ime.h"
+#include "chengyin_ime.h"
 
-namespace myswy {
+namespace chengyin {
 class State final : public fcitx::InputContextProperty {
 public:
     explicit State(DictionaryPtr source)
         : dictionary(std::move(source)),
-          session(myswy_session_new_with_dictionary(dictionary->dictionary.get()), myswy_session_free) {}
+          session(chengyin_session_new_with_dictionary(dictionary->dictionary.get()), chengyin_session_free) {}
     // Declare before session: destruction releases the Rust session first.
     DictionaryPtr dictionary;
-    std::unique_ptr<MyswySession, decltype(&myswy_session_free)> session;
+    std::unique_ptr<ChengyinSession, decltype(&chengyin_session_free)> session;
     uint64_t revision = 0;
 };
 
@@ -53,4 +53,4 @@ private:
     std::unique_ptr<DictionaryLoader> loader_;
     fcitx::FactoryFor<State> factory_;
 };
-} // namespace myswy
+} // namespace chengyin

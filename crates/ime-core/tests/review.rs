@@ -1,4 +1,4 @@
-use myswy_core::{fuzzy::OPTIONS_MASK, Dictionary, Key, Modifiers, Profile, Session};
+use chengyin_core::{fuzzy::OPTIONS_MASK, Dictionary, Key, Modifiers, Profile, Session};
 use std::sync::Arc;
 
 fn replay(source: &str, raw: &str, flags: u32) -> Session {

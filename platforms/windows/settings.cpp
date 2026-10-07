@@ -6,7 +6,7 @@
 #include <cwchar>
 #include <cstring>
 
-namespace myswy {
+namespace chengyin {
 namespace {
 struct Handle {
     HANDLE h = INVALID_HANDLE_VALUE;
@@ -16,7 +16,7 @@ struct Handle {
     }
 };
 struct ImportLock {
-    HANDLE h = CreateMutexW(nullptr, FALSE, L"Local\\MyswyIME.DictionaryImport");
+    HANDLE h = CreateMutexW(nullptr, FALSE, L"Local\\ChengyinIME.DictionaryImport");
     bool owned = false;
     ImportLock() {
         if (h) {
@@ -32,19 +32,43 @@ struct ImportLock {
     }
 };
 constexpr size_t kMaximum = 64 * 1024 * 1024;
+// preview24 and earlier stored user vocabulary, preferences and learning under
+// the former project name. Adopt that directory on first use so an upgrade
+// neither loses data nor silently starts from an empty profile.
+constexpr wchar_t kLegacyFolderName[] = L"MyswyIME";
+bool directoryExists(const std::wstring &path) {
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY);
+}
+// Re-points `path` at the legacy directory when only that one exists. Never
+// moves or copies: the old directory stays readable by an older preview, and
+// a failure simply leaves the new (empty) directory in place.
+void adoptLegacySettingsFolder(std::wstring &path) {
+    if (directoryExists(path))
+        return;
+    const auto slash = path.find_last_of(L'\\');
+    if (slash == std::wstring::npos)
+        return;
+    const std::wstring legacy = path.substr(0, slash + 1) + kLegacyFolderName;
+    if (directoryExists(legacy))
+        path = legacy;
+}
 }
 std::wstring customDictionaryPath(bool create) {
-#ifdef MYSWY_ISOLATED_UI_TEST
+#ifdef CHENGYIN_ISOLATED_UI_TEST
     wchar_t temporary[MAX_PATH] {};
     if (!GetTempPathW(MAX_PATH, temporary)) return {};
-    std::wstring path = std::wstring(temporary) + L"Myswy-UI-fixture-" + std::to_wstring(GetCurrentProcessId());
+    std::wstring path = std::wstring(temporary) + L"Chengyin-UI-fixture-" + std::to_wstring(GetCurrentProcessId());
 #else
     PWSTR folder = nullptr;
     if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &folder)))
         return {};
     std::wstring path(folder);
     CoTaskMemFree(folder);
-    path += L"\\MyswyIME";
+    path += L"\\ChengyinIME";
+    // Checked before the create below so a first run after an upgrade keeps
+    // reading and writing the adopted directory rather than a fresh empty one.
+    adoptLegacySettingsFolder(path);
 #endif
     if (create && !CreateDirectoryW(path.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
         return {};
@@ -72,8 +96,8 @@ bool readDictionaryFile(const std::wstring &path, std::vector<uint8_t> &output) 
     }
     return true;
 }
-MyswyDictionary *loadDictionaryBytes(const std::vector<uint8_t> &bytes) {
-    auto *dictionary = myswy_dictionary_new_import(bytes.data(), bytes.size());
+ChengyinDictionary *loadDictionaryBytes(const std::vector<uint8_t> &bytes) {
+    auto *dictionary = chengyin_dictionary_new_import(bytes.data(), bytes.size());
     if (dictionary || bytes.size() > kMaximum || bytes.empty() || bytes[0] == 0x40 || bytes[0] == 0xff
             || bytes[0] == 'M')
         return dictionary;
@@ -96,7 +120,7 @@ MyswyDictionary *loadDictionaryBytes(const std::vector<uint8_t> &bytes) {
         unicode.push_back(static_cast<uint8_t>(unit));
         unicode.push_back(static_cast<uint8_t>(unit >> 8));
     }
-    return myswy_dictionary_new_import(unicode.data(), unicode.size());
+    return chengyin_dictionary_new_import(unicode.data(), unicode.size());
 }
 bool installCustomDictionary(const std::wstring &source, const std::wstring &target, bool append) {
     if (target.empty())
@@ -114,7 +138,7 @@ bool installCustomDictionary(const std::wstring &source, const std::wstring &tar
     if (!dictionary)
         return false;
     if (append) {
-        MyswyDictionary *base = nullptr;
+        ChengyinDictionary *base = nullptr;
         const DWORD attributes = GetFileAttributesW(target.c_str());
         if (attributes != INVALID_FILE_ATTRIBUTES) {
             std::vector<uint8_t> old;
@@ -126,22 +150,22 @@ bool installCustomDictionary(const std::wstring &source, const std::wstring &tar
             const HGLOBAL loaded = resource ? LoadResource(instance, resource) : nullptr;
             const auto *data = loaded ? static_cast<const uint8_t *>(LockResource(loaded)) : nullptr;
             if (data)
-                base = myswy_dictionary_new_binary(data, SizeofResource(instance, resource));
+                base = chengyin_dictionary_new_binary(data, SizeofResource(instance, resource));
         }
-        auto *merged = base ? myswy_dictionary_merge(base, dictionary) : nullptr;
-        myswy_dictionary_free(base);
-        myswy_dictionary_free(dictionary);
+        auto *merged = base ? chengyin_dictionary_merge(base, dictionary) : nullptr;
+        chengyin_dictionary_free(base);
+        chengyin_dictionary_free(dictionary);
         dictionary = merged;
         if (!dictionary)
             return false;
     }
-    const int binarySize = myswy_dictionary_binary(dictionary, nullptr, 0);
+    const int binarySize = chengyin_dictionary_binary(dictionary, nullptr, 0);
     bool valid = binarySize > 0;
     if (valid) {
         bytes.resize(static_cast<size_t>(binarySize));
-        valid = myswy_dictionary_binary(dictionary, bytes.data(), bytes.size()) == binarySize;
+        valid = chengyin_dictionary_binary(dictionary, bytes.data(), bytes.size()) == binarySize;
     }
-    myswy_dictionary_free(dictionary);
+    chengyin_dictionary_free(dictionary);
     if (!valid)
         return false;
     // CREATE_NEW makes concurrent settings windows safe. Rename is atomic and

@@ -4,7 +4,7 @@
 
 PR #13：修复 Fcitx ≥5.1.13 下 `fcitx::StandardPath` 未声明导致插件无法编译；按 CMake 解析的 `Fcitx5Core_VERSION` 选择 `StandardPaths`（≥5.1.13）或 `StandardPath`（<5.1.13）。
 实测 Fcitx 5.1.7（Ubuntu 24.04）/5.1.12（Debian trixie）/5.1.23（Arch）构建 + CTest 2/2；`-Werror` 未放宽；`scripts/check.sh` 全绿；PR 的 fcitx5/windows-tsf CI 通过。
-设计文档遗留的 `Found 0 input method(s)` 判定为探针未安装 `inputmethod/myswy.conf`，`cmake --install` 后 IM 注册通过。
+设计文档遗留的 `Found 0 input method(s)` 判定为探针未安装 `inputmethod/chengyin.conf`，`cmake --install` 后 IM 注册通过。
 遗留：新版 Fcitx（Arch 容器）CI 矩阵作业补丁因 token 缺 `workflow` scope 未入库，待有权限凭据应用。均为自动化结果，未做 Fcitx 实机会话验收。
 
 ## 预设词库翻倍 I05 · 2026-10-07
@@ -13,7 +13,7 @@ PR #9：内置词库 87,540 → 184,173 条（2.10×），`.mswydict` 25.7 MiB�
 新增来源 THUOCL（MIT，70,276 条）与 phrase-pinyin-data `pinyin.txt`（MIT，26,357 条），固定修订与许可原文在 `data/sources/`；排除 rime-essay（LGPL-3.0）。
 新词权重 1，并受“不抢既有首选/不遮蔽模糊音键/须有词频证据”三条准入规则约束；200 条随机抽样无词频证据 0/200。
 同命令 `quality_report` 前后对照：全部/dev/test 的 Top-1、Top-9、可达、错误组合率完全一致。词库加载 120→358 ms（启动一次性），日常逐键 P50 137→162 µs。
-合并后 main 的 windows-tsf 因 `test_settings.cpp` 写死旧条数（87541）失败，随 preview24 修正。自动化结果，Windows 实机体感待 MYSWY 验收。
+合并后 main 的 windows-tsf 因 `test_settings.cpp` 写死旧条数（87541）失败，随 preview24 修正。自动化结果，Windows 实机体感待 CHENGYIN 验收。
 
 ## 长拼音分段输入学习完整词组 · 2026-10-06
 
@@ -43,7 +43,7 @@ test Top-1 91.4%→93.4%；其余类别不变。标注集未改。`fuzzy` 基线
 评测集保持不变。
 本机交付 chengyin-windows-x64-0.1.0-preview23-msvc.exe，5135063 bytes，SHA256 `628a33c65c765c74a11edd6c9870cb6ff3ca16c9068111f6b2fceeb58f44e126`。
 PE/7-Zip/全负载SHA/COM/生产字节一致/22项许可与插画署名CRC通过，已复制主目录。
-源码 `2fc0fa3` 的 [Actions 37453639077](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37453639077) 六作业成功，含 Windows 隔离安装、升级、回滚、卸载。
+源码 `2fc0fa3` 的 [Actions 37453639077](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37453639077) 六作业成功，含 Windows 隔离安装、升级、回滚、卸载。
 个人安装/设置/学习未改，真实宿主/混合DPI仍待E，D其余优化继续。
 
 ## preview22 Q 版大肥鱼与准确结构组句 · 2026-10-06
@@ -68,7 +68,7 @@ PE/7-Zip/全负载SHA/COM/生产字节一致/22项许可与插画署名CRC通过
 `110e733b16b1a7a1ef77de40abde114988a66d52ba93b118e6491e2242a6786c`，已复制至主工作目录。
 PE、7-Zip、全部负载 SHA-256/COM、三生产二进制一致、22 项运行时许可 CRC 与插画署名包校验通过。
 证据见 tasklist。个人安装/设置/学习未改；真实升级宿主、物理混合 DPI 和 review D 优化与 E 继续保留；B/C/D 基线已合并。
-源码 `40fec9d` 的 [Actions 37445555758](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37445555758) 六作业全部成功，含 Windows 隔离安装、升级、回滚、卸载。
+源码 `40fec9d` 的 [Actions 37445555758](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37445555758) 六作业全部成功，含 Windows 隔离安装、升级、回滚、卸载。
 
 ## preview21 候选皮肤系统 · 2026-10-06
 
@@ -88,7 +88,7 @@ PE、7-Zip、全部负载 SHA-256/COM、三生产二进制一致、22 项运行�
 PE、7-Zip、全负载 SHA-256、COM、三二进制逐字节一致、测试通知隔离与 21 项运行时许可 CRC 校验通过。
 证据 `build/native-test-preview21.txt`、`tests-release-preview21.txt`、`abi-test-preview21.txt`、
 `ui-preview21/`、`skin-paint-bench-preview21.txt`、`package-verify-preview21.txt`、`delivery-preview21.json`。
-preview21 源码 9a005e5 的 [远程 CI 37386348117](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37386348117) 已完成且成功；个人实机升级仍单独验收。
+preview21 源码 9a005e5 的 [远程 CI 37386348117](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37386348117) 已完成且成功；个人实机升级仍单独验收。
 没有修改个人安装/学习记录。旧 Explorer 升级验证、物理混合 DPI、review D 优化阶段与 E 保持待办（B、C、D 基线已于 2026-10-06 合并，见 REVIEW_REPAIR_PLAN、QUALITY_BASELINE）。
 
 ## 最新：preview20 单音节与受限 TSF 激活 · 2026-10-05
@@ -112,7 +112,7 @@ URL/search/default、密码/private、UI-only 与 100 次交替激活回归通�
 明确的受限激活缺口已修复，但不能认定它是这两个实际控件的唯一原因。
 下一步先完成升级后的 Explorer 双输入框验证，再回到普通学习 revision 与有界 writer 重试。
 
-preview19 a55c97c 的 [Actions 37318044390](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37318044390)
+preview19 a55c97c 的 [Actions 37318044390](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37318044390)
 六作业和隔离安装生命周期通过；preview20 的远程 CI 单独追踪。
 
 ## 最新：preview19 拍照候选与旧学习保护 · 2026-10-05
@@ -134,7 +134,7 @@ preview18 已有完整词保护；本次补齐未收录旧历史累计计数可�
 ## 最新：preview18 代码审查修复 · 2026-10-05
 
 原 preview8–17 的 12 个未推送提交已快进合入并推送 main `d07fe57`。
-[Actions 37309334271](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37309334271)
+[Actions 37309334271](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37309334271)
 六作业全部通过，包括隔离安装/升级/回滚/卸载；补足下述 preview17 的远程验证记录。
 审查与修复在 `codex/review-hardening`；详细结论见 [代码审查](CODE_REVIEW_2026-10-05.md)，
 [修复排期](REVIEW_REPAIR_PLAN.md)、[本批清单](WINDOWS_PREVIEW18_TASKLIST.md)和[精简交接](CONTEXT_HANDOFF.md)。
@@ -149,7 +149,7 @@ SHA-256 **57604fadbb04978675cd651008b1e03e43430ee7319f5721e5d9f400ccb428a4**。
 证据 `build/tests-preview18.txt`、`clippy-preview18.txt`、`abi-test-preview18.txt`、
 `native-test-preview18.txt`、`ui-test-preview18.txt`、`package-preview18.txt`、`delivery-preview18.json`。
 截图 `build/ui-preview18/`；没有替换个人安装或使用个人历史作为 fixture。
-源码 `ad84c9d` 的 [Actions 37314439254](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37314439254) **六作业全部通过**，
+源码 `ad84c9d` 的 [Actions 37314439254](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37314439254) **六作业全部通过**，
 包括 Linux/Windows Rust 与 ABI、MSRV、portable core、Fcitx、原生 TSF 和隔离安装/升级/回滚/卸载。
 本地交付与远程 runner 交付各有自己的构建环境及摘要，不能混用哈希。
 

@@ -2,7 +2,7 @@
 # Headless end-to-end IBus check for the Chengyin engine (I09 acceptance).
 #
 # Runs a REAL chain: private session bus -> real ibus-daemon -> the shipped
-# ibus-engine-myswy process -> Rust shared core -> commit signal back to a real
+# ibus-engine-chengyin process -> Rust shared core -> commit signal back to a real
 # client. Nothing here is mocked.
 #
 # Two IBus traps, both learned while producing the I07 design evidence, are
@@ -13,26 +13,26 @@
 #   * --single is required, or the daemon starts a second instance.
 #
 # Usage: e2e.sh <build-dir> [engine-name]
-# Expects <build-dir> to already contain ibus-engine-myswy and myswy-e2e-client.
+# Expects <build-dir> to already contain ibus-engine-chengyin and chengyin-e2e-client.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD="${1:-$HERE/../../build/ibus}"
-ENGINE="${2:-myswy}"
-ENGINE_BIN="$BUILD/ibus-engine-myswy"
-CLIENT_BIN="$BUILD/myswy-e2e-client"
+ENGINE="${2:-chengyin}"
+ENGINE_BIN="$BUILD/ibus-engine-chengyin"
+CLIENT_BIN="$BUILD/chengyin-e2e-client"
 # <exec> is spawned by the daemon from its own working directory, so both
 # paths must be absolute before they go into the XML.
 BUILD="$(cd "$BUILD" && pwd)"
-ENGINE_BIN="$BUILD/ibus-engine-myswy"
-CLIENT_BIN="$BUILD/myswy-e2e-client"
+ENGINE_BIN="$BUILD/ibus-engine-chengyin"
+CLIENT_BIN="$BUILD/chengyin-e2e-client"
 
 if [[ ! -x "$ENGINE_BIN" || ! -x "$CLIENT_BIN" ]]; then
   echo "missing build products in $BUILD; run cmake --build first" >&2
   exit 2
 fi
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/myswy-ibus-e2e-XXXXXX")"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/chengyin-ibus-e2e-XXXXXX")"
 export HOME="$WORK/home"
 export XDG_CONFIG_HOME="$HOME/.config"
 export XDG_CACHE_HOME="$HOME/.cache"
@@ -62,7 +62,7 @@ trap cleanup EXIT
 # is a separate iteration (I10). This keeps the check on the engine itself.
 export DBUS_SESSION_BUS_ADDRESS="$(dbus-daemon --session --fork --print-address=1)"
 
-ibus-daemon --single --daemonize --panel=disable --config=disable -n myswy-e2e
+ibus-daemon --single --daemonize --panel=disable --config=disable -n chengyin-e2e
 sleep 3
 DAEMON_PID="$(pgrep -x ibus-daemon | head -1)"
 echo "--- daemon pid: ${DAEMON_PID:-none}"

@@ -14,12 +14,12 @@
 ```powershell
 $env:PATH="C:\Users\xhxez\.cargo\bin;C:\Program Files\CMake\bin;" + $env:PATH
 $env:RUSTFLAGS='-C target-feature=+crt-static'
-cargo build --release -p myswy-ffi --target x86_64-pc-windows-msvc --locked
+cargo build --release -p chengyin-ffi --target x86_64-pc-windows-msvc --locked
 python scripts/version.py --generate
 python scripts/version.py --check
 python scripts/version.py --verify-bump
 cmake -S platforms/windows -B build/windows-msvc -G 'Visual Studio 17 2022' -A x64 -DPython3_EXECUTABLE=C:/Users/xhxez/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe
-cmake --build build/windows-msvc --config Release --parallel 3 --target myswy_tsf myswy_settings myswy_probe windows_skin_test windows_ui_test windows_key_test windows_settings_test windows_update_test windows_live_test myswy_tsf_fixture
+cmake --build build/windows-msvc --config Release --parallel 3 --target chengyin_tsf chengyin_settings chengyin_probe windows_skin_test windows_ui_test windows_key_test windows_settings_test windows_update_test windows_live_test chengyin_tsf_fixture
 ctest --test-dir build/windows-msvc -C Release --output-on-failure
 python scripts/package_windows.py --build-dir build/windows-msvc --toolchain msvc --makensis build/nsis-amd64/makensis.exe --nsis-notice packaging/windows/NSIS-LICENSE.txt
 ```
@@ -38,6 +38,6 @@ preview19 a55c97c 的远程 CI 六作业和隔离安装生命周期通过（Acti
 历史云环境、NSIS 固定来源及历次工具链详见 [环境归档](history/ENVIRONMENT_THROUGH_PREVIEW16.md)。
 清理保留项及本地分支状态见 [结项记录](WINDOWS_PHASE_WRAPUP.md)。
 
-preview22 源码 `40fec9d` 的 [Actions 37445555758](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37445555758) 六作业全部成功，含 Windows 隔离安装、升级、回滚、卸载。
+preview22 源码 `40fec9d` 的 [Actions 37445555758](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37445555758) 六作业全部成功，含 Windows 隔离安装、升级、回滚、卸载。
 
-preview23 源码 `2fc0fa3` 的 [Actions 37453639077](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37453639077) 六作业成功，含 Windows 隔离安装、升级、回滚、卸载。
+preview23 源码 `2fc0fa3` 的 [Actions 37453639077](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37453639077) 六作业成功，含 Windows 隔离安装、升级、回滚、卸载。

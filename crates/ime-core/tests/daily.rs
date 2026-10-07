@@ -1,4 +1,4 @@
-use myswy_core::*;
+use chengyin_core::*;
 use std::sync::Arc;
 fn press(s: &mut Session, k: Key) {
     assert!(s.process(k, Modifiers::default()).handled);

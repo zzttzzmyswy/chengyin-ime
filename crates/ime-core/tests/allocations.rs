@@ -1,4 +1,4 @@
-use myswy_core::{demo_dictionary, Dictionary, Key, Modifiers, Profile, Session};
+use chengyin_core::{demo_dictionary, Dictionary, Key, Modifiers, Profile, Session};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -48,7 +48,7 @@ fn initialized_key_path_does_not_allocate() {
     let mut display = [0u8; 319];
     assert!(real.configure_incremental(true));
     COUNTING.store(true, Ordering::SeqCst);
-    assert!(real.configure_matching(myswy_core::fuzzy::OPTIONS_MASK));
+    assert!(real.configure_matching(chengyin_core::fuzzy::OPTIONS_MASK));
     for raw in [
         "zhnag",
         "zhng",

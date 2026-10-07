@@ -1,4 +1,4 @@
-use myswy_core::{fuzzy::*, Dictionary, Key, Modifiers, Profile, Session};
+use chengyin_core::{fuzzy::*, Dictionary, Key, Modifiers, Profile, Session};
 use std::sync::Arc;
 
 fn replay(dictionary: Arc<Dictionary>, input: &str, options: u32) -> Session {

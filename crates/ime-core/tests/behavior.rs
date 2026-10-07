@@ -1,4 +1,4 @@
-use myswy_core::*;
+use chengyin_core::*;
 use std::sync::Arc;
 
 fn words(dictionary: &Dictionary, query: &str) -> Vec<String> {

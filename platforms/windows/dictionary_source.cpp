@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace myswy {
+namespace chengyin {
 DictionaryStamp readDictionaryStamp(const std::wstring &path) {
     DictionaryStamp result;
     WIN32_FILE_ATTRIBUTE_DATA data{};
@@ -20,16 +20,16 @@ DictionarySource::DictionarySource(Loader loader, Fallback fallback, DictionaryR
 
 DictionarySource::~DictionarySource() {
     if (snapshot_)
-        myswy_dictionary_free(snapshot_);
+        chengyin_dictionary_free(snapshot_);
 }
 
-MyswyDictionary *DictionarySource::acquire(bool custom, const DictionaryStamp &stamp, bool *renewed) {
+ChengyinDictionary *DictionarySource::acquire(bool custom, const DictionaryStamp &stamp, bool *renewed) {
     AcquireSRWLockExclusive(&lock_);
     const ULONGLONG now = GetTickCount64();
     const bool admitted = due(custom, stamp, now) && load(custom, stamp, now);
     if (renewed)
         *renewed = admitted;
-    MyswyDictionary *result = snapshot_ ? myswy_dictionary_clone(snapshot_) : nullptr;
+    ChengyinDictionary *result = snapshot_ ? chengyin_dictionary_clone(snapshot_) : nullptr;
     if (result)
         ++users_;
     ReleaseSRWLockExclusive(&lock_);
@@ -47,9 +47,9 @@ bool DictionarySource::retry(bool custom, const DictionaryStamp &stamp) {
     return admitted;
 }
 
-void DictionarySource::release(MyswyDictionary *owned) {
-    myswy_dictionary_free(owned);
-    MyswyDictionary *retired = nullptr;
+void DictionarySource::release(ChengyinDictionary *owned) {
+    chengyin_dictionary_free(owned);
+    ChengyinDictionary *retired = nullptr;
     AcquireSRWLockExclusive(&lock_);
     // The shared snapshot is dropped once no activated service uses it, matching the
     // DLL-scoped ownership the service had before this type existed.
@@ -57,10 +57,10 @@ void DictionarySource::release(MyswyDictionary *owned) {
         retired = std::exchange(snapshot_, nullptr);
     ReleaseSRWLockExclusive(&lock_);
     if (retired)
-        myswy_dictionary_free(retired);
+        chengyin_dictionary_free(retired);
 }
 
-void DictionarySource::adopt(MyswyDictionary *owned) {
+void DictionarySource::adopt(ChengyinDictionary *owned) {
     if (!owned)
         return;
     AcquireSRWLockExclusive(&lock_);
@@ -94,11 +94,11 @@ bool DictionarySource::due(bool custom, const DictionaryStamp &stamp, ULONGLONG 
 }
 
 bool DictionarySource::load(bool custom, const DictionaryStamp &stamp, ULONGLONG now) {
-    MyswyDictionary *next = custom && loader_ ? loader_() : (fallback_ ? fallback_() : nullptr);
+    ChengyinDictionary *next = custom && loader_ ? loader_() : (fallback_ ? fallback_() : nullptr);
     if (next) {
-        MyswyDictionary *old = std::exchange(snapshot_, next);
+        ChengyinDictionary *old = std::exchange(snapshot_, next);
         if (old)
-            myswy_dictionary_free(old);
+            chengyin_dictionary_free(old);
         // Only an admitted target advances what counts as loaded. Because a failed
         // custom load never gets here, an unchanged file stays retryable instead of
         // being treated as already loaded (review R09).

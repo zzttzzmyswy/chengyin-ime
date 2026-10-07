@@ -16,18 +16,18 @@ Windows, Linux X11, Linux Wayland, and Android.
 
 - Keep core logic independent of platform I/O and GUI libraries. Share immutable
   dictionaries, never mutable composition sessions between input contexts.
-- Preserve the C ABI ownership and event/commit contracts in `include/myswy_ime.h`.
+- Preserve the C ABI ownership and event/commit contracts in `include/chengyin_ime.h`.
 - Measure performance; report hardware, corpus, scope and percentiles. Keep core
   microbenchmarks separate from platform/UI latency and input quality.
 - Native compilation, headless tests and real desktop/device validation are
   distinct evidence. Update status honestly after each usable development slice.
 - Run relevant checks (`scripts/check.sh` for Linux core/ABI; CMake/CTest for
   Fcitx changes; Windows CMake/CTest for TSF changes). Do not make tests depend on a user's real input history.
-- Current repo: https://github.com/zzttzzmyswy/myswyIm, main branch. Read
+- Current repo: https://github.com/zzttzzmyswy/chengyin-ime, main branch. Read
   docs/WINDOWS_TASKLIST.md and docs/DEVELOPMENT.md for historical preview7: classic native
   tabs, embedded input tests, configuration notifications, language-bar mode and
   Chinese punctuation. Keep the standalone test app removed. The settings
-  executable is myswy_settings.exe; version.json defines preview23; read docs/WINDOWS_PREVIEW23_TASKLIST.md. Environment
+  executable is chengyin_settings.exe; version.json defines preview23; read docs/WINDOWS_PREVIEW23_TASKLIST.md. Environment
   reproduction is in docs/ENVIRONMENT.md.
 - Previous delivery: preview7 MSVC installer from commit b14116e, GitHub Actions run
   37212769471. All six jobs passed, including six native Windows CTests and the

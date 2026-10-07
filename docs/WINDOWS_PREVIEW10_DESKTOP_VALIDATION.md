@@ -5,9 +5,9 @@
 
 ## 安装与实际加载
 
-- 卸载注册显示 0.1.0-preview10；COM InprocServer32 指向 `C:\Program Files\MyswyIME\0.1.0-preview10\myswy_tsf.dll`。
+- 卸载注册显示 0.1.0-preview10；COM InprocServer32 指向 `C:\Program Files\ChengyinIME\0.1.0-preview10\chengyin_tsf.dll`。
 - 安装版 probe 的完整文件清单校验、DLL 导出/COM 工厂/系统 TSF 探测通过。
-- 安装后的 myswy_tsf.dll、myswy_settings.exe、myswy_probe.exe 与本地交付构建 SHA-256 一致。
+- 安装后的 chengyin_tsf.dll、chengyin_settings.exe、chengyin_probe.exe 与本地交付构建 SHA-256 一致。
 - 独立 Notepad3 测试窗口进程 11324 确认实际加载 preview10 DLL。
 - 用户原有两个 Notepad3 仍加载 preview7；以前的独立测试窗口仍加载 preview8。没有关闭或编辑这些窗口。
   已加载的 DLL 不会因安装自动替换；对应应用重新打开后才加载新版本。

@@ -1,4 +1,4 @@
-use myswy_core::*;
+use chengyin_core::*;
 use std::sync::Arc;
 fn input(s: &mut Session, text: &str) {
     for c in text.chars() {

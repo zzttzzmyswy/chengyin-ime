@@ -3,9 +3,9 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-#include "myswy_ime.h"
+#include "chengyin_ime.h"
 #include "skin.h"
-namespace myswy {
+namespace chengyin {
 struct Preferences {
     std::wstring font = L"Microsoft YaHei UI";
     int fontSize = 18;
@@ -34,8 +34,8 @@ Preferences loadPreferences(const std::wstring &);
 bool tryLoadPreferences(const std::wstring &, Preferences &);
 bool savePreferences(const std::wstring &, const Preferences &);
 bool validPreferences(const Preferences &);
-MyswyProfile *loadProfile(const std::wstring &); // missing=>empty, damaged=>NULL
-bool saveProfile(const std::wstring &, const MyswyProfile *);
+ChengyinProfile *loadProfile(const std::wstring &); // missing=>empty, damaged=>NULL
+bool saveProfile(const std::wstring &, const ChengyinProfile *);
 bool importProfile(const std::wstring &source, const std::wstring &target);
 bool clearProfile(const std::wstring &);
 // Shared only while writers/settings are alive; no key-thread file/registry I/O.

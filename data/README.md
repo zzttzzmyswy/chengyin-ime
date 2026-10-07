@@ -9,7 +9,7 @@ Windows 预载 184,173 条字词，不需要下载。`demo.tsv` 是本项目手�
 | [jieba](https://github.com/fxsjy/jieba) | `67fa2e36e72f69d9134b8a1037b83fbb070b9775` | MIT | 补充 22,415 条常用词及频率 |
 | [THUOCL](https://github.com/thunlp/THUOCL) | `a30ce79d895d01ab5132a5c74c29703ff7efb4cc` | MIT | 70,276 条领域词（IT、医学、法律、地名、诗词等） |
 | [phrase-pinyin-data](https://github.com/mozillazg/phrase-pinyin-data) | `cee0ed6e6e4898580cafd2bd5e3723e20b214aa0` | MIT | 26,357 条自带读音的词 |
-| Myswy 自写搭配 | 本仓库 `associations.tsv` | MIT | 离线搭配基线，不是训练语料或准确率评测 |
+| Chengyin 自写搭配 | 本仓库 `associations.tsv` | MIT | 离线搭配基线，不是训练语料或准确率评测 |
 
 每个来源的原始文件、完整许可、修订和 SHA256 保存在 `sources/`。
 Rime 原始词典说明派生于 Android 开源 PinyinIME，保留原始头部和署名。
@@ -43,8 +43,8 @@ DF（那是另一语料的文档频次，与本词库词频不同尺度）。
 
 ```sh
 python3 scripts/import_daily.py
-cargo run --release -p myswy-cli -- --compile data/daily.tsv data/daily.mswydict
-cargo run --release -p myswy-cli -- --import 我的词库.scel 我的词库.mswydict
+cargo run --release -p chengyin-cli -- --compile data/daily.tsv data/daily.mswydict
+cargo run --release -p chengyin-cli -- --import 我的词库.scel 我的词库.mswydict
 ```
 
 当前写出二进制 v2，兼容读取 v1。v2 沿用连续数组、UTF-8 池和 CRC32，

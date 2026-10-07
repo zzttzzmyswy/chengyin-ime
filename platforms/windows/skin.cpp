@@ -13,7 +13,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-namespace myswy {
+namespace chengyin {
 namespace {
 struct Runtime {
     ULONG_PTR token = 0;

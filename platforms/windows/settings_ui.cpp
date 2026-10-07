@@ -15,7 +15,7 @@
 #include <sstream>
 #include <thread>
 #include <vector>
-namespace myswy {
+namespace chengyin {
 namespace {
 constexpr UINT kImported = WM_APP + 31;
 constexpr UINT kUpdateReady = WM_APP + 32, kUpdateDownloaded = WM_APP + 33;
@@ -136,7 +136,7 @@ HWND Settings::control(const wchar_t *kind, const wchar_t *text, DWORD style, in
                                 scaled(width), scaled(height), pane_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), instance_, nullptr);
     SendMessageW(hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(body_), FALSE);
     if (muted)
-        SetPropW(hwnd, L"Myswy.Muted", reinterpret_cast<HANDLE>(1));
+        SetPropW(hwnd, L"Chengyin.Muted", reinterpret_cast<HANDLE>(1));
     controls_.push_back({hwnd, x, y, width, height});
     return hwnd;
 }
@@ -415,11 +415,11 @@ void Settings::buildPage() {
         end();
         begin(L"学习数据");
         auto *profile = loadProfile(userFile(L"learning.profile"));
-        paragraph(profile ? (L"已保存 " + std::to_wstring(myswy_profile_count(profile)) +
+        paragraph(profile ? (L"已保存 " + std::to_wstring(chengyin_profile_count(profile)) +
                              L" 项选词偏好，最多 8,192 项。").c_str() :
                   L"学习文件无法读取。可以导入有效备份或清除数据。");
         if (profile)
-            myswy_profile_free(profile);
+            chengyin_profile_free(profile);
         buttons(502, L"备份…", 503, L"导入备份…", 504, L"清除学习数据");
         paragraph(L"各输入会话使用 4–16 项动态查询缓存，按复用情况调整，数据变化后自动失效。\n命中率按成功选词计算：历史词参与当前拼音匹配算一次机会，选中它才算命中。旧统计每 256 次选词衰减一半；至少 16 次机会且命中率不超过 10% 的未选中记录会遗忘，容量满时优先淘汰近期命中率低的记录。");
         paragraph(L"旧备份可导入，命中统计随新版备份保存。清除或导入后自动同步；词库、设置与学习数据在升级和卸载后保留。");
@@ -436,7 +436,7 @@ void Settings::buildPage() {
     case 6:
         begin(L"澄音输入法");
         paragraph(
-            L"版本：" MYSWY_VERSION L" · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
+            L"版本：" CHENGYIN_VERSION L" · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
         paragraph(
             L"代码开源协议：MIT License · Copyright 2026 Myswy IM contributors\n允许使用、修改和分发，须保留版权和许可声明；软件按现状提供。词库及运行库有各自许可，随安装包提供。");
         buttons(605, L"开源协议", 606, L"仓库链接", 607, L"发行说明");
@@ -705,15 +705,15 @@ std::wstring Settings::diagnostics() {
     LSTATUS status = RegGetValueW(HKEY_LOCAL_MACHINE,
                                   L"Software\\Classes\\CLSID\\{65C32A54-219A-4F0A-B44C-B963D7BA532F}\\InprocServer32", nullptr, RRF_RT_REG_SZ,
                                   nullptr, registered, &size);
-    text << L"澄音 " MYSWY_VERSION L"\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
+    text << L"澄音 " CHENGYIN_VERSION L"\r\nArchitecture: x64\r\nExecutable: " << executable << L"\r\nTSF server: " <<
          (status == ERROR_SUCCESS ? registered : L"not registered") << L"\r\nDPI: " << dpi_ << L"\r\nFont: " <<
          draft_.font << L" / " << draft_.fontSize << L"\r\nPage size: " << draft_.pageSize << L"\r\nLearning: " <<
          draft_.learning << L"\r\nAssociation: " << draft_.associations << L"\r\nCaret fallback: " <<
          draft_.caretFallback << L"\r\nShift switch: " << draft_.shiftSwitch << L"\r\n";
     auto *profile = loadProfile(userFile(L"learning.profile"));
-    text << L"Saved preferences: " << (profile ? myswy_profile_count(profile) : -1) << L"\r\n";
+    text << L"Saved preferences: " << (profile ? chengyin_profile_count(profile) : -1) << L"\r\n";
     if (profile)
-        myswy_profile_free(profile);
+        chengyin_profile_free(profile);
     return text.str();
 }
 void Settings::copyDiagnostics() {
@@ -924,7 +924,7 @@ void Settings::command(int id, int event) {
         ShellExecuteW(window_, L"open", kRepository, nullptr, nullptr, SW_SHOWNORMAL); return;
     }
     if (id == 607) {
-        MessageBoxW(window_, MYSWY_VERSION L" · 2026-10-06\n\n"
+        MessageBoxW(window_, CHENGYIN_VERSION L" · 2026-10-06\n\n"
                     L"• 保护准确词组前缀，支持句末吧/吗/呢/啊/呀；整句纠错不再逐词叠加预算。\n"
                     L"• 鲸鱼娘主题更换为“Q 版大肥鱼”，采用首页正面全身形象。\n"
                     L"• 准确 A不A、词语＋的优先，抑制纠错生成句扩张。\n"
@@ -971,7 +971,7 @@ void Settings::command(int id, int event) {
             auto *profile = loadProfile(userFile(L"learning.profile"));
             bool ok = profile && saveProfile(target, profile);
             if (profile)
-                myswy_profile_free(profile);
+                chengyin_profile_free(profile);
             notify(ok ? L"学习数据已备份。" : L"无法备份学习数据；原数据保留。", !ok);
         }
         return;
@@ -1041,7 +1041,7 @@ LRESULT Settings::message(HWND hwnd, UINT message, WPARAM w, LPARAM l, bool pane
                 SendMessageW(tabs, TCM_INSERTITEMW, i, reinterpret_cast<LPARAM>(&item));
             }
             SendMessageW(tabs, TCM_SETCURSEL, page_, 0);
-            pane_ = CreateWindowExW(WS_EX_CONTROLPARENT, L"Myswy.Settings.Content", L"",
+            pane_ = CreateWindowExW(WS_EX_CONTROLPARENT, L"Chengyin.Settings.Content", L"",
                                     WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL | WS_CLIPSIBLINGS, 0, 0, 0, 0, hwnd, nullptr, instance_,
                                     this);
             CreateWindowW(L"BUTTON", L"应用", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, 0, 0, 0, 0, hwnd,
@@ -1260,14 +1260,14 @@ LRESULT CALLBACK settingsProcedure(HWND hwnd, UINT message, WPARAM w, LPARAM l) 
     wchar_t name[64] {};
     GetClassNameW(hwnd, name, 64);
     return settings ? settings->message(hwnd, message, w, l, !std::wcscmp(name,
-                                        L"Myswy.Settings.Content")) : DefWindowProcW(hwnd, message, w, l);
+                                        L"Chengyin.Settings.Content")) : DefWindowProcW(hwnd, message, w, l);
 }
 }
 int runSettings(HINSTANCE instance, int show, ITfMessagePump *pump, ITfKeystrokeMgr *keys, int initialPage, bool automaticUpdates) {
     INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_TAB_CLASSES | ICC_STANDARD_CLASSES};
     InitCommonControlsEx(&controls);
     for (const wchar_t *name : {
-                L"Myswy.Settings", L"Myswy.Settings.Content"
+                L"Chengyin.Settings", L"Chengyin.Settings.Content"
             }) {
         WNDCLASSW cls{};
         cls.hInstance = instance;
@@ -1280,7 +1280,7 @@ int runSettings(HINSTANCE instance, int show, ITfMessagePump *pump, ITfKeystroke
     Settings settings(instance, std::clamp(initialPage, 0, 7));
     RECT work{};
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
-    HWND window = CreateWindowExW(0, L"Myswy.Settings", L"澄音输入法设置",
+    HWND window = CreateWindowExW(0, L"Chengyin.Settings", L"澄音输入法设置",
                                   WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT, std::min(860,
                                           static_cast<int>(work.right - work.left) - 24), std::min(760, static_cast<int>(work.bottom - work.top) - 24),
                                   nullptr, nullptr, instance, &settings);
@@ -1293,7 +1293,7 @@ int runSettings(HINSTANCE instance, int show, ITfMessagePump *pump, ITfKeystroke
     ShowWindow(window, show);
     // Select a real child after the window is shown. An implicit first-key
     // focus change can otherwise leave TSF attached to its floating context.
-    HWND pane = FindWindowExW(window, nullptr, L"Myswy.Settings.Content", nullptr);
+    HWND pane = FindWindowExW(window, nullptr, L"Chengyin.Settings.Content", nullptr);
     SetFocus(initialPage == 5 ? GetDlgItem(pane, 701) : GetDlgItem(window, 10));
     if (automaticUpdates && loadPreferences(userFile(L"preferences.ini")).autoUpdate)
         PostMessageW(window, WM_COMMAND, MAKEWPARAM(609, BN_CLICKED), 0);

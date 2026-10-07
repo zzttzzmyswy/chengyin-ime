@@ -12,9 +12,9 @@
 
 class Context final : public fcitx::InputContext {
 public:
-    explicit Context(fcitx::InputContextManager &manager) : InputContext(manager, "myswy-test") { created(); }
+    explicit Context(fcitx::InputContextManager &manager) : InputContext(manager, "chengyin-test") { created(); }
     ~Context() override { destroy(); }
-    const char *frontend() const override { return "myswy-test"; }
+    const char *frontend() const override { return "chengyin-test"; }
     void commitStringImpl(const std::string &value) override { committed += value; }
     void deleteSurroundingTextImpl(int, unsigned int) override {}
     void forwardKeyImpl(const fcitx::ForwardKeyEvent &) override {}
@@ -25,12 +25,12 @@ public:
 int main() {
     fcitx::InputContextManager manager;
     fcitx::EventLoop loop;
-    myswy::Engine engine(manager, loop);
+    chengyin::Engine engine(manager, loop);
     Context a(manager), b(manager);
     a.setCapabilityFlags(fcitx::CapabilityFlag::Preedit);
     a.focusIn();
     b.focusIn();
-    const fcitx::InputMethodEntry entry("myswy", "Myswy", "zh_CN", "myswy");
+    const fcitx::InputMethodEntry entry("chengyin", "Chengyin", "zh_CN", "chengyin");
     auto press = [&](Context &ic, fcitx::KeySym sym, fcitx::KeyStates mods = fcitx::KeyStates(), bool release = false) {
         fcitx::KeyEvent event(&ic, fcitx::Key(sym, mods), release);
         engine.keyEvent(entry, event);

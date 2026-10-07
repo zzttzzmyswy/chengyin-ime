@@ -1,13 +1,13 @@
 [package]
-name = "myswy-cli"
+name = "chengyin-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "myswy"
+name = "chengyin"
 path = "src/main.rs"
 
 [dependencies]
-myswy-core = { path = "../ime-core" }
+chengyin-core = { path = "../ime-core" }

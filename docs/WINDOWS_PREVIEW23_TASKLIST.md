@@ -17,7 +17,7 @@
 - [x] version.json preview23，生成头文件、模拟bump与动态CI包名通过。
 - [x] 本机安装包与全负载校验。
 - [x] 推送、远程CI与隔离安装生命周期。
-  源码 `2fc0fa3` 的 [Actions 37453639077](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37453639077) 六作业成功，含 Windows 隔离安装、升级、回滚、卸载。
+  源码 `2fc0fa3` 的 [Actions 37453639077](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37453639077) 六作业成功，含 Windows 隔离安装、升级、回滚、卸载。
 
 ## 交付
 

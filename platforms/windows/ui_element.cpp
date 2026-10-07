@@ -1,10 +1,10 @@
 #include "ui_element.h"
 #include <algorithm>
-namespace myswy {
-void CandidateElement::update(MyswySession *session, ITfContext *context, uint64_t generation) {
+namespace chengyin {
+void CandidateElement::update(ChengyinSession *session, ITfContext *context, uint64_t generation) {
     generation_ = generation;
-    count_ = static_cast<UINT>(std::clamp(myswy_session_candidate_count(session), 0, 9));
-    selected_ = static_cast<UINT>(std::max(0, myswy_session_selected(session)));
+    count_ = static_cast<UINT>(std::clamp(chengyin_session_candidate_count(session), 0, 9));
+    selected_ = static_cast<UINT>(std::max(0, chengyin_session_selected(session)));
     if (!count_)
         pageCount_ = 0;
     else if (!pageCount_ || pages_[pageCount_ - 1] >= count_) {
@@ -12,7 +12,7 @@ void CandidateElement::update(MyswySession *session, ITfContext *context, uint64
         pages_[0] = 0;
     }
     for (UINT i = 0; i < count_; ++i)
-        readText(session, MYSWY_TEXT_CANDIDATE, i, rows_[i]);
+        readText(session, CHENGYIN_TEXT_CANDIDATE, i, rows_[i]);
     Ptr<ITfDocumentMgr> incoming;
     if (context)
         context->GetDocumentMgr(incoming.put());

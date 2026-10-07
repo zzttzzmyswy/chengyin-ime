@@ -1,4 +1,4 @@
-use myswy_core::{demo_dictionary, Dictionary, Key, Modifiers, Profile, Session};
+use chengyin_core::{demo_dictionary, Dictionary, Key, Modifiers, Profile, Session};
 use std::hint::black_box;
 use std::sync::Arc;
 use std::time::Instant;
@@ -40,7 +40,7 @@ fn main() {
         "session capacity+inline={}bytes",
         real.estimated_heap_bytes() + std::mem::size_of::<Session>()
     );
-    let rounds = std::env::var("MYSWY_BENCH_ROUNDS")
+    let rounds = std::env::var("CHENGYIN_BENCH_ROUNDS")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
         .filter(|&n| n > 0)
@@ -52,7 +52,7 @@ fn main() {
         "woxihuanzhongwen",
         "woxihuanzhongwenwoxihuanzhongwenwoxihuanzhongwenwoxihuanzhongwen",
     ];
-    real.configure_matching(myswy_core::fuzzy::OPTIONS_MASK);
+    real.configure_matching(chengyin_core::fuzzy::OPTIONS_MASK);
     let mut corrected_samples = Vec::new();
     for _ in 0..rounds {
         for spelling in [
@@ -275,7 +275,7 @@ fn main() {
         },
     );
     real.reset();
-    real.configure_matching(myswy_core::fuzzy::OPTIONS_MASK);
+    real.configure_matching(chengyin_core::fuzzy::OPTIONS_MASK);
     let before = real.history_cache_stats();
     measure(
         "8192-record profile: repeated nihao with all matching flags (no acknowledgment/disk)",

@@ -1,4 +1,4 @@
-use myswy_core::{
+use chengyin_core::{
     fuzzy::{NEIGHBOR, OMIT, OPTIONS_MASK, PHONETIC_MASK, REPEAT, SWAP},
     Dictionary, Key, Modifiers, Profile, Session,
 };

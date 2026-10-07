@@ -6,9 +6,9 @@
 //! import and an enable-toggle re-merge, so the layout decision rests on
 //! measurement rather than on the 64 MiB file limit (review R12).
 //!
-//! Run: cargo run --release -p myswy-core --example library_report --locked
+//! Run: cargo run --release -p chengyin-core --example library_report --locked
 
-use myswy_core::Dictionary;
+use chengyin_core::Dictionary;
 use std::hint::black_box;
 use std::sync::Arc;
 use std::time::Instant;

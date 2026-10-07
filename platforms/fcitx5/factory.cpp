@@ -3,13 +3,13 @@
 #include <fcitx/addonmanager.h>
 #include <fcitx/instance.h>
 
-class MyswyFactory final : public fcitx::AddonFactory {
+class ChengyinFactory final : public fcitx::AddonFactory {
 public:
     fcitx::AddonInstance *create(fcitx::AddonManager *manager) override {
-        auto engine = std::make_unique<myswy::Engine>(manager->instance()->inputContextManager(),
+        auto engine = std::make_unique<chengyin::Engine>(manager->instance()->inputContextManager(),
                                                      manager->instance()->eventLoop());
         engine->reloadConfig();
         return engine.release();
     }
 };
-FCITX_ADDON_FACTORY(MyswyFactory)
+FCITX_ADDON_FACTORY(ChengyinFactory)

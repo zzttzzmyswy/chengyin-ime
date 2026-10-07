@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <vector>
 #include <cwchar>
-namespace myswy {
+namespace chengyin {
 namespace {
 HRESULT string(BSTR *out, const wchar_t *text) {
     if (!out)
@@ -191,7 +191,7 @@ void openSettings() {
     if (!GetModuleFileNameW(module, path, 32768))
         return;
     std::wstring file(path);
-    file = file.substr(0, file.find_last_of(L'\\') + 1) + L"myswy_settings.exe";
+    file = file.substr(0, file.find_last_of(L'\\') + 1) + L"chengyin_settings.exe";
     ShellExecuteW(nullptr, L"open", file.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 }

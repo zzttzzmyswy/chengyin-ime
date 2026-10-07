@@ -6,13 +6,13 @@
 //! licensing and metric definitions.
 //!
 //! Run:
-//!     cargo run --release -p myswy-core --example quality_report --locked
+//!     cargo run --release -p chengyin-core --example quality_report --locked
 //!
 //! Every row is replayed key by key through one fresh [`Session`] so rows cannot
 //! influence each other. Rows with a `train` column first replay the recorded
 //! host-confirmed selections, which is what builds the learning profile.
 
-use myswy_core::{Dictionary, Key, Modifiers, Profile, Session};
+use chengyin_core::{Dictionary, Key, Modifiers, Profile, Session};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 

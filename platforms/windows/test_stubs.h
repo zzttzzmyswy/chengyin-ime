@@ -1,7 +1,7 @@
 // Test-only defaults: unimplemented TSF operations must fail explicitly.
 #pragma once
 #include "common.h"
-namespace myswy::test {
+namespace chengyin::test {
 struct RangeStub : ITfRange {
     HRESULT STDMETHODCALLTYPE GetText(TfEditCookie , DWORD , WCHAR *, ULONG , ULONG *) override { return E_NOTIMPL; }
     HRESULT STDMETHODCALLTYPE SetText(TfEditCookie , DWORD , const WCHAR *, LONG) override { return E_NOTIMPL; }

@@ -1,5 +1,5 @@
 #pragma once
-namespace myswy {
+namespace chengyin {
 struct PunctuationState {
     bool single = false, quoted = false;
     static bool supported(char c) {

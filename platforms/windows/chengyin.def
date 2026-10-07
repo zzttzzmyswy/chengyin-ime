@@ -1,4 +1,4 @@
-LIBRARY myswy_tsf
+LIBRARY chengyin_tsf
 EXPORTS
     DllGetClassObject PRIVATE
     DllCanUnloadNow PRIVATE

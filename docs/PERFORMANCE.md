@@ -40,7 +40,7 @@ Win11 build26200 / Ryzen 9 9950X 16C/32T / Rust MSVC Release 与 MSVC 19.44 Rele
 硬件：13.24 开发机，Intel Core i9-10900X 10C/20T（3.70 GHz 基频），263 GiB 内存，
 Arch Linux，Rust 1.98 Release（thin LTO）。语料为仓库内置 87,540 条 `data/daily.mswydict`
 加自造 1–64 条两字词条；不读真实用户数据。命令
-`cargo run --release -p myswy-core --example library_report --locked`。
+`cargo run --release -p chengyin-core --example library_report --locked`。
 
 | 词库数 | 合并条目 | 合并 P50 µs | P95 µs | 最大 µs | RSS 增量 KiB | 堆估算 bytes |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -107,8 +107,8 @@ Win11 build26200 / Ryzen 9 9950X 16C/32T / Rust1.99 MSVC bench Release，100 轮
 ## 复现命令
 
 ```sh
-cargo test -p myswy-core --test allocations --locked
-cargo bench -p myswy-core --bench latency --locked
+cargo test -p chengyin-core --test allocations --locked
+cargo bench -p chengyin-core --bench latency --locked
 ```
 
 当前 benchmark 无外部框架：场景采样次数分别标注，整串和查询先 200 次预热；逐键回放覆盖短词、长句、60 字节连续输入、首拼混输及连续上下文，使用 `Instant` 与 `black_box`，排序报告 P50/P95/P99/max。逐键回放不另设预热，包含每轮重置后的首键；连续上下文在一轮内只重置一次。计时器成本包含在结果中，没做校准扣除；云主机调度和频率会影响数据，纳秒尾数不表示相应精度。基准记录与界面测量分开。
@@ -169,7 +169,7 @@ P99 2.484 µs。该生成词表没有中文语言分布，继续只用于索引�
 构建与平台回归结束后单独运行，没有同时运行编译或压缩任务。命令：
 
 ```sh
-MYSWY_BENCH_ROUNDS=500 cargo bench -p myswy-core --bench latency --locked
+CHENGYIN_BENCH_ROUNDS=500 cargo bench -p chengyin-core --bench latency --locked
 ```
 
 原始输出保存在开发目录 `build/benchmark-preview4-final.txt`。Rime + jieba 共
@@ -207,7 +207,7 @@ Space 上屏计算发生在连续回放逐键采样之外；联想构建并未�
 
 同一 Debian 13 / AMD EPYC 9V74、3 vCPU、Rust 1.99，release thin LTO。
 平台构建、测试与界面截图完成后单独测量：
-`MYSWY_BENCH_ROUNDS=500 cargo bench -p myswy-core --bench latency --locked`。
+`CHENGYIN_BENCH_ROUNDS=500 cargo bench -p chengyin-core --bench latency --locked`。
 原始输出 `build/benchmark-preview5-final.txt`。词库、哈希与 preview4 相同，
 87,540 条；内存加载 71.918 ms，词库堆估算 10,409,414 bytes。
 会话 inline+预留堆 65,142 bytes，不含共享 Dictionary/Profile、COM/GDI、

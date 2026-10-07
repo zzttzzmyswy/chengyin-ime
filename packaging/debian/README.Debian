@@ -1,4 +1,4 @@
-Myswy IM — development preview
+Chengyin IM — development preview
 ==============================
 
 This package installs only the Fcitx 5 module, its two registration files and
@@ -6,7 +6,7 @@ documentation. It does not change the active input method, restart Fcitx, edit
 environment variables or install files into a user's home directory.
 
 After installation, restart Fcitx using your desktop's normal service controls.
-In the Fcitx configuration tool, add "Myswy 全拼（原型）". Its configuration accepts
+In the Fcitx configuration tool, add "Chengyin 全拼（原型）". Its configuration accepts
 an absolute UTF-8 TSV dictionary path. An empty path selects the 98-entry demo.
 The file is a replacement vocabulary, not an overlay on the demo vocabulary.
 
@@ -17,8 +17,8 @@ Loading and old-dictionary reclamation run in a worker. A failed load keeps the
 current vocabulary and is not saved over the working configuration. Compositions
 already in progress finish with the old vocabulary before switching.
 
-Settings are saved in $XDG_CONFIG_HOME/fcitx5/conf/myswy.conf (normally
-~/.config/fcitx5/conf/myswy.conf), with a top-level DictionaryPath=/absolute/path.
+Settings are saved in $XDG_CONFIG_HOME/fcitx5/conf/chengyin.conf (normally
+~/.config/fcitx5/conf/chengyin.conf), with a top-level DictionaryPath=/absolute/path.
 After manually changing this file or replacing a TSV at the same path, use
 fcitx5-remote -r to reload configuration. There is no file watcher.
 
@@ -31,4 +31,4 @@ binary for all Debian/Ubuntu releases. No maintainer scripts are installed.
 Desktop X11/Wayland validation and production vocabulary/whole-sentence decoding
 are still pending. Keep an existing input method available during testing.
 
-Project: https://github.com/zzttzzmyswy/myswyIm
+Project: https://github.com/zzttzzmyswy/chengyin-ime

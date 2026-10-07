@@ -6,15 +6,15 @@
 #include <mutex>
 #include <thread>
 
-namespace myswy {
-inline constexpr wchar_t kConfigurationEpoch[] = L"Local\\MyswyIME.ConfigurationGeneration";
+namespace chengyin {
+inline constexpr wchar_t kConfigurationEpoch[] = L"Local\\ChengyinIME.ConfigurationGeneration";
 struct ConfigurationUpdate {
     ModuleLifetime lifetime;
     Preferences preferences;
     bool preferencesValid = false;
-    MyswyDictionary *dictionary = nullptr;
-    void (*releaseDictionary)(MyswyDictionary *) = nullptr;
-    MyswyProfile *profile = nullptr;
+    ChengyinDictionary *dictionary = nullptr;
+    void (*releaseDictionary)(ChengyinDictionary *) = nullptr;
+    ChengyinProfile *profile = nullptr;
     DWORD learningGeneration = 0;
     // Ordinary (non-destructive) learning revision. A newer revision replaces the
     // in-memory snapshot without invalidating anything the service already queued.
@@ -24,7 +24,7 @@ struct ConfigurationUpdate {
         if (dictionary && releaseDictionary)
             releaseDictionary(dictionary);
         if (profile)
-            myswy_profile_free(profile);
+            chengyin_profile_free(profile);
     }
 };
 // Shared notification plus a background preference-file stamp fallback. No

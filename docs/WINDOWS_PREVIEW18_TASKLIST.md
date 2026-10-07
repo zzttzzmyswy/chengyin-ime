@@ -17,7 +17,7 @@
 - [x] 77 项 Rust、fmt、Clippy -D warnings、扩展零分配/64 KiB、MSVC /W4 /WX C ABI。
 - [x] 最终 Windows 7 项 CTest（28.50 s）、UI fixture 与截图、最终安装包一致性检查。
 - [x] 本批百分位与同期间基线比较记录；长串性能预算尚未达标，见 PERFORMANCE/R11。
-- [x] 源码 ad84c9d 已推送；[Actions 37314439254](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37314439254) 六作业及隔离安装/升级/回滚/卸载通过。
+- [x] 源码 ad84c9d 已推送；[Actions 37314439254](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37314439254) 六作业及隔离安装/升级/回滚/卸载通过。
 
 待完成的学习快照同步、后台有界重试、词库失败重载、资源/质量/实机矩阵已明确排期，
 不把当前修复写成全项目所有问题已经消除。完整同字数词库多解析仍需来源音节证据及预算设计。

@@ -8,7 +8,7 @@
 - [x] 4. 重排设置内容并精简文案：明确默认模式/切换/标点/候选/词库/学习的关系；按文字实际高度布局，检查 DPI/滚动/控件遮挡。
 - [x] 5. 增加 TSF 语言栏状态按钮与澄音标识：中/英状态实时更新，点击切换，菜单打开设置；图标、描述和系统 compartments 同步。
 - [x] 6. 中文模式默认使用中文标点，英文模式直接透传：支持成对引号，拼音中的手工撇号与翻页键继续使用；敏感字段及快捷键不转换。
-- [x] 7. 完成后提交并推送到 https://github.com/zzttzzmyswy/myswyIm；更新 README、开发文档、任务状态和可复现的环境说明。
+- [x] 7. 完成后提交并推送到 https://github.com/zzttzzmyswy/chengyin-ime；更新 README、开发文档、任务状态和可复现的环境说明。
 - [x] 验证与交付：核心/Windows 回归、旧 EXE 升级/回滚/卸载、新布局截图核对、单 EXE 负载及许可检查。
 
 真实 Windows 11 任务栏呈现、Notepad3 及不同宿主接入保留实机验证边界。
@@ -30,6 +30,6 @@
 任务 5 的实现及内部协议回归已完成；Windows 11 外壳最终呈现仍待实机确认。
 
 源码已推送 `origin/main`。交付代码提交 `b14116e`，GitHub CI 的全部六个 job 通过，
-运行链接：https://github.com/zzttzzmyswy/myswyIm/actions/runs/37212769471 。
+运行链接：https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37212769471 。
 原生 CI 使用安装版本样本验证升级；交付的 MSVC EXE 从真实旧 preview6 GNU EXE
 升级另在隔离 Wine 验证，七阶段全通过，日志 `build/installer-preview7-msvc-from6.txt`。

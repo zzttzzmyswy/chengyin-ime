@@ -3,7 +3,7 @@
 #include <cwchar>
 #include <initializer_list>
 
-namespace myswy {
+namespace chengyin {
 HINSTANCE module = nullptr;
 LONG objects = 0;
 namespace {
@@ -138,29 +138,29 @@ HRESULT registerService(bool repair = false) {
 }
 }
 extern "C" BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
-    if (reason == DLL_PROCESS_ATTACH) myswy::module = instance;
+    if (reason == DLL_PROCESS_ATTACH) chengyin::module = instance;
     // No COM, core initialization, disk access or window work under the loader lock.
     return TRUE;
 }
 extern "C" HRESULT WINAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void** out) {
     if (!out) return E_POINTER;
     *out = nullptr;
-    if (clsid != myswy::kService) return CLASS_E_CLASSNOTAVAILABLE;
-    auto* factory = new (std::nothrow) myswy::Factory;
+    if (clsid != chengyin::kService) return CLASS_E_CLASSNOTAVAILABLE;
+    auto* factory = new (std::nothrow) chengyin::Factory;
     if (!factory) return E_OUTOFMEMORY;
     const HRESULT hr = factory->QueryInterface(iid, out);
     factory->Release(); return hr;
 }
-extern "C" HRESULT WINAPI DllCanUnloadNow() { return InterlockedCompareExchange(&myswy::objects, 0, 0) == 0 ? S_OK : S_FALSE; }
+extern "C" HRESULT WINAPI DllCanUnloadNow() { return InterlockedCompareExchange(&chengyin::objects, 0, 0) == 0 ? S_OK : S_FALSE; }
 extern "C" HRESULT WINAPI DllRegisterServer() {
-#ifdef MYSWY_TEST_REGISTRATION_FAILURE
+#ifdef CHENGYIN_TEST_REGISTRATION_FAILURE
     return E_FAIL;
 #else
-    return myswy::registerService();
+    return chengyin::registerService();
 #endif
 }
-extern "C" HRESULT WINAPI DllUnregisterServer() { return myswy::unregisterService(); }
+extern "C" HRESULT WINAPI DllUnregisterServer() { return chengyin::unregisterService(); }
 extern "C" HRESULT WINAPI DllInstall(BOOL install, LPCWSTR command) {
     if (!install || !command || std::wcscmp(command, L"repair") != 0) return E_INVALIDARG;
-    return myswy::registerService(true);
+    return chengyin::registerService(true);
 }

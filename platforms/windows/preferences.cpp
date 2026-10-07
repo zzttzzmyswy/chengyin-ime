@@ -7,10 +7,10 @@
 #include <map>
 #include <array>
 #include <bcrypt.h>
-namespace myswy {
+namespace chengyin {
 namespace {
 struct Lock {
-    HANDLE handle = CreateMutexW(nullptr, FALSE, L"Local\\MyswyIME.UserPreferences");
+    HANDLE handle = CreateMutexW(nullptr, FALSE, L"Local\\ChengyinIME.UserPreferences");
     bool held = false;
     Lock() {
         if (handle) {
@@ -72,7 +72,7 @@ bool atomicWrite(const std::wstring &path, const std::vector<uint8_t> &bytes) {
     return ok;
 }
 bool validPreferences(const Preferences &p) {
-    if (p.matchingOptions & ~MYSWY_MATCHING_MASK) return false;
+    if (p.matchingOptions & ~CHENGYIN_MATCHING_MASK) return false;
     if (!p.skinFile.empty() && (p.skinFile.size()>100 || p.skinFile.find_first_not_of(L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")!=std::wstring::npos
         || p.skinFile.find(L"..")!=std::wstring::npos)) return false;
     return p.fontSize >= 12 && p.fontSize <= 32 && ((p.theme >= 0 && p.theme <= 2) || (p.theme>=10 && p.theme<=13)) && p.layout >= 0 && p.layout <= 1
@@ -128,7 +128,7 @@ bool tryLoadPreferences(const std::wstring &path, Preferences &result) {
         if (value.empty() || value.find_first_not_of(L"0123456789")!=std::wstring::npos) return false;
         wchar_t *end=nullptr;
         const auto n=std::wcstoul(value.c_str(),&end,10);
-        if (!end || *end || n>MYSWY_MATCHING_MASK || (n & ~MYSWY_MATCHING_MASK)) return false;
+        if (!end || *end || n>CHENGYIN_MATCHING_MASK || (n & ~CHENGYIN_MATCHING_MASK)) return false;
         p.matchingOptions=static_cast<uint32_t>(n);
     }
     auto flag = [&](const wchar_t *key, bool & target) {
@@ -191,24 +191,24 @@ bool savePreferences(const std::wstring &path, const Preferences &p) {
         notifyConfiguration();
     return ok;
 }
-MyswyProfile *loadProfile(const std::wstring &path) {
+ChengyinProfile *loadProfile(const std::wstring &path) {
     if (path.empty())
-        return myswy_profile_new(nullptr, 0);
+        return chengyin_profile_new(nullptr, 0);
     if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
         const DWORD error = GetLastError();
         return error == ERROR_FILE_NOT_FOUND
-               || error == ERROR_PATH_NOT_FOUND ? myswy_profile_new(nullptr, 0) : nullptr;
+               || error == ERROR_PATH_NOT_FOUND ? chengyin_profile_new(nullptr, 0) : nullptr;
     }
     std::vector<uint8_t> bytes;
     return readSmallFile(path, bytes, 4 * 1024 * 1024)
-           && !bytes.empty() ? myswy_profile_new(bytes.data(), bytes.size()) : nullptr;
+           && !bytes.empty() ? chengyin_profile_new(bytes.data(), bytes.size()) : nullptr;
 }
-bool saveProfile(const std::wstring &path, const MyswyProfile *p) {
-    int size = myswy_profile_binary(p, nullptr, 0);
+bool saveProfile(const std::wstring &path, const ChengyinProfile *p) {
+    int size = chengyin_profile_binary(p, nullptr, 0);
     if (size <= 0 || size > 4 * 1024 * 1024)
         return false;
     std::vector<uint8_t> bytes(static_cast<size_t>(size));
-    return myswy_profile_binary(p, bytes.data(), bytes.size()) == size && atomicWrite(path, bytes);
+    return chengyin_profile_binary(p, bytes.data(), bytes.size()) == size && atomicWrite(path, bytes);
 }
 namespace {
 // One shared-mapping name per profile path. The prefix gives the object its
@@ -246,10 +246,10 @@ std::wstring profileMappingName(const wchar_t *prefix, const std::wstring &path)
 }
 }
 std::wstring profileEpochName(const std::wstring &path) {
-    return profileMappingName(L"Local\\MyswyIME.LearningGeneration.", path);
+    return profileMappingName(L"Local\\ChengyinIME.LearningGeneration.", path);
 }
 std::wstring profileRevisionName(const std::wstring &path) {
-    return profileMappingName(L"Local\\MyswyIME.LearningRevision.", path);
+    return profileMappingName(L"Local\\ChengyinIME.LearningRevision.", path);
 }
 LearningEpoch::LearningEpoch(const wchar_t *name) {
     if (!name || !*name) return;
@@ -272,10 +272,10 @@ void LearningEpoch::advance() {
         InterlockedIncrement(value_);
 }
 std::wstring configurationEpochName() {
-#ifdef MYSWY_ISOLATED_CONFIG_NOTIFICATIONS
-    return L"Local\\MyswyIME.TestConfigurationGeneration." + std::to_wstring(GetCurrentProcessId());
+#ifdef CHENGYIN_ISOLATED_CONFIG_NOTIFICATIONS
+    return L"Local\\ChengyinIME.TestConfigurationGeneration." + std::to_wstring(GetCurrentProcessId());
 #else
-    return L"Local\\MyswyIME.ConfigurationGeneration";
+    return L"Local\\ChengyinIME.ConfigurationGeneration";
 #endif
 }
 void notifyConfiguration() {
@@ -299,9 +299,9 @@ ProfileUpdate updateProfile(const std::wstring &path, const uint8_t *key, size_t
     auto *profile = loadProfile(path);
     if (!profile)
         return ProfileUpdate::retry;
-    const bool ok = myswy_profile_record_selection(profile, key, keySize, text, textSize, matchingFlags) == 0
+    const bool ok = chengyin_profile_record_selection(profile, key, keySize, text, textSize, matchingFlags) == 0
                     && saveProfile(path, profile);
-    myswy_profile_free(profile);
+    chengyin_profile_free(profile);
     if (!ok)
         return ProfileUpdate::retry;
     // Ordinary learning is published on the revision channel only. Advancing a
@@ -316,7 +316,7 @@ bool importProfile(const std::wstring &source, const std::wstring &target) {
     std::vector<uint8_t> bytes;
     if (!readSmallFile(source, bytes, 4 * 1024 * 1024) || bytes.empty())
         return false;
-    auto *profile = myswy_profile_new(bytes.data(), bytes.size());
+    auto *profile = chengyin_profile_new(bytes.data(), bytes.size());
     if (!profile)
         return false;
     Lock lock;
@@ -326,7 +326,7 @@ bool importProfile(const std::wstring &source, const std::wstring &target) {
         epoch.advance();
         notifyConfiguration();
     }
-    myswy_profile_free(profile);
+    chengyin_profile_free(profile);
     return ok;
 }
 bool clearProfile(const std::wstring &path) {

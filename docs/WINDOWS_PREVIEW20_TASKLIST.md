@@ -10,7 +10,7 @@
 - 完整单音节先按准确单字历史（最多两项）→准确单字→模糊单字历史（最多两项）→模糊/纠错单字查询，
   然后继续词语线及补全。惰性查询保证分页后仍保持线的顺序；同文本去重，历史记录不删除。
 - 重新判断前缀提交后的剩余拼音；单字选择消耗整个音节，原始拼音与标注协议不变。
-- 资源管理器实际运行进程仍加载 `C:\Program Files\MyswyIME\0.1.0-preview7\myswy_tsf.dll`。
+- 资源管理器实际运行进程仍加载 `C:\Program Files\ChengyinIME\0.1.0-preview7\chengyin_tsf.dll`。
   旧版在 WinUI 地址栏、搜索框输入 `n` 直接产生英文，无候选；经典列表控件曾触发旧候选。
   没有把旧 DLL 的现象当作 preview20 的实机结果，也没有用个人历史作为回归 fixture。
 - 发现当前接入明确拒绝 `TF_TMAE_SECUREMODE`，且注册没有对应能力类别。
@@ -50,7 +50,7 @@ SHA-256 `6b68ee3ad027b4e25f8957d194f49529d98c1e48ecb0210329f9a18eac643b41`，已
 `ui-test-preview20.txt`、`ui-preview20/`、`package-preview20.txt`、`delivery-preview20.json`。
 尝试启动该经过校验的安装器时，Windows 提权返回“操作已被用户取消”，安装没有完成。
 当前调用进程没有管理员权限，不重复触发 UAC；已准备好安装包，等待后续手动安装后继续实机验证。
-preview19 的 [Actions 37318044390](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37318044390)
+preview19 的 [Actions 37318044390](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37318044390)
 六作业及隔离安装生命周期已确认通过；不能算作 preview20 的 CI 证据。
 不能用模拟 TSF、旧 DLL 或声明能力类别替代新版真实控件验收。
 后续代码审查 B–E 排期保持，优先普通学习 revision 同步与 writer 有界重试。

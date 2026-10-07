@@ -3,19 +3,19 @@
 version = 3
 
 [[package]]
-name = "myswy-cli"
+name = "chengyin-cli"
 version = "0.1.0"
 dependencies = [
- "myswy-core",
+ "chengyin-core",
 ]
 
 [[package]]
-name = "myswy-core"
+name = "chengyin-core"
 version = "0.1.0"
 
 [[package]]
-name = "myswy-ffi"
+name = "chengyin-ffi"
 version = "0.1.0"
 dependencies = [
- "myswy-core",
+ "chengyin-core",
 ]

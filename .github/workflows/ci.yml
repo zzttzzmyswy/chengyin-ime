@@ -24,19 +24,19 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --locked
       - run: cargo build --release --workspace --locked
-      - run: cargo run --release -p myswy-cli -- --query nihao
+      - run: cargo run --release -p chengyin-cli -- --query nihao
       - if: runner.os == 'Linux'
         run: |
-          cc -std=c11 -Wall -Wextra -Werror -Iinclude tests/ffi_smoke.c -Ltarget/release -lmyswy_ime -Wl,-rpath,"$PWD/target/release" -o target/ffi-smoke
+          cc -std=c11 -Wall -Wextra -Werror -Iinclude tests/ffi_smoke.c -Ltarget/release -lchengyin_ime -Wl,-rpath,"$PWD/target/release" -o target/ffi-smoke
           target/ffi-smoke
       - if: runner.os == 'Windows'
         shell: cmd
         run: |
-          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "MYSWY_VS_PATH=%%i"
-          if not defined MYSWY_VS_PATH exit /b 1
-          call "%MYSWY_VS_PATH%\VC\Auxiliary\Build\vcvars64.bat"
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "CHENGYIN_VS_PATH=%%i"
+          if not defined CHENGYIN_VS_PATH exit /b 1
+          call "%CHENGYIN_VS_PATH%\VC\Auxiliary\Build\vcvars64.bat"
           if errorlevel 1 exit /b 1
-          cl /nologo /utf-8 /W4 /WX /Iinclude tests\ffi_smoke.c target\release\myswy_ime.dll.lib /Fe:target\release\ffi-smoke.exe
+          cl /nologo /utf-8 /W4 /WX /Iinclude tests\ffi_smoke.c target\release\chengyin_ime.dll.lib /Fe:target\release\ffi-smoke.exe
           if errorlevel 1 exit /b 1
           target\release\ffi-smoke.exe
   portable-core:
@@ -47,8 +47,8 @@ jobs:
         with:
           targets: aarch64-linux-android, aarch64-unknown-linux-gnu
       # These are compile checks; they are not NDK builds or device tests.
-      - run: cargo check -p myswy-core -p myswy-ffi --target aarch64-linux-android --locked
-      - run: cargo check -p myswy-core -p myswy-ffi --target aarch64-unknown-linux-gnu --locked
+      - run: cargo check -p chengyin-core -p chengyin-ffi --target aarch64-linux-android --locked
+      - run: cargo check -p chengyin-core -p chengyin-ffi --target aarch64-unknown-linux-gnu --locked
   windows-tsf:
     runs-on: windows-2022
     steps:
@@ -80,7 +80,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: sudo apt-get update && sudo apt-get install -y libfcitx5core-dev extra-cmake-modules cmake ninja-build dpkg-dev python3
-      - run: cargo build --release -p myswy-ffi --locked
+      - run: cargo build --release -p chengyin-ffi --locked
       - run: cmake -S platforms/fcitx5 -B build/fcitx5 -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
       - run: cmake --build build/fcitx5
       - run: ctest --test-dir build/fcitx5 --output-on-failure
@@ -89,7 +89,7 @@ jobs:
       - run: python3 scripts/test_deb.py build/packages/*.deb
       - uses: actions/upload-artifact@v4
         with:
-          name: myswy-ubuntu-24.04-amd64-preview
+          name: chengyin-ubuntu-24.04-amd64-preview
           path: build/packages/*.deb
       - run: cmake -S platforms/fcitx5 -B build/fcitx5-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
       - run: cmake --build build/fcitx5-asan

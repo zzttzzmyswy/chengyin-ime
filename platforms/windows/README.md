@@ -50,12 +50,12 @@ PNG 最大 1024 × 1024 / 2 MiB，皮肤包最大 3 MiB；文字对比度需达�
 
 开始菜单提供设置、使用说明和卸载入口；输入测试位于设置的“输入测试”页；也可通过 Windows 的
 “已安装的应用”卸载。程序不会自动注销或重启。升级时占用的旧 DLL 安排
-下次重启删除，未知文件和 `%LocalAppData%\MyswyIME` 中的用户词库、设置和学习数据保留。
+下次重启删除，未知文件和 `%LocalAppData%\ChengyinIME` 中的用户词库、设置和学习数据保留。
 
 显示名称已改为“澄音输入法”；既有配置和安装目录继续沿用原内部标识，
 从旧版本升级会保留数据并替换开始菜单名称。
 
-安装在 `%ProgramFiles%\MyswyIME\版本`，校验完新文件才切换注册。
+安装在 `%ProgramFiles%\ChengyinIME\版本`，校验完新文件才切换注册。
 支持同版修复、升级失败恢复旧注册、preview1 ZIP 标准布局迁移；拒绝降级、
 同版本不同内容、外来注册和重解析点安装目录。已有应用可能继续加载旧服务，
 升级后注销或重启使其释放。当前 EXE 未签名，包内 BUILD_INFO.json 和
@@ -138,7 +138,7 @@ PgUp/PgDn 继续切换核心候选页。陈旧/重复提交在写锁中校验并
 当前应用的新选词立即影响自身排序；其他应用的普通选词同步仍在重新激活或配置更新时读取。
 关闭学习停止记录与个性化排序，已有数据保留；提供
 备份、校验后导入和清除（`.chengyinuser`，兼容旧 `.myswyuser`）。`preferences.ini` 与 `learning.profile` 位于
-`%LocalAppData%\MyswyIME`，升级/卸载均保留；文件未加密，备份可能包含敏感词句。
+`%LocalAppData%\ChengyinIME`，升级/卸载均保留；文件未加密，备份可能包含敏感词句。
 
 ## 词库与导入
 
@@ -162,7 +162,7 @@ phrase-pinyin-data 的 26,357 条带读音词（均为 MIT）。固定修订、�
 成功后自动通知现有服务后台加载。活跃组合保留自己的只读词库快照，完成后
 使用新词库；输入线程不逐键读取文件。首次激活仍读取初始配置与词库。
 重新加载失败时保留可用快照；进程首次加载无效文件则回退内置词库。
-词库存在 `%LocalAppData%\MyswyIME\dictionary.custom`，升级和卸载均保留。
+词库存在 `%LocalAppData%\ChengyinIME\dictionary.custom`，升级和卸载均保留。
 
 密码、私密、PIN、禁用和只读上下文绕过中文输入，不用于联想或学习。当前
 上下文和临时偏好不会写盘；持久学习仅保存上述选词偏好，不读取应用周边文本、不联网。
@@ -191,7 +191,7 @@ phrase-pinyin-data 的 26,357 条带读音词（均为 MIT）。固定修订、�
 本机标准 Edit/RichEdit 已复测通过，Notepad3 与跨应用矩阵仍待验证。
 
 如有问题，记录系统/应用版本、操作序列和实际结果。构建诊断在安装目录
-BUILD_INFO.json；`myswy_probe.exe 绝对路径\myswy_tsf.dll --registered` 只读检查
+BUILD_INFO.json；`chengyin_probe.exe 绝对路径\chengyin_tsf.dll --registered` 只读检查
 导出、COM 和注册，不收集输入历史。
 
 ## 自动化及开发
@@ -207,7 +207,7 @@ Wine 10 + Xvfb 的六个 CTest 覆盖原子词库导入、按键/UTF-16/候选�
 
 安装器回归覆盖安装/修复/升级/回滚/卸载、文件校验、外来注册、占用 DLL、
 词库/设置/学习文件保留和旧 ZIP 布局迁移。原生 MSVC 构建、七个 CTest 和隔离安装回归
-由 [GitHub Actions](https://github.com/zzttzzmyswy/myswyIm/actions/workflows/ci.yml) 执行，
+由 [GitHub Actions](https://github.com/zzttzzmyswy/chengyin-ime/actions/workflows/ci.yml) 执行，
 每次提交的实际结果见对应运行记录及源码 `docs/STATUS.md`。
 只有 x64 DLL；ARM64、32 位应用、安全模式、实际 WinUI/UWP、RDP、管理员应用
 仍待专门验收。核心零分配和 Linux 微基准不等同于 Windows 端到端延迟。

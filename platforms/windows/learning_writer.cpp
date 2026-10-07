@@ -2,7 +2,7 @@
 #include "preferences.h"
 #include <algorithm>
 #include <chrono>
-namespace myswy {
+namespace chengyin {
 LearningWriter::LearningWriter(std::wstring path, LearningRetryPolicy policy) : path_(std::move(path)),
     epoch_(profileEpochName(path_).c_str()), policy_(policy), thread_([this] {
     run();
