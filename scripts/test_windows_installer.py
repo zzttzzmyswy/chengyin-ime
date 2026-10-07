@@ -306,12 +306,16 @@ def main() -> None:
             # entry and an ASCII/CRLF marker. No PowerShell runtime is needed.
             legacy = legacy_product / "0.1.0-preview1"
             legacy.mkdir(parents=True)
-            for name in ("myswy_tsf.dll", "myswy_probe.exe", "myswy_testpad.exe", "README.md", "LICENSE",
-                         "THIRD_PARTY.md", "RUNTIME_LICENSES.zip", "BUILD_INFO.json"):
-                source = stage / ("chengyin_settings.exe" if name == "myswy_testpad.exe" else name)
-                if name == "myswy_tsf.dll":
-                    source = args.build_dir / ("Release/chengyin_tsf.dll" if (args.build_dir / "Release").exists() else "chengyin_tsf.dll")
-                shutil.copy2(source, legacy / name)
+            release = "Release/" if (args.build_dir / "Release").exists() else ""
+            layout = {
+                "myswy_tsf.dll": args.build_dir / (release + "chengyin_tsf.dll"),
+                "myswy_probe.exe": stage / "chengyin_probe.exe",
+                "myswy_testpad.exe": stage / "chengyin_settings.exe",
+            }
+            for destination, source in layout.items():
+                shutil.copy2(source, legacy / destination)
+            for name in ("README.md", "LICENSE", "THIRD_PARTY.md", "RUNTIME_LICENSES.zip", "BUILD_INFO.json"):
+                shutil.copy2(stage / name, legacy / name)
             (legacy / "myswy-install.txt").write_bytes(b"0.1.0-preview1\r\n")
             (legacy / "BUILD_INFO.json").write_text(json.dumps(dict(info, version="0.1.0-preview1")), encoding="utf-8")
             for name in ("Install.ps1", "Uninstall.ps1", "SHA256SUMS.json"):
