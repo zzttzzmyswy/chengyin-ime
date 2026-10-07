@@ -27,10 +27,13 @@ set(MYSWY_RUST_LIBRARY "${MYSWY_ROOT}/target/release/libmyswy_ime.a" CACHE FILEP
 if(NOT EXISTS "${MYSWY_RUST_LIBRARY}")
   message(FATAL_ERROR "Run cargo build --release -p myswy-ffi before CMake")
 endif()
-add_library(myswy-engine STATIC engine.cpp dictionary_loader.cpp)
+# dictionary_loader has no Fcitx dependency; it lives in platforms/common so the
+# IBus engine reuses the same loading semantics.
+set(MYSWY_COMMON_DIR "${MYSWY_ROOT}/platforms/common")
+add_library(myswy-engine STATIC engine.cpp "${MYSWY_COMMON_DIR}/dictionary_loader.cpp")
 set_target_properties(myswy-engine PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_features(myswy-engine PUBLIC cxx_std_17)
-target_include_directories(myswy-engine PUBLIC "${MYSWY_ROOT}/include" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(myswy-engine PUBLIC "${MYSWY_ROOT}/include" "${MYSWY_COMMON_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_definitions(myswy-engine PRIVATE MYSWY_FCITX_VERSION=${MYSWY_FCITX_VERSION})
 target_compile_options(myswy-engine PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(myswy-engine PUBLIC Fcitx5::Core Fcitx5::Config "${MYSWY_RUST_LIBRARY}" Threads::Threads ${CMAKE_DL_LIBS} m)
