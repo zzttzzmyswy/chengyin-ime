@@ -1,11 +1,33 @@
 #include "engine.h"
 #include <array>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fcntl.h>
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
+#include <utility>
+#include <vector>
+
+#ifndef MYSWY_FCITX_VERSION
+#error "MYSWY_FCITX_VERSION must be provided by CMake from Fcitx5Core_VERSION"
+#endif
+
+// Fcitx 5.1.13 introduced StandardPaths and deprecated StandardPath; the
+// headers themselves export no version macro, so the numeric value comes from
+// CMake. The two APIs are not interchangeable: standardpaths.h only exists from
+// 5.1.13 on, and iniparser.h stopped pulling in standardpath.h at the same
+// point, which is what made this file fail to compile on newer distributions.
+#define MYSWY_FCITX_VERSION_AT_LEAST(major, minor, patch) \
+    (MYSWY_FCITX_VERSION >= ((major) * 10000 + (minor) * 100 + (patch)))
+
+#if MYSWY_FCITX_VERSION_AT_LEAST(5, 1, 13)
+#include <fcitx-utils/standardpaths.h>
+#else
+#include <fcitx-utils/standardpath.h>
+#endif
+
 #include <fcitx-config/iniparser.h>
 #include <fcitx-utils/capabilityflags.h>
 #include <fcitx-utils/key.h>
@@ -18,15 +40,78 @@
 
 namespace myswy {
 namespace {
+// An unwritten temporary next to conf/myswy.conf plus the final path it belongs
+// at. Neither framework helper can be used to publish it: StandardPathTempFile's
+// destructor (<=5.1.12) ignores fsync and rename failures, and StandardPaths::
+// safeSave() (>=5.1.13) ignores rename failures. saveConfig() checks every step,
+// so this only has to create the file and hand over the descriptor.
+class UserTempFile {
+public:
+    UserTempFile() = default;
+    ~UserTempFile() { discard(); }
+    UserTempFile(const UserTempFile &) = delete;
+    UserTempFile &operator=(const UserTempFile &) = delete;
+
+    bool open(const char *pathOrig) {
+#if MYSWY_FCITX_VERSION_AT_LEAST(5, 1, 13)
+        // StandardPaths exposes no equivalent of the old openUserTemp().
+        const auto directory = fcitx::StandardPaths::global().userDirectory(fcitx::StandardPathsType::PkgConfig);
+        if (directory.empty()) { return false; }
+        const auto target = directory / pathOrig;
+        std::error_code createError;
+        std::filesystem::create_directories(target.parent_path(), createError);
+        path_ = target.string();
+        tempPath_ = path_ + "_XXXXXX";
+        std::vector<char> buffer(tempPath_.begin(), tempPath_.end());
+        buffer.push_back('\0');
+        fd_ = ::mkstemp(buffer.data());
+        if (fd_ < 0) { return false; }
+        tempPath_ = buffer.data(); // mkstemp replaced the X's in place
+#else
+        auto file = fcitx::StandardPath::global().openUserTemp(fcitx::StandardPath::Type::PkgConfig, pathOrig);
+        if (!file.isValid()) { return false; }
+        fd_ = file.release(); // take the descriptor so the framework cannot rename
+        path_ = file.path();
+        tempPath_ = file.tempPath();
+#endif
+        owned_ = true;
+        return true;
+    }
+
+    int fd() const { return fd_; }
+    const std::string &path() const { return path_; }
+    const std::string &tempPath() const { return tempPath_; }
+
+    // Hand the descriptor to the caller, which now closes it and replaces the
+    // target itself; the temporary is no longer cleaned up here.
+    int release() {
+        owned_ = false;
+        return std::exchange(fd_, -1);
+    }
+
+private:
+    void discard() {
+        if (fd_ >= 0) {
+            ::close(fd_);
+            fd_ = -1;
+        }
+        if (owned_) {
+            ::unlink(tempPath_.c_str());
+            owned_ = false;
+        }
+        path_.clear();
+        tempPath_.clear();
+    }
+
+    int fd_ = -1;
+    bool owned_ = false;
+    std::string path_;
+    std::string tempPath_;
+};
+
 bool saveConfig(const EngineConfig &configuration) {
-    auto file = fcitx::StandardPath::global().openUserTemp(fcitx::StandardPath::Type::PkgConfig, "conf/myswy.conf");
-    if (!file.isValid()) { return false; }
-    // Fcitx 5.1.12 safeSaveAsIni reports only the write callback's success;
-    // its destructor ignores fsync/rename failures. Check each operation here.
-    struct DiscardTemp {
-        fcitx::StandardPathTempFile &file;
-        ~DiscardTemp() { file.removeTemp(); }
-    } discard{file};
+    UserTempFile file;
+    if (!file.open("conf/myswy.conf")) { return false; }
     try {
         fcitx::RawConfig raw;
         configuration.save(raw);
