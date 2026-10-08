@@ -23,12 +23,12 @@ license=('MIT')
 depends=('fcitx5' 'gcc-libs' 'glibc')
 # python is used in prepare() to re-derive pkgver from the single version source.
 makedepends=('cargo' 'cmake' 'python')
-# Source archive pinned by revision. Two downloads of this URL were byte-identical
-# (sha256 3c65d054...), so the checksum below is reproducible rather than a
+# Source archive pinned by revision. The archive is reproducible: two downloads
+# of this URL were byte-identical, so the checksum is verifiable rather than a
 # one-off capture.
-_commit=92d7b95db1750c199c81fc008e1e29ddd0cc557a
+_commit=765457f78478cfd2c6a14cf0b5abb5386ec73dc8
 source=("$pkgname-$pkgver.tar.gz::https://github.com/zzttzzmyswy/chengyin-ime/archive/$_commit.tar.gz")
-sha256sums=('3c65d05418b621e2d0962547a5f5ef02db5719a82c7192c22b9188833b77b1a6')
+sha256sums=('277331ea0b11e5862cdbb7f63a5ea8d327b8ccab23e0b6ce760e894b22a3aa22')
 
 prepare() {
   cd "$srcdir/chengyin-ime-$_commit"
@@ -53,6 +53,7 @@ build() {
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCHENGYIN_PACKAGED_DATA=ON \
+    -DCHENGYIN_DEBIAN_README=OFF \
     -DBUILD_TESTING=OFF
   cmake --build build/fcitx5 -j "$(nproc)"
 }
@@ -63,7 +64,8 @@ check() {
   cmake -S platforms/fcitx5 -B build/fcitx5-test \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr \
-    -DCHENGYIN_PACKAGED_DATA=ON
+    -DCHENGYIN_PACKAGED_DATA=ON \
+    -DCHENGYIN_DEBIAN_README=OFF
   cmake --build build/fcitx5-test -j "$(nproc)"
   ctest --test-dir build/fcitx5-test --output-on-failure
 }

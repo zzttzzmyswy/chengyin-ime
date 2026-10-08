@@ -68,7 +68,12 @@ install(TARGETS chengyin LIBRARY DESTINATION "${CHENGYIN_ADDON_DIR}")
 install(FILES chengyin-addon.conf DESTINATION "${CMAKE_INSTALL_DATADIR}/fcitx5/addon" RENAME chengyin.conf)
 install(FILES chengyin-inputmethod.conf DESTINATION "${CMAKE_INSTALL_DATADIR}/fcitx5/inputmethod" RENAME chengyin.conf)
 install(FILES "${CHENGYIN_ROOT}/LICENSE" DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/fcitx5-chengyin" RENAME copyright)
-install(FILES "${CHENGYIN_ROOT}/packaging/debian/README.Debian" DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/fcitx5-chengyin")
+# Debian's install instructions are distribution-specific, so non-Debian packagers
+# turn this off and ship their own README instead.
+set(CHENGYIN_DEBIAN_README ON CACHE BOOL "Install packaging/debian/README.Debian")
+if(CHENGYIN_DEBIAN_README)
+  install(FILES "${CHENGYIN_ROOT}/packaging/debian/README.Debian" DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/fcitx5-chengyin")
+endif()
 if(CHENGYIN_PACKAGED_DATA)
   install(FILES "${CHENGYIN_ROOT}/data/daily.tsv"
           DESTINATION "${CHENGYIN_LEXICON_DIR}")
