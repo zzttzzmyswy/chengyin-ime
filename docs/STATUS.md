@@ -1,6 +1,10 @@
 # 项目状态
 
-## Arch Linux 原生安装包与默认完整词库 I12（preview27，待合并）· 2026-10-08
+## Arch Linux 原生安装包与默认完整词库 I12（preview27，已发版）· 2026-10-08
+
+PR #20（squash `7414c4f`）已合并；[v0.1.0-preview27](https://github.com/zzttzzmyswy/chengyin-ime/releases/tag/v0.1.0-preview27) 已发布，含 Arch 原生包、PKGBUILD、README.arch、Windows x64 EXE、Ubuntu deb 与 SHA256SUMS。
+负责人亲自重跑核心检查、版本检查、源码 Fcitx CTest 3/3、固定源码归档 makepkg、隔离 pacman 生命周期及校验和，均通过；交付包在 bubblewrap 内真实加载 Fcitx 插件，词库存在/缺失正负对照通过。
+Windows/deb 资产来自 CI 37735992088（源码 `1cb9d3d`，六项检查通过），Arch 源码 pin 为 `de47825`；产品源码与合并树一致。当前 deb 仍默认演示词库，本轮完整词库默认接入适用于 Arch 包及显式开启 `CHENGYIN_PACKAGED_DATA` 的构建。
 
 新增 `packaging/arch/PKGBUILD`：从固定 revision 的源码归档重建 `fcitx5-chengyin-0.1.0.preview27-1-x86_64.pkg.tar.zst`（原生 Arch x86_64，不转换 deb）。
 
