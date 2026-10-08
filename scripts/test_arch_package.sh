@@ -52,6 +52,18 @@ echo "=== reinstall ==="
 transaction -U "$package" >/dev/null
 pacman -Q fcitx5-chengyin
 
+echo "=== upgrade to a higher pkgver ==="
+# Repack the same payload with a higher version to exercise pacman's upgrade
+# path; building a second makepkg tree here would only re-test makepkg itself.
+upgrade=$(mktemp -d /tmp/chengyin-arch-upgrade-XXXXXX)/upgrade.pkg.tar.zst
+repack=$(mktemp -d /tmp/chengyin-arch-repack-XXXXXX)
+( cd "$repack" && bsdtar xf "$package" && sed -i 's/^pkgver = .*/pkgver = 0.1.0.preview99-1/' .PKGINFO && rm -f .MTREE \
+  && bsdtar --format=gnutar -cf - .PKGINFO usr | zstd -q -o "$upgrade" )
+transaction -U "$upgrade" >/dev/null
+pacman -Q fcitx5-chengyin | grep -q '0.1.0.preview99-1' || { echo "upgrade did not apply" >&2; exit 1; }
+echo "upgraded to $(pacman -Q fcitx5-chengyin)"
+rm -rf "$repack"
+
 echo "=== user data after reinstall ==="
 grep -q 'DictionaryPath=/root/private.tsv' "$root/root/.config/fcitx5/conf/chengyin.conf"
 grep -q "私有词" "$root/root/private.tsv"
