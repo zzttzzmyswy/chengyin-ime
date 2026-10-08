@@ -38,6 +38,14 @@ class Version:
         return f"{self.version}-preview{self.preview}"
 
     @property
+    def arch_pkgver(self) -> str:
+        # Arch's pkgver may not contain the hyphen used as the pkgver/pkgrel
+        # separator, so the same release text is written with dots. vercmp orders
+        # 0.1.0.preview26 < 0.1.0.preview27 monotonically, which is what pacman
+        # needs for upgrades.
+        return f"{self.version}.preview{self.preview}"
+
+    @property
     def numeric(self) -> str:
         # Four-field Windows product version: base version plus the preview number.
         return f"{self.version}.{self.preview}"
@@ -122,7 +130,8 @@ def verify_bump(current: Version) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--print", dest="show",
-                        choices=("tag", "version", "preview", "numeric", "future-tag", "package-name"))
+                        choices=("tag", "version", "preview", "numeric", "future-tag", "package-name",
+                                 "arch-pkgver"))
     parser.add_argument("--toolchain", default="msvc", choices=("msvc", "gnu"))
     parser.add_argument("--generate", action="store_true")
     parser.add_argument("--check", action="store_true")
@@ -149,7 +158,18 @@ def main() -> int:
             print(f"drift: Cargo.toml is {cargo_version} but version.json is {current.version}",
                   file=sys.stderr)
             return 1
-        print(f"OK: {current.tag} (Cargo {cargo_version}, header in sync)")
+        # The Arch package restates the version as a literal pkgver, because pacman
+        # cannot read version.json. Keep that one copy honest here so a stale pkgver
+        # cannot ship a mislabelled package.
+        arch = ROOT / "packaging/arch/PKGBUILD"
+        if arch.is_file():
+            match = re.search(r"^pkgver=(\S+)$", arch.read_text(encoding="utf-8"), re.M)
+            if not match or match.group(1) != current.arch_pkgver:
+                print(f"drift: packaging/arch/PKGBUILD pkgver is "
+                      f"{match.group(1) if match else 'missing'} but version.json implies "
+                      f"{current.arch_pkgver}", file=sys.stderr)
+                return 1
+        print(f"OK: {current.tag} (Cargo {cargo_version}, header and Arch pkgver in sync)")
         return 0
     if args.show == "package-name":
         print(current.package_name(args.toolchain))
@@ -157,6 +177,7 @@ def main() -> int:
         print({
             "tag": current.tag, "version": current.version, "preview": current.preview,
             "numeric": current.numeric, "future-tag": current.future_tag,
+            "arch-pkgver": current.arch_pkgver,
         }[args.show])
     else:
         parser.error("pass --generate, --check, --verify-bump or --print")

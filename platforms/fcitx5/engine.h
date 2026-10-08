@@ -24,7 +24,11 @@ public:
 class Engine final : public fcitx::InputMethodEngine {
 public:
     enum class ReloadState { Ready, Loading, Failed };
-    Engine(fcitx::InputContextManager &manager, fcitx::EventLoop &loop);
+    // defaultDictionaryPath is the lexicon a profile with no conf/chengyin.conf
+    // starts from, and the value the option resets to. Distribution builds pass
+    // their packaged lexicon here; it stays empty for plain source builds.
+    explicit Engine(fcitx::InputContextManager &manager, fcitx::EventLoop &loop,
+                    std::string defaultDictionaryPath = CHENGYIN_DEFAULT_DICTIONARY_PATH);
     ~Engine() override;
     void reloadConfig() override;
     const fcitx::Configuration *getConfig() const override { return &config_; }

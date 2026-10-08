@@ -1,5 +1,25 @@
 # 项目状态
 
+## Arch Linux 原生安装包与默认完整词库 I12（preview27，待合并）· 2026-10-08
+
+新增 `packaging/arch/PKGBUILD`：从固定 revision 的源码归档重建 `fcitx5-chengyin-0.1.0.preview27-1-x86_64.pkg.tar.zst`（原生 Arch x86_64，不转换 deb）。
+
+默认词库：`EngineConfig` 现在把「随包安装的完整词库路径」作为选项默认值，`reloadConfig()` 也以它为种子，因此从未写过
+`conf/chengyin.conf` 的新用户直接加载 `/usr/share/chengyin/daily.tsv`（184,173 条）；用户显式填写的路径仍优先，清空则
+回退 98 条演示词库；默认路径不可用时保留当前词典并在日志/提示报错，不静默换词库。该路径由 `CHENGYIN_PACKAGED_DATA`
+一个开关同时决定「安装什么」和「编译进去什么」，并有 CMake 断言防两者漂移。
+`CHENGYIN_DEFAULT_DICTIONARY_PATH` 必须是 `PUBLIC` 编译定义：默认实参声明在 `engine.h`，`factory.cpp` 才是插件的调用点，
+原先若是 `PRIVATE` 则插件仍编译成演示词库默认值（本轮实测到该缺陷并修正）。
+
+验证：`scripts/check.sh` 全绿；`python3 scripts/version.py --check` 全绿（新增 Arch `pkgver` 与 `version.json` 一致性检查）。
+Arch 容器（Fcitx 5.1.23 / GCC 16.2.1）内 `makepkg` 成功，`check()` 跑模块 CTest 3/3，生成
+`fcitx5-chengyin-0.1.0.preview27-1-x86_64.pkg.tar.zst`（2,553,313 B，SHA256 `6f6096b58749d63f309ab0dd49c81ec86f1b81c6b144336186f462cf57f41898`）；
+`pacman -Qip`/`-Qlp` 可读，30 个文件全部由包管理器跟踪，`ldd` 无 not found，二进制内无 runtime-local 路径。
+真实 Fcitx 守护进程（Xvfb）加载已安装插件，`fcitx5-diagnose` 列出 “Chengyin IME 0.1.0”，把 `daily.tsv` 移走后同一进程报
+`无法打开词典文件`，移回后无告警——正负对照成立。`scripts/test_arch_package.sh` 在隔离 `pacman --root` 中实测安装、
+重装、升级、卸载与清单，用户配置与自建词库均保留（有意 `-dd` 跳过依赖解析）。
+均为自动化结果；桌面实机兼容性（X11/Wayland、候选窗、多屏）待 MYSWY 验收，未声称已通过。
+
 ## 中英文切换光标提示 I11（preview26，已发版）· 2026-10-08
 
 PR #18（squash `c9ffaf5`）已合并到 `main`；release [v0.1.0-preview26](https://github.com/zzttzzmyswy/chengyin-ime/releases/tag/v0.1.0-preview26) 已发布（target `c9ffaf5`，含 Windows x64 安装 EXE、Fcitx5 deb 与 SHA256SUMS）。

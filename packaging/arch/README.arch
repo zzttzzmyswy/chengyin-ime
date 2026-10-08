@@ -1,0 +1,67 @@
+# 澄音输入法 Fcitx 5（Arch Linux x86_64）
+
+本包安装 Fcitx 5 插件、两条注册文件和完整词库；不修改当前输入法、不重启
+Fcitx、不写用户主目录、不设置全局环境变量。
+
+## 安装
+
+```sh
+sudo pacman -U ./fcitx5-chengyin-0.1.0.preview27-1-x86_64.pkg.tar.zst
+```
+
+已有旧版本时同一条命令即为升级；降级同样用 `sudo pacman -U` 指定旧包。
+
+## 启用
+
+1. 用桌面/发行版的正常方式重启 Fcitx 5（通常注销再登录，或
+   `systemctl --user restart fcitx5`）。
+2. 在 Fcitx 5 配置工具（`fcitx5-configtool`）中把**澄音输入法**
+   加入输入法列表，用框架的切换键切换过去。
+
+包不自动切换当前输入法。测试期间请保留一个可用输入法，以便随时切回。
+
+## 词库
+
+包内含完整词库（184,173 条），安装在 `/usr/share/chengyin/daily.tsv`，新配置
+（无 `~/.config/fcitx5/conf/chengyin.conf`）默认直接使用它，无需手动填路径，
+也无需自行编译或复制 TSV。
+
+- 自定义：在 Fcitx 配置工具中为澄音填写「词典 TSV 绝对路径」。自定义词典是
+  **替换**而非叠加。
+- 回退演示词典：把路径清空。
+- 路径不展开 `~` 或环境变量；不存在、目录/FIFO、超过 64 MiB、非法 UTF-8/TSV
+  或重复项都会被拒绝，此时保留当前词典并在日志/提示中报错，不会静默换成另一本。
+- 手工编辑配置或替换同路径 TSV 后，执行 `fcitx5-remote -r` 重新加载；当前不监视
+  文件变化。
+
+## 数据许可与署名
+
+完整词库由四个上游数据源离线构建，许可与固定修订随包安装在
+`/usr/share/chengyin/licenses/`（各源 `LICENSE`、`README`、`SOURCE.json`）：
+
+| 来源 | 许可 |
+| --- | --- |
+| Rime pinyin-simp | Apache-2.0 |
+| jieba | MIT |
+| THUOCL | MIT |
+| phrase-pinyin-data | MIT |
+
+代码许可是 MIT，见 `/usr/share/doc/fcitx5-chengyin/copyright`；它不替代词库许可。
+
+## 卸载
+
+在 Fcitx 配置工具中移除澄音，然后：
+
+```sh
+sudo pacman -Rns fcitx5-chengyin
+```
+
+用户配置（`~/.config/fcitx5/conf/chengyin.conf`）与自建词库不在删除范围内。
+
+## 已知限制
+
+- 仅提供 Fcitx 5；**不提供 IBus 即装即用**，也不设置全局 `GTK_IM_MODULE` /
+  `QT_IM_MODULE`（Wayland 下这类全局变量不是通用修复，见 `docs/COMPATIBILITY.md`）。
+- 桌面实机兼容性（X11/Wayland、候选窗定位、多屏、分数缩放）需实机验收，本包
+  只证明自动化构建与无头加载。
+- 本包按 `x86_64` 与构建时的 Fcitx 5.1.x 链接关系构建，不是跨发行版通用二进制。
