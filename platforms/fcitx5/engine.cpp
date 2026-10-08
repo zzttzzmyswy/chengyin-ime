@@ -184,8 +184,8 @@ uint32_t mapKey(fcitx::KeySym sym) {
 }
 } // namespace
 
-Engine::Engine(fcitx::InputContextManager &manager, fcitx::EventLoop &loop)
-    : manager_(manager), dictionary_(demoDictionary()),
+Engine::Engine(fcitx::InputContextManager &manager, fcitx::EventLoop &loop, std::string defaultDictionaryPath)
+    : manager_(manager), config_(std::move(defaultDictionaryPath)), dictionary_(demoDictionary()),
       factory_([this](fcitx::InputContext &) { return new State(dictionary_); }) {
     if (chengyin_ime_abi_version() != CHENGYIN_ABI_VERSION || !manager.registerProperty("chengyinState", &factory_)) {
         throw std::runtime_error("Chengyin IM ABI mismatch or duplicate property");
@@ -204,7 +204,9 @@ Engine::~Engine() {
 }
 
 void Engine::reloadConfig() {
-    EngineConfig config;
+    // Seed with this build's packaged lexicon, so a profile that never saved a
+    // configuration keeps it instead of resolving to the empty (demo) default.
+    EngineConfig config(config_.dictionaryPath.defaultValue());
     fcitx::readAsIni(config, "conf/chengyin.conf");
     loadDictionary(*config.dictionaryPath, false);
 }
