@@ -1,6 +1,6 @@
 # Fcitx 5 Linux 原型
 
-目标框架版本 ≥5.1，C++17；实际本地验证版本见 STATUS。发行包（deb/PKGBUILD）默认使用随包安装的完整词库，纯源码构建则回退到 98 条内置演示词条；两者都可在 Fcitx 配置工具里改成自定义 TSV。当前为开发预览，不要把它设为唯一的日常输入法。
+目标框架版本 ≥5.1，C++17；实际本地验证版本见 STATUS。Arch 包默认使用随包安装的完整词库；默认源码构建及当前 CI 的 deb 包仍使用 98 条内置演示词条，都可在 Fcitx 配置工具里改成自定义 TSV。当前为开发预览，不要把它设为唯一的日常输入法。
 
 ## 构建与暂存安装
 
@@ -69,8 +69,8 @@ python3 scripts/test_deb.py build/packages/*.deb
 原生 PKGBUILD 在 `packaging/arch/`，从固定 revision 的源码归档重建，不转换 deb：
 
 ```sh
-cd packaging/arch && makepkg
-bash scripts/test_arch_package.sh fcitx5-chengyin-*.pkg.tar.zst
+(cd packaging/arch && makepkg)
+sudo bash scripts/test_arch_package.sh packaging/arch/fcitx5-chengyin-0.1.0.preview27-1-x86_64.pkg.tar.zst
 ```
 
 `pkgver` 由 `scripts/version.py --print arch-pkgver` 派生（上游 tag 的连字符是 pkgver/pkgrel 分隔符，不能在 pkgver 里出现），`prepare()` 会重新推导并拒绝与 `version.json` 不一致的值。`makepkg` 的 `check()` 会用同一份源码跑模块自身的 CTest。
@@ -83,7 +83,7 @@ bash scripts/test_arch_package.sh fcitx5-chengyin-*.pkg.tar.zst
 
 - 每个 InputContext 独立会话；只读词典在同进程内共享。
 - 字母全拼、`'` 音节约束、空格/1–9 选词、上下键、退格、Esc、Enter 原文上屏。
-- 共享核心支持连续全拼/首拼/声母混输、前后翻页、中间编辑和分段选择；词条覆盖取决于配置的 TSV。发行包默认加载随包的 `data/daily.tsv`（184,173 条）；纯源码构建默认仍是 98 条示例，需自行指定 `data/daily.tsv`。
+- 共享核心支持连续全拼/首拼/声母混输、前后翻页、中间编辑和分段选择；词条覆盖取决于配置的 TSV。Arch 包及显式开启 `CHENGYIN_PACKAGED_DATA=ON` 的构建默认加载随包的 `daily.tsv`（184,173 条）；默认源码构建及当前 CI 的 deb 包仍是 98 条示例，需自行指定 `data/daily.tsv`。
 - 上屏后提供离线联想；Tab 或鼠标确认，普通空格/数字直接交给应用；重置和敏感输入清除上下文与临时偏好。
 - 具备 Preedit 能力的应用使用 client preedit，其余使用输入面板；候选位置交给框架。
 - 候选可鼠标选中；列表版本变化后旧回调不提交。
