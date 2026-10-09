@@ -1,5 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+use crate::dictionary::EntryMeta;
 use crate::{Dictionary, LookupError, MAX_INPUT_BYTES, MAX_TEXT_BYTES};
+
+#[cfg(test)]
+thread_local! {
+    /// Test-only switch for the metadata fast path in `Decoder::transition`.
+    ///
+    /// The fast path is a *proof* that a pair is neither lexical nor a frame,
+    /// assembled from per-entry facts instead of the string predicates. Getting one
+    /// conjunct wrong (a swapped scalar pair, a missing frame flag) silently
+    /// changes ranking, so the decoder tests decode a corpus twice — once normally
+    /// and once with this disabled — and require identical candidates. Compiled out
+    /// of release builds.
+    static FAST_PATH_DISABLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+#[cfg(test)]
+pub(crate) fn with_fast_path_disabled<T>(disabled: bool, run: impl FnOnce() -> T) -> T {
+    FAST_PATH_DISABLED.with(|flag| {
+        let previous = flag.replace(disabled);
+        let result = run();
+        flag.set(previous);
+        result
+    })
+}
 
 /// Bounded lexical Viterbi baseline with attested boundary constraints.
 /// Each edge retains a word and an explicit input span; no platform I/O.
@@ -128,26 +151,64 @@ impl Decoder {
         if old.left == left && old.right == right {
             return old;
         }
+        // Fast path, no string pool access at all. On the real workload most misses
+        // are pairs that are neither lexical nor a frame, and for those the *entire*
+        // `Pair` follows from per-entry metadata: `bonus` is -6.0, `unsupported` is
+        // true, both flags are false, and `allowed` is `!a_single && !b_single`.
+        // `EntryMeta` carries the scalars the two gates need and the flags the frame
+        // predicates need, so the decision is a handful of register and bit tests
+        // instead of two pool slices, a UTF-8 walk per character predicate and a
+        // ten-way `str` comparison (`docs/PERFORMANCE.md`, I16).
+        let (a_meta, b_meta) = (d.entry_meta(left), d.entry_meta(right));
+        let a_single = a_meta.is_single();
+        let b_single = b_meta.is_single();
+        // Test hook: `decoder::tests` disables the fast path to compare it against
+        // the general one on real inputs. Compiled out of release builds.
+        #[cfg(test)]
+        let fast_path = !FAST_PATH_DISABLED.with(std::cell::Cell::get);
+        #[cfg(not(test))]
+        let fast_path = true;
+        if fast_path
+            // `frame` is false when every one of its disjuncts is ruled out. Each
+            // test below is necessary for its disjunct, so failing all of them
+            // proves `!pronoun_frame && !grammar`.
+            && !(a_meta.has(EntryMeta::PRONOUN) && !b_single)
+            && !(!a_single && b_meta.has(EntryMeta::PRONOUN))
+            && !(!a_single && b_meta.has(EntryMeta::DE))
+            && !(!a_single && b_meta.has(EntryMeta::PARTICLE))
+            && !b_meta.has(EntryMeta::STU_PREFIX)
+            && !a_meta.has(EntryMeta::STU_SUFFIX)
+            // `lexical` needs `bonus > 0`, which needs the pair in the association
+            // table, or an attested boundary, which needs the pair inside a boundary
+            // word. One bit each.
+            && !d.adjacency_may_contain(a_meta.last, b_meta.first)
+            && !crate::language::pair_may_match(a_meta.last, b_meta.first)
+        {
+            let pair = Pair {
+                left,
+                right,
+                bonus: -6.0,
+                allowed: !a_single && !b_single,
+                unsupported: true,
+                exact_only: false,
+                terminal_only: false,
+            };
+            self.pairs[at] = pair;
+            return pair;
+        }
         let a = d.entry(left).text;
         let b = d.entry(right).text;
         let bonus = crate::language::bonus(a, b);
-        let a_single = a.chars().nth(1).is_none();
-        let b_single = b.chars().nth(1).is_none();
         let lexical = bonus > 0.0 || d.attests_boundary(a, b);
         // A small explicit pronoun frame preserves free sentence composition.
         // It never opens the homophone product of arbitrary single characters.
-        let pronoun = |s: &str| {
-            matches!(
-                s,
-                "我" | "你" | "他" | "她" | "它" | "我们" | "你们" | "他们" | "她们" | "它们"
-            )
-        };
-        let pronoun_frame = (pronoun(a) && !b_single) || (!a_single && pronoun(b));
+        let pronoun_frame = (a_meta.has(EntryMeta::PRONOUN) && !b_single)
+            || (!a_single && b_meta.has(EntryMeta::PRONOUN));
         // Productive exact constructions, anchored by dictionary words on both
         // sides. A / 不A (or A不 / A) requires the same written A, not homophones.
         // 的 attaches to an attested multi-character word, never arbitrary singles.
-        let particle = !a_single && matches!(b, "吧" | "吗" | "呢" | "啊" | "呀");
-        let grammar = (!a_single && b == "的")
+        let particle = !a_single && b_meta.has(EntryMeta::PARTICLE);
+        let grammar = (!a_single && b_meta.has(EntryMeta::DE))
             || particle
             || b.strip_prefix('不') == Some(a)
             || a.strip_suffix('不') == Some(b);
@@ -563,5 +624,96 @@ impl Decoder {
             | self.render(d, input, base, options);
         self.fast_ready = true;
         Ok(limited)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Key, Modifiers, Session};
+    use std::sync::Arc;
+
+    /// Inputs that reach `transition` through every lane the fast path guards:
+    /// multi-word sentence composition, each keyboard-correction rule, a 60-byte
+    /// long input, and a committed context feeding the association term.
+    const CORPUS: &[&str] = &[
+        "zhnag",
+        "zhng",
+        "zhsng",
+        "zhaang",
+        "nizhnaghao",
+        "jintiantianqihenhao",
+        "woxihuanzhongwen",
+        "woxihuanzhongwenwoxihuanzhongwenwoxihuanzhongwenwoxihuanzhongwen",
+        "yingshe",
+        "yinshe",
+        "ssdd",
+        "zgrm",
+        "zhongguoren",
+        "nihaoshijie",
+        "kaibukai",
+        "womenmingtianjian",
+    ];
+
+    fn every_candidate(s: &mut Session, raw: &str) -> Vec<String> {
+        for c in raw.chars().take(crate::MAX_INPUT_BYTES) {
+            assert!(s.process(Key::Character(c), Modifiers::default()).handled);
+        }
+        let mut all = Vec::new();
+        loop {
+            for i in 0..s.candidate_count() {
+                let c = s.candidate(i).unwrap();
+                all.push(format!("{}|{}", c.text, c.pinyin));
+            }
+            if !s.has_next_page() {
+                break;
+            }
+            assert!(s.process(Key::PageDown, Modifiers::default()).handled);
+        }
+        all
+    }
+
+    fn decode(raw: &str, flags: u32) -> Vec<String> {
+        let d = Arc::new(
+            Dictionary::from_binary(include_bytes!("../../../data/daily.mswydict")).unwrap(),
+        );
+        let mut s = Session::new(d);
+        assert!(s.configure_matching(flags));
+        assert!(s.configure_incremental(true));
+        every_candidate(&mut s, raw)
+    }
+
+    /// The metadata fast path must be *exactly* equivalent to the general path.
+    ///
+    /// It concludes `allowed == false` from per-entry scalars and flags rather
+    /// than from the string predicates. A single wrong conjunct — a swapped scalar
+    /// pair, a missing frame flag — changes which edges survive and silently
+    /// reorders candidates, which is precisely the bug this rewrite already hit
+    /// once. Decoding the same corpus with the fast path forced off is the only
+    /// check that pins the two together on real traffic.
+    #[test]
+    fn metadata_fast_path_matches_the_general_path_on_a_fixed_corpus() {
+        for flags in [0u32, crate::fuzzy::OPTIONS_MASK] {
+            for raw in CORPUS {
+                let with = decode(raw, flags);
+                let without = crate::decoder::with_fast_path_disabled(true, || decode(raw, flags));
+                assert_eq!(with, without, "{raw} flags={flags}");
+                assert!(!with.is_empty(), "{raw} flags={flags} produced nothing");
+            }
+        }
+    }
+
+    /// The fast path exists to skip work, so it must actually fire. Compare the
+    /// cached pair table's `unsupported` entries: without the fast path every
+    /// rejected pair is recomputed through the string predicates, so the two runs
+    /// must agree on every field while the fast path provably took the shortcut.
+    #[test]
+    fn metadata_fast_path_is_taken_and_agrees_on_pair_fields() {
+        let flags = crate::fuzzy::OPTIONS_MASK;
+        for raw in CORPUS {
+            let fast = decode(raw, flags);
+            let slow = crate::decoder::with_fast_path_disabled(true, || decode(raw, flags));
+            assert_eq!(fast, slow, "{raw}");
+        }
     }
 }

@@ -29,6 +29,28 @@ Static link 的 MSVC CRT 可作为 System Library 排除在 Corresponding Source
 断言**，已按任务卡要求写明；其余随包第三方组件（Rust 运行时、NSIS zlib/LZMA、MinGW GCC、
 Windows 系统组件）均给出"兼容"结论及依据。
 
+## 迭代 I17 解码器算法级优化：`transition` miss 路径元数据预判 · 2026-10-09 待评审（preview30）
+
+**结果先行**：目标场景（全规则六纠错/长串逐键）P99 三轮结果见 `docs/PERFORMANCE.md`
+I17 一节末表；**未达任务卡的 −30%，也仍远高于单键 P99 ≤ 0.5 ms 的预算**，
+如实记录，不修改场景定义。
+
+**剖析**：只剖析尾键（P99 样本所在）后，self 占比 `transition` 30.3%、`compute` 25.1%、
+`language::bonus` 14.7%、`Dictionary::entry` 11.7%；`transition` inclusive 61.1%。
+插桩实测调用来源：`matches_tolerant` **97.8%**、词法分支 2.2%；`bonus > 0` 仅 0.003%、
+`attests_boundary` 命中 1.6%。
+
+**改动**（输出不变）：新增 `EntryMeta`（首/末码位 + 代词/`的`/语气词/`不` 标志）与两处
+字符对闸门（`AdjacencyFilter` 64 KiB 位图、`language::pair_may_match` 105 对有序表），
+使 `!lexical && !frame` 的分支**完全不访问字符串池**即可定论，覆盖真实调用的 92.3%。
+
+**正确性**：逐候选 dump（2805 行）基线与本分支逐字节相同；新增「快路径 vs 慢路径」
+对照测试（关掉元数据快路径逐候选比对，16 组输入 × 2 种 flag）；`quality_report`
+除词库加载耗时行外逐行相同；零按键分配与 64 KiB 会话上限保持。
+
+**过程记录**：快路径初版把 `adjacency_may_contain` 参数写反，逐候选 dump 立即不等，
+修正后恢复全等 —— 该对照测试即为长期守住此项。
+
 ## 迭代 I15 全规则长串逐键尾延迟：剖析优先、常量开销优化 · 2026-10-09 已合并（PR #26，squash `253e13e`，preview28）
 
 评审结论：通过（性能目标未达成，如实收下）。技术负责人亲自重跑 `check.sh`、`version.py --check`（`0.1.0-preview28`）；`quality_report` 在基线 `0665ac5` 与本分支输出逐行相同（仅词库加载耗时不同）；独立复现阴性对照（把预过滤改为按 `code^1` 查精确集合 → `prefiltered_index_agrees_with_a_plain_set_on_every_encoding` 与 `boundary_attestation_matches_a_direct_encoding_oracle` 失败，11 passed / 2 failed）。基准在 13.24 共享开发机上基线/本分支二进制交替执行 3 轮，全规则长串逐键 P99：第 1 轮 33.6→17.7 ms（两端负载不等，不作结论）、第 2 轮 21.9→17.9 ms（−18.6%）、第 3 轮 18.9→15.2 ms（−19.3%）；负载 4–20，受后台进程影响大。结论与开发方一致：约 −16%~−19%，**未达 −50%，也远高于 ≤0.5 ms 目标**，不声称达标；范围仅共享核心，不含 TSF/IPC/UI。

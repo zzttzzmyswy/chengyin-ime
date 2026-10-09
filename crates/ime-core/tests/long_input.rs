@@ -246,3 +246,143 @@ fn page_walking_and_first_page_agree_across_a_fixed_corpus() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// I16: algorithmic decoder optimization (adjacency gate + association gate).
+//
+// I16 adds two *necessary-condition* prefilters so the decoder can skip work that
+// would only be discarded:
+//
+//   1. `Dictionary::attests_boundary` tests one resident bit over the scalar pair
+//      straddling the join before walking up to nine boundary-word encodings.
+//   2. `language::bonus` tests one resident bit over the continuation's first UTF-8
+//      byte before walking context suffixes and binary-searching groups.
+//
+// A bit is set for every real head/tail pair and every real continuation byte, so
+// neither gate can turn a `true` into a `false`. These tests pin the *observable*
+// candidate sequences they sit on, and pin the soundness property directly, so an
+// edit that makes either gate unsound fails loudly instead of silently.
+//
+// Expectations were dumped from the unoptimized binary (`324bc49`, preview28) with
+// every page's every candidate recorded as `text|pinyin`; the optimized dump is
+// byte-identical (see `docs/PERFORMANCE.md`, I16).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn i16_gated_paths_preserve_the_long_and_fuzzy_candidate_sequences() {
+    // One input per path the gates sit on: the adjacency gate is reachable only
+    // through multi-word sentence composition, the association gate only once a
+    // composition has a context. `jintiantianqihenhao` drives the first; the
+    // correction lanes below drive the tolerant walker that feeds it.
+    for (raw, head, total) in [
+        (
+            "jintiantianqihenhao",
+            vec![
+                "今天天气很好|jintiantianqihenhao",
+                "今天|jin'tian",
+                "锦田|jin'tian",
+                "进|jin",
+                "金|jin",
+                "近|jin",
+                "仅|jin",
+                "尽|jin",
+                "紧|jin",
+                "今|jin",
+                "劲|jin",
+                "斤|jin",
+            ],
+            328usize,
+        ),
+        (
+            "zhsng",
+            vec![
+                "战歌|zhan'ge",
+                "真个|zhen'ge",
+                "战鼓|zhan'gu",
+                "朱昂|zhu'ang",
+                "治丧|zhi'sang",
+                "之上|zhi'shang",
+                "智商|zhi'shang",
+                "租房|zu'fang",
+                "支行|zhi'hang",
+                "只剩|zhi'sheng",
+                "纸上|zhi'shang",
+                "之声|zhi'sheng",
+            ],
+            179,
+        ),
+        (
+            "zhaang",
+            vec![
+                "轧钢|zha'gang",
+                "咋样|za'yang",
+                "炸弹|zha'dan",
+                "眨眼|zha'yan",
+                "栅栏|zha'lan",
+                "招安|zhao'an",
+                "乍看|zha'kan",
+                "扎眼|zha'yan",
+                "札干|zha'gan",
+                "沙岸|sha'an",
+                "诏安|zhao'an",
+                "招行|zhao'hang",
+            ],
+            248,
+        ),
+        (
+            "nizhnaghao",
+            vec![
+                "你帐号|ni'zhang'hao",
+                "你账号|ni'zhang'hao",
+                "你|ni",
+                "拟|ni",
+                "尼|ni",
+                "呢|ni",
+                "泥|ni",
+                "妳|ni",
+                "妮|ni",
+                "腻|ni",
+                "逆|ni",
+                "倪|ni",
+            ],
+            78,
+        ),
+    ] {
+        let mut s = session(fuzzy::OPTIONS_MASK);
+        let all = every_candidate(&mut s, raw);
+        assert_eq!(&all[..head.len()], &head[..], "{raw} ranking");
+        assert_eq!(all.len(), total, "{raw} candidate count");
+    }
+}
+
+#[test]
+fn i16_a_committed_context_still_steers_the_next_composition() {
+    // The association gate is consulted only once a composition has a committed
+    // context: `Decoder::compute` passes `context` to `language::bonus` solely at
+    // `start == 0`. Commit a word, then type the continuation. An unsound gate
+    // would drop the association bonus and reorder this page.
+    let mut s = session(fuzzy::OPTIONS_MASK);
+    for c in "woxihuan".chars() {
+        assert!(s.process(Key::Character(c), Modifiers::default()).handled);
+    }
+    assert!(s.process(Key::Space, Modifiers::default()).handled);
+    assert_eq!(s.commit(), "我喜欢");
+    for c in "zhongwen".chars() {
+        assert!(s.process(Key::Character(c), Modifiers::default()).handled);
+    }
+    let mut all = Vec::new();
+    loop {
+        for i in 0..s.candidate_count() {
+            let c = s.candidate(i).unwrap();
+            all.push(format!("{}|{}", c.text, c.pinyin));
+        }
+        if !s.has_next_page() {
+            break;
+        }
+        assert!(s.process(Key::PageDown, Modifiers::default()).handled);
+    }
+    // "我喜欢" + "中文" is the attested association and must stay first.
+    assert_eq!(all[0], "中文|zhong'wen");
+    assert_eq!(all[1], "纵纹|zong'wen");
+    assert_eq!(all.len(), 70, "candidate count changed");
+}
