@@ -118,6 +118,7 @@ Windows 一次 SetText 写 commit+preedit，再将 composition 起点 ShiftStart
 缺 `Xvfb`/`xdotool`/`dbus-daemon`/`fcitx5`/`cc`/libX11 头时输出原因并以退出码 77 跳过。
 **当前该层未注册进 CTest**：它能把插件加载起来并让按键到达适配层，但上屏文本尚未能在本机回收到 XIM 客户端，
 阻塞点与已尝试做法写在脚本头部注释里。
+
 ## 工程边界
 
 | 目录 | 职责 |
