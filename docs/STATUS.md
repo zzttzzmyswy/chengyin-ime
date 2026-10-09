@@ -1,5 +1,36 @@
 # 项目状态
 
+## 迭代 I15 全规则长串逐键尾延迟：剖析优先、常量开销优化 · 2026-10-09 已交付待验收
+
+**结果先行**：目标场景三轮 P99 分别为 19.07→15.92 ms（−16.5%）、
+18.29→15.49 ms（−15.3%）、20.68→17.30 ms（−16.4%），三轮一致；
+P95 降幅相近，其余四个基准场景 P99 亦为 −15% 至 −18%，无一场景回退。
+**未达到任务卡的 P99 −50%**，也仍远高于性能预算的单键 P99 ≤ 0.5 ms；如实记录。
+
+**剖析（perf，13.24 / i9-10900X / `data/daily.mswydict` 184,173 条）**：
+`Decoder::transition` self 32.2%、inclusive **70.7%**；`Decoder::compute` 22.7%；
+`language::bonus` 11.6%；`Dictionary::entry` 10.5%；`SipHash hash_one::<&u128>` 8.5%
+（全部来自 `boundary_words`）。
+
+**两条否证结论（避免了下一次走弯路）**：
+
+- `transition` 每轮 978,419 次调用对应 537,871 个 distinct `(left,right)`，冗余仅 1.8×；
+  128 槽 memo 的 15.3% 命中率是容量上限而非缺陷。
+- 编译期变体对照（表大小 128→65536、索引哈希换全域混合）P99 全落在 18.5–19.0 ms，
+  **扩大或改良 memo 零收益**，故本批未动 memo。
+
+**改动**（均不改变任何输出）：
+
+1. `boundary_words: HashSet<u128>`（SipHash）→ `BoundaryIndex`：64 KiB 位图预过滤
+   （19,196 键置位 18,825 位，误判率 3.6%）+ 同键快速哈希精确集合；无假阴性可能。
+2. `language::bonus(context, …)` 从 `Decoder::compute` 的逐 rank 循环内提升到循环外（两处）。
+3. `estimated_heap_bytes` 同步改用 `BoundaryIndex::heap_bytes`（共享词库堆 +64 KiB）。
+
+**正确性**：8 组输入（含 64 字节长串）优化前后逐页每候选 `text|pinyin` **104 行全等**；
+新增 `tests/long_input.rs`（5 条）与 `dictionary.rs` 内 oracle 单元测试
+（对全部 19,196 个编码及 4 种扰动比对成员判定）；零按键分配与 64 KiB 会话上限保持。
+详见 `docs/PERFORMANCE.md` 的 I15 一节。
+
 ## Fcitx5 真实守护进程端到端（上屏断言）纳入 CTest I14 · 2026-10-09 已合并（PR #24，squash `c655111`）
 
 评审结论：通过。技术负责人亲自重跑 `check.sh`、`version.py --check`、全新构建后 ctest 连续 3 次（5/5，含 `fcitx5-e2e`）、运行前后 `pgrep -a fcitx5`/`pgrep -a Xvfb` 集合不变（MYSWY 的真实 Fcitx PID 未受影响）；独立复现阴性对照 2 处（词库不含 `ni'hao` → 场景 3 超时、退出 1；暂存目录去掉 `addon/chengyin.conf` → “did not load the staged chengyin plugin”、退出 1）；`PATH` 屏蔽后输出 `SKIP: missing host dependencies` 并退出 77。未改产品代码，未发版（仍 preview27）。

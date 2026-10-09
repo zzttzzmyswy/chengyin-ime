@@ -1,6 +1,89 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
 
+/// Exact-key set behind [`BoundaryIndex`]. Its keys are the collision-free
+/// 126-bit encodings built below from dictionary text, not caller-supplied
+/// input, so SipHash's hash-flooding resistance buys nothing here — while its
+/// cost is paid on every probe. A deterministic multiplicative mix keeps the
+/// same membership answers and the same build-to-build behaviour.
+#[derive(Default)]
+struct BoundaryHasher(u64);
+impl std::hash::Hasher for BoundaryHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.write_u64(u64::from(byte));
+        }
+    }
+    fn write_u64(&mut self, value: u64) {
+        self.0 = (self.0 ^ value).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        self.0 ^= self.0 >> 29;
+    }
+    fn write_u128(&mut self, value: u128) {
+        // Both halves carry distinct text, so fold them before mixing; dropping
+        // the high half would alias six-scalar encodings onto shorter ones.
+        self.write_u64(value as u64);
+        self.write_u64((value >> 64) as u64);
+    }
+}
+type BoundarySet = HashSet<u128, std::hash::BuildHasherDefault<BoundaryHasher>>;
+
+/// Bits in the [`BoundaryIndex`] prefilter. 64 KiB: small enough to stay
+/// cache-resident, large enough that the ~184k dictionary words collide rarely.
+const BOUNDARY_FILTER_BITS: usize = 1 << 19;
+
+/// Boundary-word lookup: the exact set of two-to-six-scalar word encodings,
+/// fronted by a bitset prefilter over the same keys.
+///
+/// `attests_boundary` probes up to nine encodings per call, and `Decoder`'s
+/// profile shows those probes dominating the long-input tail: each one lands on
+/// a random slot of a multi-megabyte `HashSet`, so the cost is cache misses, not
+/// comparisons. The prefilter answers the common case — the encoding is simply
+/// not a word — from one line of a 64 KiB bitset.
+///
+/// This cannot change any answer: building the filter sets a bit for every member,
+/// so a clear bit proves absence and a set bit still consults the exact set.
+/// False positives cost one extra exact lookup; there are no false negatives.
+#[derive(Debug)]
+struct BoundaryIndex {
+    filter: Box<[u64]>,
+    exact: BoundarySet,
+}
+impl BoundaryIndex {
+    /// Top bits of a multiplicative mix: the encodings differ only in their low
+    /// bits (each scalar contributes 21, so six scalars fill 126 bits), and using
+    /// the low bits directly would cluster every short word at the bottom.
+    fn bit(code: u128) -> (usize, u64) {
+        let mixed = ((code as u64) ^ ((code >> 64) as u64)).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        let at = (mixed >> (64 - 19)) as usize;
+        (at >> 6, 1 << (at & 63))
+    }
+    fn build(codes: impl Iterator<Item = u128>) -> Self {
+        let mut filter = vec![0u64; BOUNDARY_FILTER_BITS / 64].into_boxed_slice();
+        let mut exact = BoundarySet::default();
+        for code in codes {
+            let (word, mask) = Self::bit(code);
+            filter[word] |= mask;
+            exact.insert(code);
+        }
+        Self { filter, exact }
+    }
+    fn contains(&self, code: u128) -> bool {
+        let (word, mask) = Self::bit(code);
+        self.filter[word] & mask != 0 && self.exact.contains(&code)
+    }
+    fn heap_bytes(&self) -> usize {
+        self.filter.len() * 8 + (self.exact.capacity() * 8 / 7 + 1) * 17
+    }
+}
+impl Default for BoundaryIndex {
+    fn default() -> Self {
+        Self::build(std::iter::empty())
+    }
+}
+
 pub const MAX_INPUT_BYTES: usize = 63;
 pub const MAX_PINYIN_BYTES: usize = 255;
 pub const MAX_TEXT_BYTES: usize = 256;
@@ -112,7 +195,7 @@ pub struct Dictionary {
     total_frequency: f64,
     shortcuts: Vec<u32>,
     text_index: Vec<u32>,
-    boundary_words: HashSet<u128>,
+    boundary_words: BoundaryIndex,
     max_letters: usize,
     initials_keys: String,
     initials_groups: Vec<InitialGroup>,
@@ -354,7 +437,7 @@ impl Dictionary {
             total_frequency: 0.0,
             shortcuts: Vec::new(),
             text_index: Vec::new(),
-            boundary_words: HashSet::new(),
+            boundary_words: BoundaryIndex::default(),
             max_letters: 0,
             initials_keys: String::new(),
             initials_groups: Vec::new(),
@@ -452,8 +535,8 @@ impl Dictionary {
         // Collision-free encoding of up to six Unicode scalars, including their
         // length (each digit is scalar+1). This immutable derived index avoids
         // repeated UTF-8 binary searches for every decoder boundary.
-        self.boundary_words = (0..self.entries.len() as u32)
-            .filter_map(|id| {
+        self.boundary_words =
+            BoundaryIndex::build((0..self.entries.len() as u32).filter_map(|id| {
                 let mut code = 0u128;
                 let mut count = 0;
                 for c in self.entry(id).text.chars() {
@@ -464,8 +547,7 @@ impl Dictionary {
                     code = (code << 21) | u128::from(u32::from(c) + 1);
                 }
                 (count >= 2).then_some(code)
-            })
-            .collect();
+            }));
         self.max_letters = (0..self.entries.len() as u32)
             .map(|id| {
                 self.entry(id)
@@ -710,7 +792,7 @@ impl Dictionary {
             + self.initials_keys.capacity()
             + self.initials_groups.capacity() * std::mem::size_of::<InitialGroup>()
             + self.initials_words.capacity() * 4
-            + (self.boundary_words.capacity() * 8 / 7 + 1) * 17
+            + self.boundary_words.heap_bytes()
     }
     pub(crate) fn entry(&self, id: u32) -> Candidate<'_> {
         let e = self.entries[id as usize];
@@ -748,7 +830,7 @@ impl Dictionary {
                 .fold(0u128, |v, c| (v << 21) | u128::from(u32::from(c) + 1));
             for c in right.chars().take(3) {
                 code = (code << 21) | u128::from(u32::from(c) + 1);
-                if self.boundary_words.contains(&code) {
+                if self.boundary_words.contains(code) {
                     return true;
                 }
             }
@@ -1196,7 +1278,7 @@ impl Dictionary {
             total_frequency: 0.0,
             shortcuts: Vec::new(),
             text_index: Vec::new(),
-            boundary_words: HashSet::new(),
+            boundary_words: BoundaryIndex::default(),
             max_letters: 0,
             initials_keys: String::new(),
             initials_groups: Vec::new(),
@@ -1626,4 +1708,122 @@ pub(crate) fn crc32(bytes: &[u8]) -> u32 {
         crc = (crc >> 8) ^ TABLE[((crc ^ u32::from(b)) & 255) as usize];
     }
     !crc
+}
+
+#[cfg(test)]
+mod boundary_index_tests {
+    use super::*;
+
+    /// The prefilter must never invent or hide a membership. This pins the
+    /// prefiltered index against a plain `HashSet` oracle over the real shipped
+    /// lexicon, then over codes that are *not* in it (including near-misses that
+    /// differ by one scalar, which is where a naive low-bit filter would alias).
+    #[test]
+    fn prefiltered_index_agrees_with_a_plain_set_on_every_encoding() {
+        let source = include_str!("../../../data/daily.tsv");
+        let d = Dictionary::from_tsv(source).unwrap();
+
+        // Every dictionary text of two to six scalars, re-encoded independently of
+        // the index that was built during construction.
+        let mut oracle: HashSet<u128> = HashSet::new();
+        let mut probes: Vec<u128> = Vec::new();
+        for id in 0..d.entry_count() as u32 {
+            let text = d.entry(id).text;
+            let mut code = 0u128;
+            let mut count = 0;
+            for c in text.chars() {
+                count += 1;
+                code = (code << 21) | u128::from(u32::from(c) + 1);
+            }
+            if (2..=6).contains(&count) {
+                // The same text under several pronunciations yields the same code,
+                // so membership is a set question, not a per-entry one.
+                oracle.insert(code);
+                probes.push(code);
+            }
+        }
+        assert!(!oracle.is_empty());
+        for &code in &probes {
+            assert!(d.boundary_words.contains(code), "index lost a member");
+        }
+
+        // Near-misses: bump one scalar of a real member so the encoding is a
+        // different code but adjacent in bit space. None of these may be reported
+        // present unless it really is a member.
+        let mut false_positives = 0usize;
+        for &code in probes.iter().take(4096) {
+            for delta in [1u128, 2, 1 << 21, 1 << 42] {
+                let probe = code.wrapping_add(delta);
+                let expected = oracle.contains(&probe);
+                let actual = d.boundary_words.contains(probe);
+                assert_eq!(
+                    actual, expected,
+                    "disagreement on perturbed code {probe:#x}"
+                );
+                false_positives += usize::from(actual);
+            }
+        }
+        // A prefilter that always said "yes" would pass the loop above while
+        // making the prefilter useless; require that it actually rejects.
+        assert!(
+            false_positives * 8 < probes.len().min(4096),
+            "prefilter admits nearly everything ({false_positives} of {})",
+            probes.len().min(4096) * 4
+        );
+        assert_eq!(d.boundary_words.filter.len() * 64, BOUNDARY_FILTER_BITS);
+    }
+
+    /// `attests_boundary` is the only caller, and it walks suffixes of `left`
+    /// against prefixes of `right`. Pin it against a direct oracle so the
+    /// prefilter cannot change which joins count as attested.
+    #[test]
+    fn boundary_attestation_matches_a_direct_encoding_oracle() {
+        let source = include_str!("../../../data/daily.tsv");
+        let d = Dictionary::from_tsv(source).unwrap();
+        let mut oracle: HashSet<u128> = HashSet::new();
+        for id in 0..d.entry_count() as u32 {
+            let text = d.entry(id).text;
+            let mut code = 0u128;
+            let mut count = 0;
+            for c in text.chars() {
+                count += 1;
+                code = (code << 21) | u128::from(u32::from(c) + 1);
+            }
+            if (2..=6).contains(&count) {
+                oracle.insert(code);
+            }
+        }
+        let direct = |left: &str, right: &str| {
+            for (start, _) in left.char_indices().rev().take(3) {
+                let mut code = left[start..]
+                    .chars()
+                    .fold(0u128, |v, c| (v << 21) | u128::from(u32::from(c) + 1));
+                for c in right.chars().take(3) {
+                    code = (code << 21) | u128::from(u32::from(c) + 1);
+                    if oracle.contains(&code) {
+                        return true;
+                    }
+                }
+            }
+            false
+        };
+        for (left, right) in [
+            ("我", "喜欢"),
+            ("你", "好"),
+            ("映射", "声"),
+            ("壅塞", "不通"),
+            ("中", "国"),
+            ("张", "三"),
+            ("完全", "没有"),
+            ("啊", "吧"),
+            ("数据库", "查询"),
+            ("孤", "舟"),
+        ] {
+            assert_eq!(
+                d.attests_boundary(left, right),
+                direct(left, right),
+                "{left}+{right}"
+            );
+        }
+    }
 }
