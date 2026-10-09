@@ -1,6 +1,8 @@
 # 项目状态
 
-## Fcitx5 真实守护进程端到端（上屏断言）纳入 CTest I14 · 2026-10-09 待验收
+## Fcitx5 真实守护进程端到端（上屏断言）纳入 CTest I14 · 2026-10-09 已合并（PR #24，squash `c655111`）
+
+评审结论：通过。技术负责人亲自重跑 `check.sh`、`version.py --check`、全新构建后 ctest 连续 3 次（5/5，含 `fcitx5-e2e`）、运行前后 `pgrep -a fcitx5`/`pgrep -a Xvfb` 集合不变（MYSWY 的真实 Fcitx PID 未受影响）；独立复现阴性对照 2 处（词库不含 `ni'hao` → 场景 3 超时、退出 1；暂存目录去掉 `addon/chengyin.conf` → “did not load the staged chengyin plugin”、退出 1）；`PATH` 屏蔽后输出 `SKIP: missing host dependencies` 并退出 77。未改产品代码，未发版（仍 preview27）。
 
 I13 遗留的唯一阻塞——真实守护进程链路的上屏文本回收——已解决，`fcitx5-e2e` 已注册进 CTest，
 模块 CTest 由 4/4 变为 **5/5**。
