@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "engine.h"
+// The version gate must come before engine.h: it pulls in config.h ->
+// fcitx-config/configuration.h, whose own headers need the Utils stack (flags.h
+// among them) to have been seen already, so engine.h is included last.
 #include <array>
 #include <cstdio>
 #include <cstdlib>
@@ -39,7 +41,15 @@
 #include <fcitx/inputpanel.h>
 #include <fcitx/userinterface.h>
 
+#include "engine.h"
+
 namespace chengyin {
+// The file this feature owns, relative to the package's own Fcitx data
+// directory. A learner's selections are the user's own text, they never leave
+// the machine, and the path is built from StandardPaths rather than from a
+// hand-rolled XDG lookup.
+const char *const kProfileFileName = "chengyin/profile.bin";
+
 namespace {
 // An unwritten temporary next to conf/chengyin.conf plus the final path it belongs
 // at. Neither framework helper can be used to publish it: StandardPathTempFile's
@@ -185,12 +195,51 @@ uint32_t mapKey(fcitx::KeySym sym) {
 }
 } // namespace
 
-Engine::Engine(fcitx::InputContextManager &manager, fcitx::EventLoop &loop, std::string defaultDictionaryPath)
+std::string Engine::DefaultProfilePath() {
+    // StandardPaths rather than reading XDG_DATA_HOME by hand, so the file lands
+    // beside everything else this package owns and honours the same overrides. An
+    // empty answer means the framework has no user data directory at all (which is
+    // what SKIP_FCITX_USER_PATH produces): persistence is then simply unavailable
+    // and no path is invented.
+#if CHENGYIN_FCITX_VERSION_AT_LEAST(5, 1, 13)
+    const auto directory = fcitx::StandardPaths::global().userDirectory(fcitx::StandardPathsType::PkgData);
+    if (directory.empty()) { return {}; }
+    return (directory / kProfileFileName).string();
+#else
+    const auto directory = fcitx::StandardPath::global().userDirectory(fcitx::StandardPath::Type::PkgData);
+    if (directory.empty()) { return {}; }
+    return directory + "/" + kProfileFileName;
+#endif
+}
+
+Engine::Engine(fcitx::InputContextManager &manager, fcitx::EventLoop &loop, std::string defaultDictionaryPath,
+               std::string profilePath, LearningRetryPolicy policy)
     : manager_(manager), config_(std::move(defaultDictionaryPath)), settings_(settingsOf(config_)),
+      store_(std::make_unique<ProfileStore>(std::move(profilePath), policy)),
       dictionary_(demoDictionary()),
       factory_([this](fcitx::InputContext &) { return new State(dictionary_); }) {
     if (chengyin_ime_abi_version() != CHENGYIN_ABI_VERSION || !manager.registerProperty("chengyinState", &factory_)) {
         throw std::runtime_error("Chengyin IM ABI mismatch or duplicate property");
+    }
+    // The master profile is built from exactly the bytes the store adopted: the
+    // file's own content, or empty for an absent or unusable one. An empty profile
+    // is still a working profile, so a damaged file leaves learning enabled in
+    // memory -- the store refuses to write, which is what keeps the damaged file
+    // itself intact, and the warning below says so once.
+    const auto &initial = store_->initialBytes();
+    master_.reset(chengyin_profile_new(initial.empty() ? nullptr : initial.data(), initial.size()));
+    if (!master_ || !store_->available()) {
+        // Nothing can be learned without a profile and a place to keep it, so the
+        // switch is forced off rather than left claiming behaviour this run cannot
+        // deliver. The user still sees the option for what it is; what changes is
+        // only that this process does not pretend to honour it.
+        config_.learning.setValue(false);
+        settings_ = settingsOf(config_);
+        profileWarning_ = store_->available() ? "学习档案无法载入，本次运行关闭学习"
+                                              : "没有可写入的学习档案位置，本次运行关闭学习";
+    } else if (!store_->warning().empty()) {
+        profileWarning_ = store_->warning();
+        FCITX_WARN() << "Chengyin IM: " << profileWarning_;
     }
     dispatcher_.attach(&loop);
     loader_ = std::make_unique<DictionaryLoader>([this](uint64_t request, DictionaryPtr dictionary, std::string error) {
@@ -216,8 +265,14 @@ void Engine::reloadConfig() {
     // build's defaults, which is what makes an old profile keep working.
     config_.pageSize.setValue(*config.pageSize);
     config_.associations.setValue(*config.associations);
+    config_.learning.setValue(*config.learning);
     config_.fuzzy.setValue(*config.fuzzy);
     config_.correction.setValue(*config.correction);
+    // Every path that re-reads settings also re-reads the profile: this is the one
+    // entry point for `fcitx5-remote -r`, which is how a user clears learning (by
+    // deleting the file) or imports one (by replacing it), even though the config
+    // tool never displays either action.
+    adoptReloadedProfile();
     if (adoptSettings()) { synchronizeAll(); }
     loadDictionary(*config.dictionaryPath, false);
 }
@@ -262,7 +317,12 @@ void Engine::applySettings(State &state) {
     // The core only accepts a page width and matching rules on an idle session.
     // A busy one keeps its old settings and is retried on the next key, so a
     // settings save can never disturb an active composition or drop a keystroke.
-    const uint32_t learning = (kDefaultLearning ? 1u : 0u) | (settings_.associations ? 2u : 0u);
+    // Learning is on only when the option says so AND there is somewhere to
+    // persist to. A run that cannot write must not learn into memory that dies
+    // with the process: the user would see the ordering change and then silently
+    // lose it on restart. This is also what makes the learning bit part of the
+    // compared settings snapshot below.
+    const uint32_t learning = (learningEnabled() ? 1u : 0u) | (settings_.associations ? 2u : 0u);
     if (chengyin_session_configure(session, static_cast<uint32_t>(settings_.pageSize), learning) != 0) { return; }
     if (chengyin_session_configure_matching(session, settings_.matching) != 0) { return; }
     state.settingsRevision = settingsRevision_;
@@ -277,6 +337,7 @@ void Engine::synchronizeAll() {
         auto *state = ic->propertyFor(&factory_);
         synchronize(*state);
         applySettings(*state);
+        applyProfile(*state);
         // Do not touch an idle context's panel: it may belong to another IME.
         if (ic->hasFocus() && !text(state->session.get(), CHENGYIN_TEXT_PREEDIT).empty()) { refresh(ic); }
         return true;
@@ -318,6 +379,141 @@ void Engine::synchronize(State &state) {
     }
 }
 
+// Learning is on when the option says so, there is a master profile to record
+// into, and there is somewhere for the result to live. A run with nowhere to
+// persist cannot learn: the user would watch the ordering change and then lose
+// it at restart, which is worse than not changing it. StandardPaths answers with
+// an empty user directory under SKIP_FCITX_USER_PATH, so a framework that has
+// been told not to touch $HOME is exactly the case this covers.
+bool Engine::learningEnabled() const {
+    return settings_.learning && master_ != nullptr && store_ && store_->available();
+}
+
+void Engine::applyProfile(State &state) {
+    if (state.profileRevision == profileRevision_) { return; }
+    // Idle only: set_profile refuses a session mid-composition and leaves it
+    // completely unchanged, so a session that was busy when learning advanced
+    // keeps its older snapshot and is retried on the next key. A session is never
+    // left half-updated, and an active composition is never disturbed -- the same
+    // rule applySettings() follows for the settings snapshot.
+    //
+    // The core's set_profile clears the composition and, with it, any association
+    // list the previous commit produced. Re-pushing the snapshot on every commit
+    // would therefore erase the continuation list the user is looking at, so the
+    // snapshot is published only when the session is showing nothing at all. The
+    // association list is a post-commit state whose preedit is empty but whose
+    // results are not, which is exactly the case `is_association` reports.
+    if (chengyin_session_is_association(state.session.get()) > 0) { return; }
+    if (chengyin_session_set_profile(state.session.get(), master_.get()) != 0) { return; }
+    state.profileRevision = profileRevision_;
+    ++state.revision;
+}
+
+void Engine::adoptReloadedProfile() {
+    if (!store_) { return; }
+    std::vector<uint8_t> adopted;
+    // reload() drops whatever was still queued as well, so a selection confirmed
+    // before the user deleted or replaced the file can never be replayed onto the
+    // new content. The state the call returns is therefore the whole of what the
+    // engine now knows about learning.
+    store_->reload(adopted);
+    auto replacement = std::unique_ptr<ChengyinProfile, decltype(&chengyin_profile_free)>(
+        chengyin_profile_new(adopted.empty() ? nullptr : adopted.data(), adopted.size()),
+        chengyin_profile_free);
+    if (!replacement) {
+        // No profile can be built from what is on disk, so there is nothing to
+        // learn into either. The store has already stopped writing, which is what
+        // leaves the file it could not read untouched.
+        profileWarning_ = "学习档案无法载入，本次运行关闭学习";
+        FCITX_WARN() << "Chengyin IM: " << profileWarning_;
+        config_.learning.setValue(false);
+        settings_ = settingsOf(config_);
+        ++settingsRevision_;
+        return;
+    }
+    master_ = std::move(replacement);
+    // A new revision is what makes every idle session pick the snapshot up; a
+    // session that is composing right now keeps its own and is retried later.
+    // Deleting the file therefore returns every session to an unlearned ordering,
+    // and restoring it adopts the imported habits -- both without any GUI action.
+    ++profileRevision_;
+    profileWarning_ = store_->warning();
+    if (!profileWarning_.empty()) { FCITX_WARN() << "Chengyin IM: " << profileWarning_; }
+}
+
+bool Engine::learn(fcitx::InputContext *ic, State &state) {
+    // The keyEvent entry already forwards every key out of a sensitive context,
+    // so this is a second, independent guard rather than the only one: learning
+    // must never be trained on a password or a private field even if a future
+    // caller reaches process() through another path.
+    if (!learningEnabled() || sensitive(ic)) { return false; }
+    // The two texts are read BEFORE learn_commit, which clears the learning key
+    // and is documented as the single call that consumes the pair.
+    uint8_t key[CHENGYIN_MAX_INPUT_BYTES + 1] = {};
+    uint8_t committed[CHENGYIN_MAX_TEXT_BYTES + 1] = {};
+    const int keySize = chengyin_session_text(state.session.get(), CHENGYIN_TEXT_LEARNING_KEY, 0, key, sizeof(key));
+    const int textSize =
+        chengyin_session_text(state.session.get(), CHENGYIN_TEXT_COMMIT, 0, committed, sizeof(committed));
+    // Only a positive return means the core recorded a selection; zero is the
+    // ordinary "this commit trained nothing" answer.
+    if (chengyin_session_learn_commit(state.session.get()) <= 0) { return false; }
+    const auto keyLength = static_cast<size_t>(keySize - 1);
+    const auto textLength = static_cast<size_t>(textSize - 1);
+    // Where the new master comes from depends on whether this session's baseline is
+    // still the master's own revision, and the two cases are not interchangeable.
+    //
+    // The session has already applied the selection to its OWN copy of the snapshot,
+    // so when that copy is current it is taken as the master rather than recording
+    // the pair a second time here. Recording into both would count every selection
+    // twice -- and the core measures hit rate over trials, so a doubled count
+    // promotes a candidate in half the selections Windows needs. This is the same
+    // handover the Windows adapter performs (platforms/windows/service.cpp), and it
+    // is also what carries the phrase-level pair a multi-segment composition learns
+    // alongside the row.
+    //
+    // The snapshot is immutable and shared, so taking it is a refcount bump, not a
+    // copy: sessions already holding the previous one are unaffected until they are
+    // handed the new one.
+    //
+    // A session whose baseline is BEHIND the master must not donate its snapshot,
+    // because that snapshot was built on the older revision and would silently drop
+    // every pair learned since -- pairs other contexts are already using. That
+    // happens whenever a context stays busy across another context's commit:
+    // applyProfile only publishes to a session that is showing nothing. Such a
+    // session's own copy is stale, so the pair is recorded into the master instead.
+    // There is still no double count: the stale copy never becomes the master, so
+    // the selection is written down exactly once, in the master.
+    const bool baselineCurrent = state.profileRevision == profileRevision_;
+    std::unique_ptr<ChengyinProfile, decltype(&chengyin_profile_free)> snapshot(
+        baselineCurrent ? chengyin_session_profile(state.session.get()) : nullptr,
+        chengyin_profile_free);
+    if (snapshot) {
+        master_ = std::move(snapshot);
+    } else if (chengyin_profile_record_selection(master_.get(), key, keyLength, committed, textLength,
+                                                 settings_.matching) != 0) {
+        // The fallback also covers a snapshot that simply could not be taken; it is
+        // the same pair either way.
+        //
+        // ChengyinProfile::record_selection is copy-on-write: master_'s Profile is
+        // shared by reference with every session that was handed it, so the ABI
+        // clones it here before mutating. The sessions holding the previous snapshot
+        // keep the old content until applyProfile publishes the new one, which is
+        // exactly the immutability the sessions rely on.
+        return false;
+    }
+    ++profileRevision_;
+    // Queueing is best-effort: a full queue or an unusable store drops the event
+    // rather than delaying the keystroke. The selection is already in memory.
+    store_->enqueue(key, keyLength, committed, textLength, settings_.matching);
+    return true;
+}
+
+std::string Engine::profileError() const { return store_ ? store_->lastError() : std::string(); }
+
+ProfileStoreStats Engine::profileStats() const { return store_ ? store_->stats() : ProfileStoreStats{}; }
+
+bool Engine::flushLearning(uint64_t timeoutMs) { return store_ ? store_->flush(timeoutMs) : true; }
+
 void Engine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &event) {
     auto *ic = event.inputContext();
     if (sensitive(ic)) { clear(ic); return; }
@@ -341,13 +537,31 @@ int32_t Engine::process(fcitx::InputContext *ic, uint32_t key, uint32_t modifier
     // a save already uses the new rules, and a session that was busy at save time
     // picks the change up as soon as its composition ends.
     applySettings(*state);
+    applyProfile(*state);
     const auto result = chengyin_session_process(state->session.get(), key, modifiers);
     ++state->revision;
     if (result < 0) { clear(ic); return result; }
     const auto commit = text(state->session.get(), CHENGYIN_TEXT_COMMIT);
     // Commit is delivered even when punctuation is forwarded to the application.
     if (!commit.empty()) { ic->commitString(commit); }
+    // The host has accepted the text, so this is the one moment learning may be
+    // acknowledged. Two conditions beyond the commit itself:
+    //
+    // * Only an accepted key is a selection. The core also commits when a
+    //   punctuation key forces the current candidate out and is then passed to
+    //   the application; that is a passthrough, not a choice, so it trains
+    //   nothing even though it produced text.
+    // * learn() itself re-checks the sensitive flag and the learning switch.
+    //
+    // The order inside learn() matters: LEARNING_KEY and COMMIT are read before
+    // learn_commit, which is the call documented to consume them.
+    if (!commit.empty() && result >= 0 && (result & CHENGYIN_HANDLED)) { learn(ic, *state); }
     synchronize(*state); // only switches after an active composition has finished
+    // After both, so this event's own outcome -- a fresh composition, a finished
+    // commit, an association list -- decides whether the session may be
+    // re-snapshotted. A selection just recorded lands here and takes effect from
+    // the next input, exactly as a settings change does.
+    applyProfile(*state);
     refresh(ic, (result & CHENGYIN_LIMITED) != 0);
     return result;
 }
@@ -394,6 +608,11 @@ void Engine::refresh(fcitx::InputContext *ic, bool limited) {
         panel.setAuxDown(fcitx::Text(dictionaryError_ + "；当前词典仍可使用"));
     } else if (!preedit.empty() && reloadState_ == ReloadState::Loading) {
         panel.setAuxDown(fcitx::Text("正在加载词典，继续使用当前词典"));
+    } else if (!preedit.empty() && !profileWarning_.empty()) {
+        // Shown once per run rather than once per key: the warning describes how
+        // this process started, and repeating it would push the composition hint
+        // off the panel. It carries no spelling and no text.
+        panel.setAuxDown(fcitx::Text(profileWarning_ + "；本次选择仍会影响当前排序"));
     }
     ic->updatePreedit();
     ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
@@ -403,6 +622,10 @@ void Engine::clear(fcitx::InputContext *ic) {
     auto *state = ic->propertyFor(&factory_);
     chengyin_session_reset(state->session.get());
     synchronize(*state);
+    // A reset leaves the session showing nothing, so this is the second place a
+    // pending snapshot can land -- and the one every key of a sensitive context
+    // reaches, which is how such a session stays current without training.
+    applyProfile(*state);
     ++state->revision;
     refresh(ic);
 }

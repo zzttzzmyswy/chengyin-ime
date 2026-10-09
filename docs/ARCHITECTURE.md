@@ -85,7 +85,7 @@ worker 用普通文件检查和有界分块读取拒绝 FIFO/设备及过大输�
 - Windows：TSF 适配负责 COM 生命周期、ITfTextInputProcessorEx、编辑会话锁、composition range、候选 UI 与宿主线程重入，绝不在全局键盘钩子内做解码。处理 UTF-16 范围和 UTF-8 核心之间的索引转换。
 - Android：InputMethodService 负责 InputConnection、setComposingText/commitText、EditorInfo、软键盘布局和进程生命周期。JNI 只传有界事件和输出，系统主线程不做词典加载或磁盘持久化。
 
-密码/敏感输入由平台标志决定；Fcitx 原型绕过组合并清空临时状态。Windows 原型同样检查密码/私密/PIN 作用域、禁用和只读上下文；Android 需实现对应能力。Windows 已有独立 Profile 与后台持久化层；Fcitx/Android 尚未接入持久学习。
+密码/敏感输入由平台标志决定；Fcitx 原型绕过组合并清空临时状态。Windows 原型同样检查密码/私密/PIN 作用域、禁用和只读上下文；Android 需实现对应能力。Windows 与 Fcitx 5 各自有独立 Profile 与后台持久化层（Fcitx 侧见 platforms/fcitx5/profile_store.cpp，单进程写入、无跨进程锁）；Android 尚未接入持久学习。
 Profile 使用最多 4,096 项的有序记录，key 保留实际拼写和手工分隔，text 仅纯中文；
 计数与序列决定优先级。MSWYUSR1 二进制校验长度、UTF-8、顺序、语法和 CRC，
 最多 2 MiB。Arc<str> 共享不可变拼写/文本，选择确认只复制记录表而非全部字符串。

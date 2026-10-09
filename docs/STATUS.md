@@ -1,5 +1,37 @@
 # 项目状态
 
+## 迭代 I19 Fcitx 选词学习持久化（`Learning` 开关 + Profile 落盘） · 2026-10-10 已交付待评审
+
+分支 `codex/fcitx-persistent-learning`。**本卡不发版**：`version.json` 未改，仍为 preview30。
+
+**结果先行**：Fcitx 5 插件接入共享核心的本地选词学习。新增 `Learning` 开关（默认开，文案同 Windows「根据选词习惯排序」），
+每次中文上屏记录一次选词，同拼音候选排序随用户习惯变化，重启后保留。档案在
+`${XDG_DATA_HOME:-$HOME/.local/share}/fcitx5/chengyin/profile.bin`（目录 0700 / 文件 0600）；清除=删文件 +
+`fcitx5-remote -r`，导入=放回文件 + `fcitx5-remote -r`，不新增配置界面按钮。多个输入上下文共享一份内存主档案；
+正在组合的会话不被改动。敏感字段不学不写。写盘在独立工作线程 + 128 槽有界队列，按键线程不做序列化与 I/O。
+
+**改动面**：`platforms/fcitx5/config.h`（新增 `Learning` 选项，取代 `kDefaultLearning` 常量；`EngineSettings` 增加
+learning 位）、`engine.h`/`engine.cpp`（主档案与 profileRevision、`applyProfile`、`learn`、
+`DefaultProfilePath`、启动/重载读取、损坏档案提示、面板提示行）、新增 `platforms/fcitx5/profile_store.{h,cpp}`
+（工作线程、有界队列、原子替换、有界重试）、`CMakeLists.txt`（编译新文件并注册 `fcitx5-learning`）、
+新增 `test_learning.cpp`、`test_engine.cpp`/`test_settings.cpp`/`test_dictionary_reload.cpp`/
+`test_default_dictionary.cpp` 改为显式注入临时档案路径与私有 `XDG_DATA_HOME`（此前会写用户真实
+`$HOME`）、`platforms/fcitx5/README.md`。未改 `crates/`、`include/chengyin_ime.h`、`platforms/windows/`、
+`version.json`、`.github/workflows`。
+
+**证据**：`bash scripts/check.sh` 退出 0；`python3 scripts/version.py --check` 通过（`0.1.0-preview30`，未变）；
+全新构建后 `ctest` 连续 3 次 7/7 通过，运行前后 `pgrep -a fcitx5` 输出不变（本机真实 Fcitx 未受影响），
+测试只用私有 HOME/XDG 与注入的临时路径；新增 `fcitx5-learning` 90 条断言，逐条覆盖任务卡验收项。
+阴性对照三处各自复现预期失败：删掉敏感检查（入口 + 学习处）→ 敏感用例 F 失败；让学习位与 `learn_commit`
+忽略开关（即 I19 之前的行为）→ 开关用例 E 失败；允许覆盖损坏档案 → 损坏用例 G 失败（均为本地临时变体，未提交）。
+
+**与设计的偏差**：学习记录取会话自身的快照作为主档案（`chengyin_session_profile`），而不是在主档案上再录一次——
+否则一次选词会被计两次，而核心按命中率/trials 排序，会导致比 Windows 少一半次数就升位；这也与 Windows
+`service.cpp` 的交接方式一致。因此 `profile_store` 保存的是事件队列，引擎内存档案以会话快照为准。
+
+**未断言**：只验证无头与真实 `fcitx::Instance`；配置工具界面的实际渲染、真实桌面候选窗/多屏未验证。
+不声称「Linux 学习已与 Windows 完全一致」：单进程无跨进程锁与 generation/revision 通道，无 GUI 清除/导入按钮。
+
 ## 迭代 I18 Fcitx 设置对齐 Windows（第一批：页宽/联想/模糊音/键盘纠错） · 2026-10-09 已合并（PR #34，squash `f8951ca`，未发版）
 
 编号说明：本迭代在 MYS-2041 中按 I17 派出，合并时 I17 已被并行的解码器优化迭代（PR #31，preview30）占用，故更名为 I18。

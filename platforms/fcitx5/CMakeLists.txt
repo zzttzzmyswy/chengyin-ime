@@ -34,7 +34,7 @@ set(CHENGYIN_COMMON_DIR "${CHENGYIN_ROOT}/platforms/common")
 # The regression test copies this lexicon to a private path, so it can exercise
 # the full-vocabulary default without writing to an installed file.
 set(CHENGYIN_TEST_DICTIONARY "${CHENGYIN_ROOT}/data/daily.tsv")
-add_library(chengyin-engine STATIC engine.cpp "${CHENGYIN_COMMON_DIR}/dictionary_loader.cpp")
+add_library(chengyin-engine STATIC engine.cpp profile_store.cpp "${CHENGYIN_COMMON_DIR}/dictionary_loader.cpp")
 set_target_properties(chengyin-engine PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_features(chengyin-engine PUBLIC cxx_std_17)
 target_include_directories(chengyin-engine PUBLIC "${CHENGYIN_ROOT}/include" "${CHENGYIN_COMMON_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -109,6 +109,17 @@ if(BUILD_TESTING)
   target_link_libraries(chengyin-settings-test PRIVATE chengyin-engine)
   target_compile_options(chengyin-settings-test PRIVATE -Wall -Wextra -Werror -UNDEBUG)
   add_test(NAME fcitx5-settings COMMAND chengyin-settings-test)
+  # The persistent-learning suite (I19). It drives the real Engine through key
+  # events, setConfig() and reloadConfig(), and owns both the lexicon and the
+  # profile path it writes to: nothing here resolves into the user's own data
+  # directory.
+  add_executable(chengyin-learning-test test_learning.cpp)
+  target_link_libraries(chengyin-learning-test PRIVATE chengyin-engine)
+  target_compile_options(chengyin-learning-test PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+  add_test(NAME fcitx5-learning COMMAND chengyin-learning-test)
+  # It walks several cases, each with a selection loop and a bounded store flush.
+  set_tests_properties(fcitx5-learning PROPERTIES TIMEOUT 180)
+
   add_executable(chengyin-reload-test test_dictionary_reload.cpp)
   target_link_libraries(chengyin-reload-test PRIVATE chengyin-engine)
   target_compile_options(chengyin-reload-test PRIVATE -Wall -Wextra -Werror -UNDEBUG)
