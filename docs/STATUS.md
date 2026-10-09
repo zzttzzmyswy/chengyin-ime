@@ -1,6 +1,10 @@
 # 项目状态
 
-## 迭代 I16 项目代码许可改为 GPL-3.0-or-later · 2026-10-09 已交付待验收（preview29）
+## 迭代 I16 项目代码许可改为 GPL-3.0-or-later · 2026-10-09 已合并（PR #28，squash `c519407`，preview29）
+
+评审结论：通过。技术负责人亲自重跑 `check.sh`、`version.py --check`（`0.1.0-preview29`）、Fcitx CTest 5/5、暂存安装后包内 `copyright` 首行为 GPLv3；逐行核对 diff，除 SPDX 头外只有许可文案、版本源与「关于」页文案，无产品逻辑改动。**评审中发现并修正**：交付的 `LICENSE` 由网页转换而来（弯引号、`©`、段落重排），不是官方原文；追加提交 `203e39d` 换成 gnu.org `gpl-3.0.txt`（ASCII，674 行，sha256 `3972dc97…`）。PR #29 统一了文档内的旧仓库名链接。
+发版：[v0.1.0-preview29](https://github.com/zzttzzmyswy/chengyin-ime/releases/tag/v0.1.0-preview29)（target `c519407`，Windows EXE、Ubuntu deb 取自 Actions 37943375368；Arch 包由固定源码重建，容器内 CTest 5/5、隔离 pacman 生命周期通过；PKGBUILD 已 pin，归档 SHA256 `bfa378a7…` 两次下载一致）。仍为预发布，未做实机验收。
+
 
 **结果先行**：项目自有代码许可由 MIT 改为 **GPL-3.0-or-later**，词库与美术素材许可保持原样
 （独立于代码），preview28 及更早版本仍按当时 MIT 授予、不追溯。`LICENSE` 换为 GPLv3 官方全文

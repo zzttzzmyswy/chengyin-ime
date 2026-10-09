@@ -26,9 +26,9 @@ makedepends=('cargo' 'cmake' 'python')
 # Source archive pinned by revision. The archive is reproducible: two downloads
 # of this URL were byte-identical, so the checksum is verifiable rather than a
 # one-off capture.
-_commit=253e13e7e9a9dbd576502d4ce440f1d50f39c2bc
+_commit=c5194074cb66e2acdb5f65baaa84a6ff82f225d1
 source=("$pkgname-$pkgver.tar.gz::https://github.com/zzttzzmyswy/chengyin-ime/archive/$_commit.tar.gz")
-sha256sums=('4564eb05d75be79644c8c36f5e0f0375c1929dae24e155d75e8a70f17bc30766')
+sha256sums=('bfa378a7f83c9cd87fa92adff9de1a06dd89d5f56332d0de1632b73c9b72e827')
 
 prepare() {
   cd "$srcdir/chengyin-ime-$_commit"
