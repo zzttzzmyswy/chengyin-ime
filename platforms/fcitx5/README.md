@@ -91,6 +91,6 @@ sudo bash scripts/test_arch_package.sh packaging/arch/fcitx5-chengyin-0.1.0.prev
 - reset/deactivate 清空组合；Password/Sensitive 字段透传并清空状态。
 - 达到长度/歧义上限时保留组合并显示提示。
 
-无头测试使用真实 Fcitx InputContext、事件循环和输入面板对象验证事件转换、UTF-8 上屏、会话隔离、陈旧候选、重置/停用、敏感字段及异步词典热切换。它不启动 compositor、GTK/Qt 应用或真正候选窗，不验证焦点事件路由和光标定位。C++ 测试另以 AddressSanitizer/UndefinedBehaviorSanitizer 运行；Rust 静态库及系统库未做 sanitizer 插桩。
+无头测试分两层。`test_engine.cpp`/`test_dictionary_reload.cpp`/`test_default_dictionary.cpp` 直接构造 `Engine` 与假 `InputContext`；`test_instance.cpp`（CTest `fcitx5-instance`）启动真实 `fcitx::Instance`，由框架按 addon 配置加载插件与 `testfrontend`/`testim`，经 `InputMethodManager` 路由按键，覆盖组合/候选/翻页/数字选词/编辑键/修饰键/双上下文隔离/敏感字段/切换输入法/失焦/重置/鼠标陈旧候选/长度上限/词库热切换，共 126 条断言，自造 TSV 词库且不读写用户配置。真实守护进程端到端 `e2e.sh`（Xvfb + 真实 `fcitx5` + 真实 XIM + xdotool）当前能把插件加载起来并让按键到达适配层，但上屏文本尚未能在本机回收到 XIM 客户端，故未注册进 CTest，阻塞与已尝试做法见脚本头部。两层都不启动 compositor、GTK/Qt 应用或真实候选窗，不验证光标定位。C++ 测试另以 AddressSanitizer/UndefinedBehaviorSanitizer 运行；Rust 静态库及系统库未做 sanitizer 插桩。
 
 已知限制：Linux 配置界面当前只加载严格 TSV，尚未接入 Windows 的搜狗导入/追加界面；未持久保存用户词频，无中文标点转换；实际桌面焦点/导航/协议测试尚未完成。后台加载不等于无限容量：TSV 构建仍有临时内存峰值，磁盘/内核阻塞和正在执行的 Rust 构建不能瞬间取消，关闭插件需要等待工作线程结束。

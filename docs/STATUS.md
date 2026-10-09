@@ -1,5 +1,32 @@
 # 项目状态
 
+## Fcitx5 适配层真实 Instance 回归与守护进程端到端 I13 · 2026-10-08
+
+新增**真实框架集成测试** `platforms/fcitx5/test_instance.cpp`
+（CTest `fcitx5-instance`）：启动真实 `fcitx::Instance`，由框架按 addon 配置加载
+chengyin 插件与 `testfrontend`/`testim`，键盘事件经 `TestFrontend::sendKeyEvent`
+进入 `InputMethodManager` 路由，覆盖注册与激活、组合/候选/数字选词/翻页、编辑键、
+修饰键与释放事件、双输入上下文隔离、敏感字段、输入法切换、失焦与重置、鼠标选词
+（含陈旧候选 revision 保护）、超长输入上限、词库热切换，以及大写/Caps Lock 现状快照，
+共 126 条断言。测试自造 TSV 词库并经 `conf/chengyin.conf` 注入，`SKIP_FCITX_USER_PATH`
+使所有用户目录为空，不读不写用户配置、词库与输入历史。缺 testing 模块时 CMake `QUIET`
+查找失败即不注册该测试（Debian/Ubuntu 部分 `libfcitx5core-dev` 情形）。
+
+新增**真实守护进程端到端脚本** `platforms/fcitx5/e2e.sh` 与 XIM 客户端 `e2e_client.c`：
+私有 HOME/XDG、私有 session bus、`Xvfb -displayfd`、真实 `fcitx5` 守护进程 + 暂存安装的
+插件 + 真实 XIM 连接，`xdotool` 经 XTEST 注入按键；只结束本脚本启动的 PID，不使用任何
+`pkill fcitx5`/`pkill Xvfb`。**该层未达成可断言的端到端上屏**：在 13.24 上守护进程确实加载
+chengyin、XIM 前端接管按键、`fcitx5-remote -s chengyin` 可切到插件（此时守护进程内
+`Engine::keyEvent` 实测逐键触发），但本机自建 XIM 客户端未能把上屏文本回收到进程内，
+`xterm` 因缺位图字体无法起窗，故 3 个场景断言未通过。脚本已注册进 CTest 之前被暂时
+注释，避免纳入一个已知失败用例；阻塞点与已尝试做法见脚本头部注释与交付评论。
+
+验证：`scripts/check.sh` 全绿；`python3 scripts/version.py --check` 全绿（未改产品代码，
+不 bump 版本）；模块 CTest 4/4 通过（新增 `fcitx5-instance`）。阴性对照 3 处各自复现预期失败
+（去敏感字段保护→5 条失败；去 `select` 的 revision 判断→2 条失败；去掉 `clear()` 的会话重置
+→多条失败），还原后恢复全绿。均为自动化结果；真实桌面 X11/Wayland 兼容性未验证，不作声称。
+
+
 ## Arch Linux 原生安装包与默认完整词库 I12（preview27，已发版）· 2026-10-08
 
 PR #20（squash `7414c4f`）已合并；[v0.1.0-preview27](https://github.com/zzttzzmyswy/chengyin-ime/releases/tag/v0.1.0-preview27) 已发布，含 Arch 原生包、PKGBUILD、README.arch、Windows x64 EXE、Ubuntu deb 与 SHA256SUMS。
