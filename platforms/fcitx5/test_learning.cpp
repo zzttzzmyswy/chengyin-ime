@@ -98,6 +98,16 @@ std::string dictionary() {
            // decided by (count, sequence), so re-testing a spelling an earlier case
            // already selected many times would make the assertion depend on that
            // count rather than on the switch this case is about.
+           // Two spellings only the stale-baseline case uses, so a promotion there
+           // can never be confused with what an earlier case trained.
+           "lan\t蓝\t2400\n"
+           "lan\t兰\t2390\n"
+           "yun\t云\t2380\n"
+           "yun\t运\t2370\n"
+           // Case J commits this key from a stale baseline, so it must be a key
+           // no other case has ever learned a row for.
+           "wu\t吴\t2360\n"
+           "wu\t武\t2350\n"
            "hao\t好\t2450\n"
            "hao\t号\t2440\n"
            "ni'hao\t你好\t950\n"
@@ -205,8 +215,8 @@ int main() {
     fcitx::InputContextManager manager;
     fcitx::EventLoop loop;
     chengyin::Engine engine(manager, loop, "", profilePath);
-    Context a(manager, "learning-a"), b(manager, "learning-b");
-    Driver driverA(engine, a), driverB(engine, b);
+    Context a(manager, "learning-a"), b(manager, "learning-b"), c(manager, "learning-c");
+    Driver driverA(engine, a), driverB(engine, b), driverC(engine, c);
 
     chengyin::EngineConfig config(lexicon);
     auto save = [&] {
@@ -361,6 +371,13 @@ int main() {
             restarted = std::make_unique<chengyin::Engine>(*restartManager, loop, "", profilePath);
             restartedContext = std::make_unique<Context>(*restartManager, "learning-restart");
             restartedDriver = std::make_unique<Driver>(*restarted, *restartedContext);
+            // The same lexicon as the first run: a restart means the same
+            // configuration, and without this the assertions below would be about the
+            // bundled demo dictionary rather than about the file that was read.
+            fcitx::RawConfig restartRaw;
+            chengyin::EngineConfig restartConfig(lexicon);
+            restartConfig.save(restartRaw);
+            restarted->setConfig(restartRaw);
             checkCount(restarted->profileCount(), 3, "D.1 the restarted engine reads the learned pairs");
         });
         steps.push_back([&] {
@@ -595,6 +612,95 @@ int main() {
         checkEqual(firstRowOf(driverA, "ma"), learnedBefore, "H.11 the imported ordering is back");
     });
 
+
+    // --- Case J: a session whose baseline is stale must not erase a fresher one. -
+    // applyProfile only publishes to a session that is showing nothing, so a context
+    // that stays busy across another context's commit keeps an older snapshot. When
+    // that stale session later commits, its own copy must NOT become the master: it
+    // was built on an older revision and would silently drop every pair learned
+    // since -- pairs the other contexts are already using. The pair is recorded into
+    // the master instead, so it is still written down exactly once.
+    //
+    // `lan`, `yun` and `wu` are trained by no other case, and each has exactly one
+    // learned row, so "both pairs are in effect" is observable as ordering rather
+    // than inferred from a count: if A's stale snapshot became the master, B's `lan`
+    // row would be gone and `lan` would fall back to its lexicon order.
+    int32_t stalePairsBefore = 0;
+    steps.push_back([&] {
+        // A starts composing and deliberately does NOT finish. Its baseline stays at
+        // whatever revision it last applied -- which is what makes it stale later.
+        driverA.type("wu");
+        check(!driverA.page().empty(), "J.1 A is composing and therefore not idle");
+        stalePairsBefore = engine.profileCount();
+    });
+    steps.push_back([&] {
+        // B learns a pair while A is still busy. The master moves on, but A cannot be
+        // handed the new snapshot: it is not idle.
+        chooseWord(driverB, "lan", "兰");
+        checkEqual(firstRowOf(driverB, "lan"), "兰", "J.2 B learned its pair");
+        checkCount(engine.profileCount(), stalePairsBefore + 1,
+                   "J.3 the master holds B's pair");
+    });
+    steps.push_back([&] {
+        // A finishes its own composition and commits. A's session snapshot predates
+        // B's selection, so taking it as the master here is exactly what the bug did.
+        driverA.clearCommitted();
+        driverA.choose("武");
+        driverA.press(FcitxKey_space);
+        checkEqual(driverA.committed(), "武", "J.4 A committed its own word");
+        checkCount(engine.profileCount(), stalePairsBefore + 2,
+                   "J.5 both B's pair and A's pair are in the master");
+    });
+    steps.push_back([&] {
+        // B's pair must still be in effect. With the bug, A's stale snapshot became
+        // the master and this row was gone, so `lan` fell back to the lexicon order.
+        checkEqual(firstRowOf(driverB, "lan"), "兰",
+                   "J.6 B's pair still leads after A's stale commit");
+        // A brand-new context is the second, independent witness: it has never been
+        // handed any snapshot, so it can only ever see the master the engine holds
+        // right now. Both pairs must show up there.
+        driverC.type("lan");
+        checkEqual(driverC.firstRow(), "兰", "J.7 a new context sees B's pair");
+        driverC.escape();
+        driverC.type("wu");
+        checkEqual(driverC.firstRow(), "武", "J.8 and A's pair from the stale baseline");
+        driverC.escape();
+    });
+    steps.push_back([&] {
+        // A third pair, so the file on disk carries one more row than A's stale
+        // snapshot ever knew about.
+        chooseWord(driverB, "yun", "运");
+        check(flush(), "J.9 the writer drained");
+        checkEqual(firstRowOf(driverB, "yun"), "运", "J.10 the third pair was learned");
+    });
+    steps.push_back([&] {
+        // A restart reads the file: every pair the two contexts learned must be there,
+        // including the one A learned from a stale baseline.
+        restartManager = std::make_unique<fcitx::InputContextManager>();
+        restarted = std::make_unique<chengyin::Engine>(*restartManager, loop, "", profilePath);
+        restartedContext = std::make_unique<Context>(*restartManager, "learning-stale");
+        restartedDriver = std::make_unique<Driver>(*restarted, *restartedContext);
+        // The fixture lexicon, or the restarted engine would answer from the bundled
+        // demo and the words this case learned would not be reachable at all. The step
+        // runner waits for that load to publish before the assertions below run.
+        fcitx::RawConfig staleRaw;
+        chengyin::EngineConfig staleConfig(lexicon);
+        staleConfig.save(staleRaw);
+        restarted->setConfig(staleRaw);
+    });
+    steps.push_back([&] {
+        checkEqual(firstRowOf(*restartedDriver, "lan"), "兰",
+                   "J.11 B's pair survived the restart");
+        checkEqual(firstRowOf(*restartedDriver, "yun"), "运",
+                   "J.12 B's third pair survived the restart");
+        checkCount(restarted->profileCount(), stalePairsBefore + 3,
+                   "J.13 the imported file carries every pair both contexts learned");
+        restartedDriver.reset();
+        restartedContext.reset();
+        restarted.reset();
+        restartManager.reset();
+    });
+
     // --- Case I: a store that cannot write never blocks the key thread. ---------
     // The target path is a DIRECTORY, so every publish fails and the retry budget is
     // spent while events pile up behind it. This is the failing-storage case, and it
@@ -639,30 +745,37 @@ int main() {
         for (int i = 0; i < 40; ++i) { chooseWord(*blockedDriver, "ma", "妈"); }
         checkEqual(blockedDriver->committed(), "妈", "I.2 every key was processed");
         checkEqual(firstRowOf(*blockedDriver, "ma"), "妈", "I.3 in-memory learning still reordered");
+        // The retrying happens on the store's own thread, so the accounting below is
+        // only final once nothing is queued and no batch is still being retried.
+        // flush() is exactly that wait -- and on a failing store it only returns
+        // after the retry budget is spent and the batch has been counted as dropped.
+        // Asserting without it is what made this case pass on a fast machine and
+        // fail on CI: the counters were simply read before the worker had run.
+        check(blocked->flushLearning(30000), "I.4 the writer reached a terminal state on a failing store");
         const auto stats = blocked->profileStats();
         check(stats.rejected + stats.dropped + stats.exhausted > 0,
-              "I.4 the failures are counted rather than swallowed",
+              "I.5 the failures are counted rather than swallowed",
               "rejected=" + std::to_string(stats.rejected) +
                   " dropped=" + std::to_string(stats.dropped) +
                   " exhausted=" + std::to_string(stats.exhausted));
         // A 128-slot bounded queue plus a publish that never succeeds is what these
         // counters describe, and nothing here may grow without limit.
-        check(stats.rejected <= 128, "I.5 the queue stayed bounded");
-        check(!blocked->profileError().empty(), "I.6 the last failure is reported");
+        check(stats.rejected <= 128, "I.6 the queue stayed bounded");
+        check(!blocked->profileError().empty(), "I.7 the last failure is reported");
     });
     steps.push_back([&] {
         const auto error = blocked->profileError();
         check(error.find("妈") == std::string::npos && error.find("ma") == std::string::npos,
-              "I.7 the error text carries no spelling or text", error);
-        check(error.find("学习档案") != std::string::npos, "I.8 and it names the learning store", error);
+              "I.8 the error text carries no spelling or text", error);
+        check(error.find("学习档案") != std::string::npos, "I.9 and it names the learning store", error);
         check(std::filesystem::is_directory(blockedPath),
-              "I.9 the path it could not write is still a directory");
+              "I.10 the path it could not write is still a directory");
         // A flush still returns inside its own bound even though nothing can be
         // persisted: the bound is what has to hold, not the outcome.
         const auto flushStart = fcitx::now(CLOCK_MONOTONIC);
         blocked->flushLearning(1000);
         const auto flushMs = (fcitx::now(CLOCK_MONOTONIC) - flushStart) / 1000;
-        check(flushMs <= 3000, "I.10 flush honours its bound while the store fails",
+        check(flushMs <= 3000, "I.11 flush honours its bound while the store fails",
               std::to_string(flushMs) + " ms");
     });
     steps.push_back([&] {
@@ -673,7 +786,7 @@ int main() {
         blockedContext.reset();
         blocked.reset();
         blockedManager.reset();
-        check(true, "I.11 the engine shut down with a failing store and a full queue");
+        check(true, "I.12 the engine shut down with a failing store and a full queue");
     });
 
     // The step machine: one step per event-loop turn, and a step is only taken once

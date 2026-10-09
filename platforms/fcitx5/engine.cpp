@@ -459,25 +459,46 @@ bool Engine::learn(fcitx::InputContext *ic, State &state) {
     if (chengyin_session_learn_commit(state.session.get()) <= 0) { return false; }
     const auto keyLength = static_cast<size_t>(keySize - 1);
     const auto textLength = static_cast<size_t>(textSize - 1);
-    // The session has just applied the selection to its OWN copy of the snapshot,
-    // so that copy is taken as the master rather than recording the pair a second
-    // time here. Recording into both would count every selection twice -- and the
-    // core measures hit rate over trials, so a doubled count promotes a candidate
-    // in half the selections Windows needs. This is the same handover the Windows
-    // adapter performs (platforms/windows/service.cpp), and it is also what carries
-    // the phrase-level pair a multi-segment composition learns alongside the row.
+    // Where the new master comes from depends on whether this session's baseline is
+    // still the master's own revision, and the two cases are not interchangeable.
+    //
+    // The session has already applied the selection to its OWN copy of the snapshot,
+    // so when that copy is current it is taken as the master rather than recording
+    // the pair a second time here. Recording into both would count every selection
+    // twice -- and the core measures hit rate over trials, so a doubled count
+    // promotes a candidate in half the selections Windows needs. This is the same
+    // handover the Windows adapter performs (platforms/windows/service.cpp), and it
+    // is also what carries the phrase-level pair a multi-segment composition learns
+    // alongside the row.
     //
     // The snapshot is immutable and shared, so taking it is a refcount bump, not a
-    // copy: sessions already holding the previous one are unaffected until they
-    // are handed the new one.
+    // copy: sessions already holding the previous one are unaffected until they are
+    // handed the new one.
+    //
+    // A session whose baseline is BEHIND the master must not donate its snapshot,
+    // because that snapshot was built on the older revision and would silently drop
+    // every pair learned since -- pairs other contexts are already using. That
+    // happens whenever a context stays busy across another context's commit:
+    // applyProfile only publishes to a session that is showing nothing. Such a
+    // session's own copy is stale, so the pair is recorded into the master instead.
+    // There is still no double count: the stale copy never becomes the master, so
+    // the selection is written down exactly once, in the master.
+    const bool baselineCurrent = state.profileRevision == profileRevision_;
     std::unique_ptr<ChengyinProfile, decltype(&chengyin_profile_free)> snapshot(
-        chengyin_session_profile(state.session.get()), chengyin_profile_free);
+        baselineCurrent ? chengyin_session_profile(state.session.get()) : nullptr,
+        chengyin_profile_free);
     if (snapshot) {
         master_ = std::move(snapshot);
     } else if (chengyin_profile_record_selection(master_.get(), key, keyLength, committed, textLength,
                                                  settings_.matching) != 0) {
-        // Falling back to recording into the master keeps learning correct even if
-        // the snapshot could not be taken; it is the same pair either way.
+        // The fallback also covers a snapshot that simply could not be taken; it is
+        // the same pair either way.
+        //
+        // ChengyinProfile::record_selection is copy-on-write: master_'s Profile is
+        // shared by reference with every session that was handed it, so the ABI
+        // clones it here before mutating. The sessions holding the previous snapshot
+        // keep the old content until applyProfile publishes the new one, which is
+        // exactly the immutability the sessions rely on.
         return false;
     }
     ++profileRevision_;
