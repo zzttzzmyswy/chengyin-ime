@@ -32,7 +32,7 @@
 
 按“收益/成本/许可风险”排序。许可口径：读思路与自行实现不受限；复制代码/数据须保留原版权声明并与 GPL-3.0-or-later 兼容（libime 为 LGPL-2.1-or-later，可并入但需保留声明与许可文本）。
 
-1. **数据驱动的笔误/变体别名表**（libpinyin `pinyin_custom2.h:71-79`、`special_table.h`）。澄音音节集已有 `lue/nue/lv/nv`（`data/syllables.txt`），但缺 `jv/lve/nve/jiou/guei/gun`、`on→ong` 这类别名与 libpinyin 的 85 条重切分、20 条内部拆分对照。成本小；风险低（表可自己生成，若直接取表须保留头部声明）。**建议先做**，并在 `quality.tsv` 新增 `alias` 类用例。
+1. **数据驱动的笔误/变体别名表**（libpinyin `pinyin_custom2.h:71-79`、`special_table.h`）。澄音音节集已有 `lue/nue/lv/nv`（`data/syllables.txt`），但缺 `jv/lve/nve/jiou/guei`、`on→ong`（已核对 `data/syllables.txt` 无前五项） 这类别名与 libpinyin 的 85 条重切分、20 条内部拆分对照。成本小；风险低（表可自己生成，若直接取表须保留头部声明）。**建议先做**，并在 `quality.tsv` 新增 `alias` 类用例。
 2. **逐键增量复用**（libime 切分图 merge + 词格节点复用 + 两级 LRU，`segmentgraph.cpp:101`、`decoder.cpp`）。直接对应 I15 遗留的 `Decoder::transition` miss 路径与逐 start DP 重复展开（`STATUS.md` I15 “后续方向”）。成本中等偏高；风险：与“零堆分配”预算冲突，需先设计固定容量缓存。**建议作为下一轮性能迭代**。
 3. **整句触发条件与候选截断**（librime `script_translator.cc:~498`；libime `scoreFilter`/`wordCandidateLimit`）：无精确词且 ≥2 音节才做整句；相对最优分差超过阈值的候选不进入首页。成本小；需用质量集确认不降低 Top-9/可达率。
 4. **拼写类型阶梯 + 反向剪枝**（librime `syllabifier.cc:179-198`）。澄音已有“全拼优先于缩写”的结构，是否存在“缩写/模糊候选压过正确全拼”需用质量集量化后再决定；先做诊断，不预设收益。
