@@ -1,8 +1,47 @@
 # 项目状态
 
+## Fcitx5 真实守护进程端到端（上屏断言）纳入 CTest I14 · 2026-10-09 待验收
+
+I13 遗留的唯一阻塞——真实守护进程链路的上屏文本回收——已解决，`fcitx5-e2e` 已注册进 CTest，
+模块 CTest 由 4/4 变为 **5/5**。
+
+**选路**：改用框架自身的 D-Bus 前端，不再走 XIM。`org.fcitx.Fcitx.InputMethod1.CreateInputContext`
+建立真实输入上下文，`org.fcitx.Fcitx.InputContext1.ProcessKeyEvent` 送按键，上屏文本经该对象的
+`CommitString` 信号取回。这条链路同样经过真实守护进程 → 真实 `InputMethodManager` → 真实插件，
+但不需要 X 服务器、不需要窗口管理器，因此 `e2e.sh` 不再启动 Xvfb、不再用 `xdotool`，也不再依赖
+libX11 与 `xterm`。I13 试过的 XIM 方案（XFilterEvent 全事件、回调式/Root 式 style、`XNFocusWindow`、
+MapNotify 后取焦点、先注入再激活）全部作废并已从脚本删除。
+
+**改动**：`platforms/fcitx5/e2e_client.c` 重写为 GIO D-Bus 客户端（原 XIM 客户端删除）；
+`platforms/fcitx5/e2e.sh` 改为私有 HOME/XDG + 私有 session bus + 真实 `fcitx5` + D-Bus 客户端，
+3 个场景各由客户端自己断言；`platforms/fcitx5/CMakeLists.txt` 注册 `add_test(fcitx5-e2e)`，
+`SKIP_RETURN_CODE 77`、`TIMEOUT 120`，客户端链接 `pkg-config gio-2.0`。**未改产品代码，未 bump 版本。**
+
+**三个场景**（词典为脚本自造 TSV，经 `conf/chengyin.conf` 指定；`ni'hao` 词条两条，第二条为 `拟好`）：
+`nihao`+空格 → 收到 `你好`；`nihao`+Esc → 无上屏；`nihao`+`2` → 收到 `拟好`（证明数字键到达插件
+候选列表而非应用）。客户端不写固定长 sleep：每个键送入后轮询守护进程回报的 `UpdateFormattedPreedit`，
+确认该键已到达引擎才送下一个；终止键也在完整组合可见之后才送。每个阶段有独立超时，失败时报出
+是哪一步没发生并附当时的预编辑与上屏计数。
+
+**验证**（13.24，Fcitx 5.1.23）：`scripts/check.sh` 全绿；`python3 scripts/version.py --check` 全绿；
+`ctest --test-dir build/fcitx5 --output-on-failure` 5/5 通过，连续 3 次均通过且运行前后
+`pgrep -a fcitx5` / `pgrep -a Xvfb` 进程集合不变（本机 MYSWY 的真实 Fcitx 未受影响）。
+
+**阴性对照 2 处**（本地临时变体，未提交）：① 暂存目录去掉 `chengyin.conf` → 守护进程报
+`Group Item chengyin in group Default is not valid. Removed.`，脚本以 “did not load the staged chengyin plugin”
+失败退出 1；② 词库 TSV 换成不含 `ni'hao` 的内容 → 场景 1 收到原样 `nihao`、场景 3 超时无上屏，
+脚本以两条断言失败退出 1。
+
+**依赖跳过**：`PATH` 屏蔽 `fcitx5`/`dbus-daemon`/`cmake` 后输出
+`SKIP: missing host dependencies: dbus-daemon fcitx5 cmake` 并以退出码 77 结束。
+
+**已知限制**：这是自动化无头结果，**不等于**真实 X11/Wayland 桌面的候选窗、光标定位与焦点行为
+已通过，不作为桌面兼容性声称。本路径验证的是 D-Bus 前端；XIM 与 GTK/Qt 应用内协议仍未覆盖。
+
+
 ## Fcitx5 适配层真实 Instance 回归与守护进程端到端 I13 · 2026-10-09 已合并（PR #22，squash `633327b`）
 
-评审结论：第 1 层通过；技术负责人重跑 `check.sh`、`version.py --check`、ctest 3 次（4/4）、进程集合不变，并独立复现 3 处阴性对照（去敏感保护→5 条失败；去 `select` revision 判断→12.4/12.5 失败；`clear()` 不重置会话→多条失败）；缺 testing 模块时以 `CMAKE_DISABLE_FIND_PACKAGE_Fcitx5ModuleTestFrontend=ON` 模拟，仅跳过且其余 3 项通过。第 2 层降级收下（脚本入库、未注册 CTest），后续迭代 I14 解决。未改产品代码，未发版（仍 preview27）。
+评审结论：第 1 层通过；技术负责人重跑 `check.sh`、`version.py --check`、ctest 3 次（4/4）、进程集合不变，并独立复现 3 处阴性对照（去敏感保护→5 条失败；去 `select` revision 判断→12.4/12.5 失败；`clear()` 不重置会话→多条失败）；缺 testing 模块时以 `CMAKE_DISABLE_FIND_PACKAGE_Fcitx5ModuleTestFrontend=ON` 模拟，仅跳过且其余 3 项通过。第 2 层降级收下（XIM 脚本入库、未注册 CTest），由 I14 改走 D-Bus 前端后解决并已注册。未改产品代码，未发版（仍 preview27）。
 
 新增**真实框架集成测试** `platforms/fcitx5/test_instance.cpp`
 （CTest `fcitx5-instance`）：启动真实 `fcitx::Instance`，由框架按 addon 配置加载

@@ -106,18 +106,27 @@ Windows 一次 SetText 写 commit+preedit，再将 composition 起点 ShiftStart
 数字、鼠标及宿主候选 Finalize 统一 editKey 路径；异步去重、代际检查和敏感字段透传保留。
 
 
-## Fcitx5 适配层回归怎么跑（I13）
+## Fcitx5 适配层回归怎么跑（I14）
 
 第 1 层是真实 `fcitx::Instance` 集成测试 `platforms/fcitx5/test_instance.cpp`（CTest 名 `fcitx5-instance`）：
 插件由框架按 addon 配置加载，按键经 `testfrontend` 进入 `InputMethodManager` 路由，126 条断言。
 依赖 `Fcitx5ModuleTestFrontend` / `Fcitx5ModuleTestIM` 两个 CMake 包与 `fcitx-utils/testing.h`；
 发行版不带 testing 模块时 CMake `find_package(... QUIET)` 失败即不注册该测试，属预期跳过而非失败。
 
-第 2 层是真实守护进程端到端 `platforms/fcitx5/e2e.sh <build-dir>`：私有 HOME/XDG、私有 session bus、
-`Xvfb -displayfd` 取空闲显示号、`DESTDIR` 暂存安装插件、真实 `fcitx5` + 真实 XIM 连接 + `xdotool` XTEST 注入。
-缺 `Xvfb`/`xdotool`/`dbus-daemon`/`fcitx5`/`cc`/libX11 头时输出原因并以退出码 77 跳过。
-**当前该层未注册进 CTest**：它能把插件加载起来并让按键到达适配层，但上屏文本尚未能在本机回收到 XIM 客户端，
-阻塞点与已尝试做法写在脚本头部注释里。
+第 2 层是真实守护进程端到端 `platforms/fcitx5/e2e.sh <build-dir>`（CTest 名 `fcitx5-e2e`，`TIMEOUT 120`、
+`SKIP_RETURN_CODE 77`）：私有 HOME/XDG、私有 session bus、`DESTDIR` 暂存安装插件、真实 `fcitx5` 守护进程，
+客户端 `chengyin-e2e-client` 经框架自身的 `org.fcitx.Fcitx.InputMethod1` / `InputContext1` D-Bus 接口创建
+真实输入上下文、送按键并监听 `CommitString` 信号取得上屏文本。该路径不需要 X 服务器，因此不启动 Xvfb。
+
+缺 `fcitx5`/`dbus-daemon`/`cmake`，或该 fcitx5 不带 `dbusfrontend` addon 时，输出原因并以退出码 77 跳过。
+客户端链接 GIO（`pkg-config gio-2.0`）；构建机没有 GIO 头文件时 CMake 不注册该测试。
+
+断言的三个场景分别是 `nihao`+空格 必须收到 `你好`、`nihao`+Esc 不得上屏、`nihao`+`2` 必须选中第二条
+候选（词典为脚本自造 TSV，经 `conf/chengyin.conf` 指定）。客户端不写固定长 sleep：每个键送入后都轮询
+守护进程回报的 `UpdateFormattedPreedit` 预编辑，确认该键已到达引擎才送下一个，终止键也在完整组合可见
+之后才送；每个阶段都有超时并能报出是哪一步没发生。
+
+`scripts/check.sh` 的 Rust 部分与本层无关；本层由上面的 `ctest` 调用。
 
 ## 工程边界
 

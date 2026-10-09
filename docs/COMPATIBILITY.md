@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | Linux x86_64 Rust 核心 | 已测 | Debian 13、Rust 1.99，行为/索引参考对比/零分配测试 |
 | C ABI 动态链接 | 已测 | 本地 GCC 14 调用 release `.so`；GitHub Linux/Windows MSVC C 程序调用动态库通过，UTF-8、空指针、缓冲区、句柄生命周期 |
-| Fcitx 5 插件 | 本地构建、无头单元测试与真实 Instance 集成测试已测 | Debian Fcitx 5.1.12 事件/热切换/ASan；Arch Fcitx 5.1.23 新增 `fcitx5-instance`（真实 `fcitx::Instance` + testfrontend，126 条断言）与 `fcitx5-dictionary-reload`；守护进程端到端（Xvfb + 真实 fcitx5 + XIM）已打通插件加载与按键路由，但上屏文本未能在本机回收到客户端，该层未纳入 CTest，见 STATUS I13。无头测试不等于 GUI/协议通过 |
+| Fcitx 5 插件 | 本地构建、无头单元测试、真实 Instance 集成测试与真实守护进程端到端（含上屏断言）已测 | Debian Fcitx 5.1.12 事件/热切换/ASan；Arch Fcitx 5.1.23 的 `fcitx5-instance`（真实 `fcitx::Instance` + testfrontend，126 条断言）、`fcitx5-dictionary-reload` 与 `fcitx5-e2e`（真实 `fcitx5` 守护进程 + 暂存安装插件 + 真实 D-Bus 输入上下文，断言上屏 `你好`），共 5/5；`fcitx5-e2e` 走框架自身 D-Bus 前端而非 XIM，不启动 Xvfb。无头测试不等于 GUI/协议通过：真实桌面 X11/Wayland 的候选窗、光标定位与焦点行为仍未验证 |
 | Debian amd64 测试包 | 隔离文件布局和生命周期已测 | dpkg 安装/重装/升级/回滚/移除/purge；依赖解析已生成，依赖安装和真实桌面待测 |
 | Linux aarch64 共享核心 | 构建检查 | `cargo check`，未链接或运行 ARM 原生程序 |
 | Android aarch64 共享核心 | 构建检查 | `cargo check`，无 JNI、APK、NDK 链接和设备测试 |
