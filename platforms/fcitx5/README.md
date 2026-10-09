@@ -31,15 +31,44 @@ sudo cmake --install build/fcitx5
 
 源码安装的卸载依据 `install_manifest.txt`：本项目模块、两个注册文件和两个文档文件，并在 Fcitx 配置工具移除该输入法。不批量删除整个 Fcitx 目录。使用下面的 Debian 包安装时，由包管理器跟踪和移除这些文件。
 
+## 设置（与 Windows 端对齐的部分）
+
+在本批（I17）之前，Fcitx 插件的设置页只有“词典 TSV 绝对路径”，候选页宽固定为 9，且插件从不把用户偏好告诉共享核心。现在配置工具里会增加下面这些项，语义与默认值与 Windows 设置页一致：
+
+| 选项 | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `PageSize` | 枚举 5/7/9 | **5** | 每页候选数。**默认值由 9 改为 5**，与 Windows 一致 |
+| `Associations` | 布尔 | 开 | “提交中文后显示联想词” |
+| `Fuzzy` | 子分组，11 个布尔 | 全关 | 模糊音（双向匹配）：`zh↔z`、`ch↔c`、`sh↔s`、`n↔l`、`f↔h`、`l↔r`、`an↔ang`、`en↔eng`、`in↔ing`、`ian↔iang`、`uan↔uang` |
+| `Correction` | 子分组，4 个布尔 | 全关 | 常见键盘失误：相邻字母按反、漏按一个字母、QWERTY 相邻键误按、重复按键 |
+
+保存后立即对正在运行的空闲会话生效，不需要重启。**正在输入的组合不受影响**：设置只在一个组合结束后应用，因此保存设置不会丢键，也不会改变或取消当前组合；下一次输入即按新设置进行。候选列表的页宽与数字选词键始终跟随核心实际生效的页宽，二者不会错位。
+
+只改上述设置（`DictionaryPath` 未变）时**不重载词典**：直接应用并写回配置。只有 `DictionaryPath` 变化才走后台加载。设置写回磁盘失败时会像词典保存失败一样在提示里报告，不静默。
+
+`PageSize` 用枚举而不是整数范围：配置工具因此只提供 5/7/9 三个选项，手工写入集合外的值会退回该选项的默认值，而不会被悄悄夹到用户没选过的宽度。
+
+Fcitx 配置工具只显示本批已有的项；**学习（持久用户词频）与多词库管理尚未在本批对齐**，中文标点、中英切换、Shift 切换也未接入，列在后续批次。
+
 ## 词典配置与更新
 
 在 Fcitx 配置工具中打开澄音的设置，填写“词典 TSV 绝对路径”。留空恢复内置演示词典。自定义词典是**替换**演示词典，而非合并；格式见 [词典说明](../../data/README.md)。路径不展开 `~` 或环境变量。
 
-也可编辑 `${XDG_CONFIG_HOME:-$HOME/.config}/fcitx5/conf/chengyin.conf`，顶层字段如下：
+也可编辑 `${XDG_CONFIG_HOME:-$HOME/.config}/fcitx5/conf/chengyin.conf`；一个把上面设置都改过的文件长这样：
 
 ```ini
 DictionaryPath=/absolute/path/to/my-dictionary.tsv
+PageSize=7
+Associations=True
+
+[Fuzzy]
+AnAng=True
+
+[Correction]
+Swap=True
 ```
+
+旧版本写下的配置文件只有 `DictionaryPath`，加载时其余项各自取本节表格里的默认值，不报错也不覆盖。
 
 配置工具保存会自动请求加载。手工编辑配置，或替换同一路径的 TSV 后，执行 `fcitx5-remote -r` 重新加载；当前不监视文件变更。建议先写新文件再原子重命名，避免读取到正在写入的半个词典。
 
@@ -82,7 +111,7 @@ sudo bash scripts/test_arch_package.sh packaging/arch/fcitx5-chengyin-0.1.0.prev
 ## 原型行为
 
 - 每个 InputContext 独立会话；只读词典在同进程内共享。
-- 字母全拼、`'` 音节约束、空格/1–9 选词、上下键、退格、Esc、Enter 原文上屏。
+- 字母全拼、`'` 音节约束、空格/数字选词（数字只到当前页宽）、上下键、退格、Esc、Enter 原文上屏。
 - 共享核心支持连续全拼/首拼/声母混输、前后翻页、中间编辑和分段选择；词条覆盖取决于配置的 TSV。Arch 包及显式开启 `CHENGYIN_PACKAGED_DATA=ON` 的构建默认加载随包的 `daily.tsv`（184,173 条）；默认源码构建及当前 CI 的 deb 包仍是 98 条示例，需自行指定 `data/daily.tsv`。
 - 上屏后提供离线联想；Tab 或鼠标确认，普通空格/数字直接交给应用；重置和敏感输入清除上下文与临时偏好。
 - 具备 Preedit 能力的应用使用 client preedit，其余使用输入面板；候选位置交给框架。
@@ -91,6 +120,6 @@ sudo bash scripts/test_arch_package.sh packaging/arch/fcitx5-chengyin-0.1.0.prev
 - reset/deactivate 清空组合；Password/Sensitive 字段透传并清空状态。
 - 达到长度/歧义上限时保留组合并显示提示。
 
-无头测试分两层。`test_engine.cpp`/`test_dictionary_reload.cpp`/`test_default_dictionary.cpp` 直接构造 `Engine` 与假 `InputContext`；`test_instance.cpp`（CTest `fcitx5-instance`）启动真实 `fcitx::Instance`，由框架按 addon 配置加载插件与 `testfrontend`/`testim`，经 `InputMethodManager` 路由按键，覆盖组合/候选/翻页/数字选词/编辑键/修饰键/双上下文隔离/敏感字段/切换输入法/失焦/重置/鼠标陈旧候选/长度上限/词库热切换，共 126 条断言，自造 TSV 词库且不读写用户配置。真实守护进程端到端 `e2e.sh`（CTest `fcitx5-e2e`）在私有 HOME/XDG 与私有 session bus 下启动真实 `fcitx5`、加载 `DESTDIR` 暂存安装的插件，客户端经框架自身的 `org.fcitx.Fcitx.InputMethod1`/`InputContext1` D-Bus 接口建立真实输入上下文、送按键并在 `CommitString` 信号里断言上屏文本，覆盖 `nihao`+空格→`你好`、`nihao`+Esc→不上屏、`nihao`+`2`→第二条候选三个场景；该路径不需要 X 服务器，不启动 Xvfb。缺 `fcitx5`/`dbus-daemon`/`cmake` 或该 fcitx5 不带 `dbusfrontend` addon 时以退出码 77 跳过。两层都不启动 compositor、GTK/Qt 应用或真实候选窗，不验证光标定位。C++ 测试另以 AddressSanitizer/UndefinedBehaviorSanitizer 运行；Rust 静态库及系统库未做 sanitizer 插桩。
+无头测试分两层。`test_engine.cpp`/`test_dictionary_reload.cpp`/`test_default_dictionary.cpp` 直接构造 `Engine` 与假 `InputContext`；`test_instance.cpp`（CTest `fcitx5-instance`）启动真实 `fcitx::Instance`，由框架按 addon 配置加载插件与 `testfrontend`/`testim`，经 `InputMethodManager` 路由按键，覆盖组合/候选/翻页/数字选词/编辑键/修饰键/双上下文隔离/敏感字段/切换输入法/失焦/重置/鼠标陈旧候选/长度上限/词库热切换，共 128 条断言（翻页用例随默认页宽改为 5 并补数字键越界断言，原 122 条），自造 TSV 词库且不读写用户配置。`test_settings.cpp`（CTest `fcitx5-settings`）另驱动同一个 `Engine` 走配置工具自身的入口 `setConfig()`，逐档验证 5/7/9 页宽与对应的数字键、11 项模糊音与 4 项键盘纠错逐位映射、联想开关、旧配置文件回落默认值、持久化往返、只改设置不重载词典，以及**活跃组合中保存设置不丢键、不改组合**，共 122 条断言。真实守护进程端到端 `e2e.sh`（CTest `fcitx5-e2e`）在私有 HOME/XDG 与私有 session bus 下启动真实 `fcitx5`、加载 `DESTDIR` 暂存安装的插件，客户端经框架自身的 `org.fcitx.Fcitx.InputMethod1`/`InputContext1` D-Bus 接口建立真实输入上下文、送按键并在 `CommitString` 信号里断言上屏文本，覆盖 `nihao`+空格→`你好`、`nihao`+Esc→不上屏、`nihao`+`2`→第二条候选三个场景；该路径不需要 X 服务器，不启动 Xvfb。缺 `fcitx5`/`dbus-daemon`/`cmake` 或该 fcitx5 不带 `dbusfrontend` addon 时以退出码 77 跳过。两层都不启动 compositor、GTK/Qt 应用或真实候选窗，不验证光标定位。C++ 测试另以 AddressSanitizer/UndefinedBehaviorSanitizer 运行；Rust 静态库及系统库未做 sanitizer 插桩。
 
-已知限制：Linux 配置界面当前只加载严格 TSV，尚未接入 Windows 的搜狗导入/追加界面；未持久保存用户词频，无中文标点转换；实际桌面焦点/导航/协议测试尚未完成。后台加载不等于无限容量：TSV 构建仍有临时内存峰值，磁盘/内核阻塞和正在执行的 Rust 构建不能瞬间取消，关闭插件需要等待工作线程结束。
+已知限制：本批只对齐页宽、联想、模糊音与键盘纠错四项，**未持久保存用户词频**（学习开关在本批不提供，调用共享核心时学习位固定为该核心的默认值 true，即维持现状）；**多词库管理**、中文标点、中英切换与 Shift 切换未接入；Linux 配置界面当前只加载严格 TSV，尚未接入 Windows 的搜狗导入/追加界面；实际桌面焦点/导航/协议测试尚未完成。后台加载不等于无限容量：TSV 构建仍有临时内存峰值，磁盘/内核阻塞和正在执行的 Rust 构建不能瞬间取消，关闭插件需要等待工作线程结束。

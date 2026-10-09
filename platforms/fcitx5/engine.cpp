@@ -186,7 +186,8 @@ uint32_t mapKey(fcitx::KeySym sym) {
 } // namespace
 
 Engine::Engine(fcitx::InputContextManager &manager, fcitx::EventLoop &loop, std::string defaultDictionaryPath)
-    : manager_(manager), config_(std::move(defaultDictionaryPath)), dictionary_(demoDictionary()),
+    : manager_(manager), config_(std::move(defaultDictionaryPath)), settings_(settingsOf(config_)),
+      dictionary_(demoDictionary()),
       factory_([this](fcitx::InputContext &) { return new State(dictionary_); }) {
     if (chengyin_ime_abi_version() != CHENGYIN_ABI_VERSION || !manager.registerProperty("chengyinState", &factory_)) {
         throw std::runtime_error("Chengyin IM ABI mismatch or duplicate property");
@@ -209,12 +210,77 @@ void Engine::reloadConfig() {
     // configuration keeps it instead of resolving to the empty (demo) default.
     EngineConfig config(config_.dictionaryPath.defaultValue());
     fcitx::readAsIni(config, "conf/chengyin.conf");
+    // fcitx5-remote -r and a hand-edited conf/chengyin.conf both arrive here, so
+    // the file's own settings are adopted before the (possibly new) lexicon is
+    // requested. A file written before these options existed leaves them at this
+    // build's defaults, which is what makes an old profile keep working.
+    config_.pageSize.setValue(*config.pageSize);
+    config_.associations.setValue(*config.associations);
+    config_.fuzzy.setValue(*config.fuzzy);
+    config_.correction.setValue(*config.correction);
+    if (adoptSettings()) { synchronizeAll(); }
     loadDictionary(*config.dictionaryPath, false);
 }
 
 void Engine::setConfig(const fcitx::RawConfig &config) {
     config_.load(config, true);
+    const bool settingsChanged = adoptSettings();
+    // Only a save that changed a non-dictionary option *and* left DictionaryPath
+    // alone can skip the reload. Anything else — a new path, or a save that
+    // differs in no option at all — keeps the long-standing behaviour of
+    // re-reading the lexicon. That last case is what a repeated Apply and a
+    // hand-edited file followed by `fcitx5-remote -r` look like, and re-reading
+    // the same path is how a user replaces a TSV in place.
+    if (settingsChanged && *config_.dictionaryPath == dictionary_->path) {
+        // Nothing but the settings moved, so the shipped lexicon is left alone:
+        // rebuilding the 184,173-entry vocabulary for a candidate-width change
+        // would cost about 0.4 s and buy nothing.
+        if (saveConfig(config_)) {
+            settingsError_.clear();
+        } else {
+            // The running engine already uses the new settings; what is missing is
+            // only restart durability, which the user has to be told about.
+            settingsError_ = "设置已应用，但配置保存失败；重启后可能恢复旧设置";
+        }
+        synchronizeAll();
+        return;
+    }
     loadDictionary(*config_.dictionaryPath, true);
+}
+
+bool Engine::adoptSettings() {
+    const auto next = settingsOf(config_);
+    if (next == settings_) { return false; }
+    settings_ = next;
+    ++settingsRevision_;
+    return true;
+}
+
+void Engine::applySettings(State &state) {
+    if (state.settingsRevision == settingsRevision_) { return; }
+    auto *session = state.session.get();
+    // The core only accepts a page width and matching rules on an idle session.
+    // A busy one keeps its old settings and is retried on the next key, so a
+    // settings save can never disturb an active composition or drop a keystroke.
+    const uint32_t learning = (kDefaultLearning ? 1u : 0u) | (settings_.associations ? 2u : 0u);
+    if (chengyin_session_configure(session, static_cast<uint32_t>(settings_.pageSize), learning) != 0) { return; }
+    if (chengyin_session_configure_matching(session, settings_.matching) != 0) { return; }
+    state.settingsRevision = settingsRevision_;
+    // The panel is built at the width the core now pages at, so the two cannot
+    // disagree about which row a digit selects.
+    state.pageSize = settings_.pageSize;
+    ++state.revision;
+}
+
+void Engine::synchronizeAll() {
+    manager_.foreach([this](fcitx::InputContext *ic) {
+        auto *state = ic->propertyFor(&factory_);
+        synchronize(*state);
+        applySettings(*state);
+        // Do not touch an idle context's panel: it may belong to another IME.
+        if (ic->hasFocus() && !text(state->session.get(), CHENGYIN_TEXT_PREEDIT).empty()) { refresh(ic); }
+        return true;
+    });
 }
 
 void Engine::loadDictionary(std::string path, bool persist) {
@@ -241,13 +307,7 @@ void Engine::loaded(uint64_t request, DictionaryPtr dictionary, std::string erro
     }
     dictionaryError_ = std::move(error);
     if (!dictionaryError_.empty()) { FCITX_WARN() << "Chengyin IM: " << dictionaryError_; }
-    manager_.foreach([this](fcitx::InputContext *ic) {
-        auto *state = ic->propertyFor(&factory_);
-        synchronize(*state);
-        // Do not touch an idle context's panel: it may belong to another IME.
-        if (ic->hasFocus() && !text(state->session.get(), CHENGYIN_TEXT_PREEDIT).empty()) { refresh(ic); }
-        return true;
-    });
+    synchronizeAll();
 }
 
 void Engine::synchronize(State &state) {
@@ -275,6 +335,12 @@ void Engine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &event) {
 int32_t Engine::process(fcitx::InputContext *ic, uint32_t key, uint32_t modifiers) {
     auto *state = ic->propertyFor(&factory_);
     synchronize(*state);
+    // Same place as the dictionary switch, and for the same reason: a session is
+    // only ever re-configured between compositions. A pending settings change is
+    // applied here before the key is processed, so the very next keystroke after
+    // a save already uses the new rules, and a session that was busy at save time
+    // picks the change up as soon as its composition ends.
+    applySettings(*state);
     const auto result = chengyin_session_process(state->session.get(), key, modifiers);
     ++state->revision;
     if (result < 0) { clear(ic); return result; }
@@ -304,10 +370,15 @@ void Engine::refresh(fcitx::InputContext *ic, bool limited) {
     const auto count = chengyin_session_candidate_count(session);
     if (count > 0) {
         auto list = std::make_unique<fcitx::CommonCandidateList>();
+        // Both the list's page width and the digits it answers to follow the
+        // width the core was actually configured with, never a fixed 9: the panel
+        // must not offer a row the core does not have on this page, and a digit
+        // must not select a row the panel is not showing.
+        const int width = state->pageSize;
         fcitx::KeyList keys;
-        for (uint32_t i = 0; i < 9; ++i) { keys.emplace_back(static_cast<fcitx::KeySym>(FcitxKey_1 + i)); }
+        for (int i = 0; i < width; ++i) { keys.emplace_back(static_cast<fcitx::KeySym>(FcitxKey_1 + i)); }
         if (chengyin_session_is_association(session)<=0) {list->setSelectionKey(keys);}
-        list->setPageSize(9);
+        list->setPageSize(width);
         for (int32_t i = 0; i < count; ++i) {
             list->append<Word>(text(session, CHENGYIN_TEXT_CANDIDATE, static_cast<size_t>(i)),
                                this, static_cast<size_t>(i), state->revision);
@@ -316,7 +387,9 @@ void Engine::refresh(fcitx::InputContext *ic, bool limited) {
         panel.setCandidateList(std::move(list));
     }
     if (chengyin_session_is_association(session)>0) {panel.setAuxUp(fcitx::Text("联想 · Tab / 鼠标确认"));}
-    if (limited || chengyin_session_budget_limited(session)>0) { panel.setAuxDown(fcitx::Text("输入达到长度或歧义上限，请分段输入")); }
+    if (!preedit.empty() && !settingsError_.empty()) {
+        panel.setAuxDown(fcitx::Text(settingsError_ + "；当前设置仍可继续使用"));
+    } else if (limited || chengyin_session_budget_limited(session)>0) { panel.setAuxDown(fcitx::Text("输入达到长度或歧义上限，请分段输入")); }
     else if (!preedit.empty() && !dictionaryError_.empty()) {
         panel.setAuxDown(fcitx::Text(dictionaryError_ + "；当前词典仍可使用"));
     } else if (!preedit.empty() && reloadState_ == ReloadState::Loading) {
@@ -339,7 +412,7 @@ void Engine::reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &ev
 void Engine::select(fcitx::InputContext *ic, size_t index, uint64_t revision) {
     if (sensitive(ic) || !ic->hasFocus()) { clear(ic); return; }
     auto *state = ic->propertyFor(&factory_);
-    if (state->revision != revision || index >= 9) { return; }
+    if (state->revision != revision || index >= static_cast<size_t>(state->pageSize)) { return; }
     process(ic, CHENGYIN_KEY_SELECT_1 + static_cast<uint32_t>(index), 0);
 }
 } // namespace chengyin

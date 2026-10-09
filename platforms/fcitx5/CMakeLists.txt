@@ -102,6 +102,13 @@ if(BUILD_TESTING)
   target_link_libraries(chengyin-fcitx5-test PRIVATE chengyin-engine)
   target_compile_options(chengyin-fcitx5-test PRIVATE -Wall -Wextra -Werror -UNDEBUG)
   add_test(NAME fcitx5-engine COMMAND chengyin-fcitx5-test)
+  # The settings-alignment suite (I17). It drives the real Engine through
+  # setConfig(), the same entry the config tool uses, and owns its own fixture
+  # lexicon written into a private directory.
+  add_executable(chengyin-settings-test test_settings.cpp)
+  target_link_libraries(chengyin-settings-test PRIVATE chengyin-engine)
+  target_compile_options(chengyin-settings-test PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+  add_test(NAME fcitx5-settings COMMAND chengyin-settings-test)
   add_executable(chengyin-reload-test test_dictionary_reload.cpp)
   target_link_libraries(chengyin-reload-test PRIVATE chengyin-engine)
   target_compile_options(chengyin-reload-test PRIVATE -Wall -Wextra -Werror -UNDEBUG)
@@ -116,6 +123,10 @@ if(BUILD_TESTING)
   add_test(NAME fcitx5-default-dictionary COMMAND chengyin-default-dictionary-test)
   set_tests_properties(fcitx5-engine fcitx5-dictionary-reload
     PROPERTIES TIMEOUT 15)
+  # The settings suite walks 15 rules forwards and backwards and settles the
+  # background lexicon load between saves, so it needs more than the
+  # single-behaviour suites do.
+  set_tests_properties(fcitx5-settings PROPERTIES TIMEOUT 120)
   set_tests_properties(fcitx5-default-dictionary PROPERTIES TIMEOUT 30)
 
   # Real-framework integration test. It boots a fcitx::Instance and drives the
