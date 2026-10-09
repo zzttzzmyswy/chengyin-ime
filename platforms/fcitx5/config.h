@@ -24,14 +24,6 @@ namespace chengyin {
 // configured with, so this value only ever describes a brand-new session.
 inline constexpr int kUnconfiguredPageSize = 9;
 
-// `chengyin_session_configure` takes the learning bit alongside the width, but
-// Linux has no persistent learning yet (that is the next batch), so this batch
-// ships no learning switch. The bit is therefore always sent as the core's own
-// default — `Session::learning_enabled`, which `Session::new` sets to true — so
-// configuring a session never turns learning off as a side effect. When the
-// learning switch arrives, this constant is what it replaces.
-inline constexpr bool kDefaultLearning = true;
-
 // Candidate widths a user may choose, matching the Windows settings page. This is
 // an enum rather than an IntConstrain range on purpose: the config tool then
 // offers exactly these three choices, and a hand-edited value outside the set
@@ -115,6 +107,12 @@ public:
     //
     // PageSize defaults to 5 for the same reason it does on Windows; Linux used
     // to hardcode 9, and that change is recorded in this platform's README.
+    //
+    // Learning is the switch the kDefaultLearning constant used to stand in for:
+    // its wording is the Windows settings page's own, and it defaults to on there
+    // as well. Turning it off stops this build from recording selections and from
+    // writing the profile, and tells the core to drop the session-local recency
+    // and phrase state it had accumulated.
     explicit EngineConfig(std::string defaultDictionaryPath = CHENGYIN_DEFAULT_DICTIONARY_PATH)
         : dictionaryPath{this, "DictionaryPath",
               "词典 TSV 绝对路径（默认使用随包安装的完整词典；清空则使用内置演示词典）",
@@ -122,6 +120,7 @@ public:
           pageSize{this, "PageSize", "每页候选数", PageSize::Five},
           associations{this, "Associations",
               "提交中文后显示联想词；Tab 或鼠标确认，空格、数字和 Enter 交给应用", true},
+          learning{this, "Learning", "根据选词习惯排序（本机保存，不联网）", true},
           fuzzy{this, "Fuzzy", "模糊音（双向匹配）", FuzzyConfig{}},
           correction{this, "Correction", "常见键盘失误", CorrectionConfig{}} {}
     const char *typeName() const override { return "ChengyinConfig"; }
@@ -171,6 +170,7 @@ public:
     fcitx::Option<std::string> dictionaryPath;
     fcitx::Option<PageSize> pageSize;
     fcitx::Option<bool> associations;
+    fcitx::Option<bool> learning;
     fcitx::Option<FuzzyConfig> fuzzy;
     fcitx::Option<CorrectionConfig> correction;
 };
@@ -181,15 +181,20 @@ public:
 struct EngineSettings {
     int pageSize = kUnconfiguredPageSize;
     bool associations = true;
+    // The learning bit the core is configured with. It is part of the compared
+    // snapshot because a save that flips it must reach every idle session -- the
+    // core drops its session-local recency and phrase state when it goes off.
+    bool learning = true;
     uint32_t matching = 0;
     bool operator==(const EngineSettings &other) const {
         return pageSize == other.pageSize && associations == other.associations &&
-               matching == other.matching;
+               learning == other.learning && matching == other.matching;
     }
     bool operator!=(const EngineSettings &other) const { return !(*this == other); }
 };
 
 inline EngineSettings settingsOf(const EngineConfig &config) {
-    return EngineSettings{config.pageSizeValue(), *config.associations, config.matchingFlags()};
+    return EngineSettings{config.pageSizeValue(), *config.associations, *config.learning,
+                          config.matchingFlags()};
 }
 } // namespace chengyin

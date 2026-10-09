@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "engine.h"
 #include <cassert>
+#include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <fcitx-utils/key.h>
@@ -23,10 +25,32 @@ public:
     std::string committed;
 };
 
+// Learning is on by default and the adapter persists it, so this test needs the
+// same private-environment discipline the other suites use: every XDG directory
+// resolves inside a temporary tree and the profile path is injected explicitly.
+// Without both, a run would read and write the developer's own
+// $XDG_DATA_HOME/fcitx5/chengyin/profile.bin.
+struct TemporaryDirectory {
+    TemporaryDirectory() {
+        char pattern[] = "/tmp/chengyin-engine-XXXXXX";
+        const char *created = ::mkdtemp(pattern);
+        assert(created);
+        path = created;
+    }
+    ~TemporaryDirectory() { std::filesystem::remove_all(path); }
+    TemporaryDirectory(const TemporaryDirectory &) = delete;
+    TemporaryDirectory &operator=(const TemporaryDirectory &) = delete;
+    std::string path;
+};
+
 int main() {
+    TemporaryDirectory directory;
+    setenv("XDG_CONFIG_HOME", (directory.path + "/config").c_str(), 1);
+    setenv("FCITX_CONFIG_HOME", (directory.path + "/config/fcitx5").c_str(), 1);
+    setenv("XDG_DATA_HOME", (directory.path + "/data").c_str(), 1);
     fcitx::InputContextManager manager;
     fcitx::EventLoop loop;
-    chengyin::Engine engine(manager, loop);
+    chengyin::Engine engine(manager, loop, "", directory.path + "/data/chengyin/profile.bin");
     Context a(manager), b(manager);
     a.setCapabilityFlags(fcitx::CapabilityFlag::Preedit);
     a.focusIn();

@@ -33,12 +33,13 @@ sudo cmake --install build/fcitx5
 
 ## 设置（与 Windows 端对齐的部分）
 
-在本批（I17）之前，Fcitx 插件的设置页只有“词典 TSV 绝对路径”，候选页宽固定为 9，且插件从不把用户偏好告诉共享核心。现在配置工具里会增加下面这些项，语义与默认值与 Windows 设置页一致：
+在本批（I17）之前，Fcitx 插件的设置页只有“词典 TSV 绝对路径”，候选页宽固定为 9，且插件从不把用户偏好告诉共享核心。现在配置工具里有下面这些项，语义与默认值与 Windows 设置页一致（`Learning` 为 I19 新增）：
 
 | 选项 | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
 | `PageSize` | 枚举 5/7/9 | **5** | 每页候选数。**默认值由 9 改为 5**，与 Windows 一致 |
 | `Associations` | 布尔 | 开 | “提交中文后显示联想词” |
+| `Learning` | 布尔 | 开 | “根据选词习惯排序（本机保存，不联网）”。见下文「选词学习」 |
 | `Fuzzy` | 子分组，11 个布尔 | 全关 | 模糊音（双向匹配）：`zh↔z`、`ch↔c`、`sh↔s`、`n↔l`、`f↔h`、`l↔r`、`an↔ang`、`en↔eng`、`in↔ing`、`ian↔iang`、`uan↔uang` |
 | `Correction` | 子分组，4 个布尔 | 全关 | 常见键盘失误：相邻字母按反、漏按一个字母、QWERTY 相邻键误按、重复按键 |
 
@@ -48,7 +49,50 @@ sudo cmake --install build/fcitx5
 
 `PageSize` 用枚举而不是整数范围：配置工具因此只提供 5/7/9 三个选项，手工写入集合外的值会退回该选项的默认值，而不会被悄悄夹到用户没选过的宽度。
 
-Fcitx 配置工具只显示本批已有的项；**学习（持久用户词频）与多词库管理尚未在本批对齐**，中文标点、中英切换、Shift 切换也未接入，列在后续批次。
+Fcitx 配置工具只显示本批已有的项；**多词库管理尚未对齐**，中文标点、中英切换、Shift 切换也未接入，列在后续批次。
+
+## 选词学习（本机持久保存）
+
+本批（I19）加入 `Learning` 开关，默认开，文案与 Windows 设置页一致。打开时，**每次中文上屏都会记录一次选词**，
+同拼音的候选排序随之向用户的习惯倾斜；关了就不再记录，也不会学习。学习数据只保存在本机，不联网、不上传。
+
+**档案位置**：`${XDG_DATA_HOME:-$HOME/.local/share}/fcitx5/chengyin/profile.bin`。目录权限 `0700`，文件 `0600`，
+因为里面是用户自己的输入文字。可用 `XDG_DATA_HOME` 改变位置，插件通过 Fcitx 的 StandardPaths 解析，
+不自己拼路径。
+
+**清除与导入导出没有配置界面按钮**，按任务卡要求用文件操作：
+
+- 清除：删除 `profile.bin`，然后 `fcitx5-remote -r`（或在配置工具里保存一次设置）。
+- 导出/备份：直接复制 `profile.bin`。
+- 导入：把备份放回该路径并 `fcitx5-remote -r`。
+
+重新读取时**已排队但尚未落盘的记录会被丢弃**：这些记录是针对被替换掉的旧内容确认的，重放到新内容上会得到
+错误的习惯，所以宁可丢弃。
+
+**损坏的档案不会被覆盖**：文件存在但校验失败（或不是普通文件、超过 4 MiB）时，插件用空档案运行、
+在候选面板提示一次、并在**本次进程内停止写盘**，原文件一字不动，方便用户自行检查或修复。
+此时内存中的学习仍然生效（本次输入内排序会变），只是重启后不保留。
+
+**敏感输入不学习**：密码/私密字段的按键由插件直接透传，既不组合也不记录。
+
+**多个输入上下文共享同一份学习结果**：插件持有一份内存主档案，空闲会话取它的快照，所以在 A 窗口学到的排序
+在 B 窗口下一次输入就生效。正在组合中的会话不会被改动，等它空闲后再切换。
+
+`Learning` 关闭时，共享核心会同时清空会话内的最近选词与联想短语状态；这是"关闭即停止个性化"的预期行为，
+**不是**删除已保存的档案——档案还在，重新打开开关就继续用。
+
+**写盘在后台线程**：按键线程只把已确认的选词拷进一个 128 槽的有界队列，序列化、`fsync`、原子替换都在工作线程；
+队列满则丢弃并计数，按键不会被磁盘拖慢。写盘失败按有上限的次数与时间窗重试（4 次 / 30 秒，退避翻倍起于 50 ms），
+超限则丢弃这一批并记入日志，内存中的排序不受影响。退出时尽力刷盘但有上限，不会让 Fcitx 卡在退出上。
+日志与提示里**只出现条数与错误原因，不出现拼写或文字内容**。
+
+与 Windows 的差异（不声称"已完全一致"）：
+
+- 单个插件进程，**没有跨进程锁**，也没有 Windows 的 generation/revision 映射通道；同一台机器上多个
+  Fcitx 实例（不同 `XDG_DATA_HOME`）各写各的档案。
+- 没有设置界面里的"清除/导入"按钮，按上面的文件操作完成；Windows 有。
+- 未做多屏、真实桌面焦点/候选窗的实机验证，只跑无头与真实 `fcitx::Instance` 测试。
+
 
 ## 词典配置与更新
 
@@ -120,6 +164,6 @@ sudo bash scripts/test_arch_package.sh packaging/arch/fcitx5-chengyin-0.1.0.prev
 - reset/deactivate 清空组合；Password/Sensitive 字段透传并清空状态。
 - 达到长度/歧义上限时保留组合并显示提示。
 
-无头测试分两层。`test_engine.cpp`/`test_dictionary_reload.cpp`/`test_default_dictionary.cpp` 直接构造 `Engine` 与假 `InputContext`；`test_instance.cpp`（CTest `fcitx5-instance`）启动真实 `fcitx::Instance`，由框架按 addon 配置加载插件与 `testfrontend`/`testim`，经 `InputMethodManager` 路由按键，覆盖组合/候选/翻页/数字选词/编辑键/修饰键/双上下文隔离/敏感字段/切换输入法/失焦/重置/鼠标陈旧候选/长度上限/词库热切换，共 128 条断言（翻页用例随默认页宽改为 5 并补数字键越界断言，原 122 条），自造 TSV 词库且不读写用户配置。`test_settings.cpp`（CTest `fcitx5-settings`）另驱动同一个 `Engine` 走配置工具自身的入口 `setConfig()`，逐档验证 5/7/9 页宽与对应的数字键、11 项模糊音与 4 项键盘纠错逐位映射、联想开关、旧配置文件回落默认值、持久化往返、只改设置不重载词典，以及**活跃组合中保存设置不丢键、不改组合**，共 122 条断言。真实守护进程端到端 `e2e.sh`（CTest `fcitx5-e2e`）在私有 HOME/XDG 与私有 session bus 下启动真实 `fcitx5`、加载 `DESTDIR` 暂存安装的插件，客户端经框架自身的 `org.fcitx.Fcitx.InputMethod1`/`InputContext1` D-Bus 接口建立真实输入上下文、送按键并在 `CommitString` 信号里断言上屏文本，覆盖 `nihao`+空格→`你好`、`nihao`+Esc→不上屏、`nihao`+`2`→第二条候选三个场景；该路径不需要 X 服务器，不启动 Xvfb。缺 `fcitx5`/`dbus-daemon`/`cmake` 或该 fcitx5 不带 `dbusfrontend` addon 时以退出码 77 跳过。两层都不启动 compositor、GTK/Qt 应用或真实候选窗，不验证光标定位。C++ 测试另以 AddressSanitizer/UndefinedBehaviorSanitizer 运行；Rust 静态库及系统库未做 sanitizer 插桩。
+无头测试分两层。`test_engine.cpp`/`test_dictionary_reload.cpp`/`test_default_dictionary.cpp` 直接构造 `Engine` 与假 `InputContext`；`test_instance.cpp`（CTest `fcitx5-instance`）启动真实 `fcitx::Instance`，由框架按 addon 配置加载插件与 `testfrontend`/`testim`，经 `InputMethodManager` 路由按键，覆盖组合/候选/翻页/数字选词/编辑键/修饰键/双上下文隔离/敏感字段/切换输入法/失焦/重置/鼠标陈旧候选/长度上限/词库热切换，共 128 条断言（翻页用例随默认页宽改为 5 并补数字键越界断言，原 122 条），自造 TSV 词库且不读写用户配置。`test_settings.cpp`（CTest `fcitx5-settings`）另驱动同一个 `Engine` 走配置工具自身的入口 `setConfig()`，逐档验证 5/7/9 页宽与对应的数字键、11 项模糊音与 4 项键盘纠错逐位映射、联想开关、旧配置文件回落默认值、持久化往返、只改设置不重载词典，以及**活跃组合中保存设置不丢键、不改组合**，共 122 条断言。`test_learning.cpp`（CTest `fcitx5-learning`）驱动同一个 `Engine`，逐条验证本机持久选词学习：默认开关下反复选同一候选会使它升到首位、档案写入临时目录且权限为 0600/0700、重启（同路径新 `Engine`）后排序保留、`Learning` 关闭时文件字节与 mtime 都不动且排序不变、敏感字段不学不写、两个输入上下文共享同一份学习结果且正在组合的上下文不被打断、损坏档案既不覆盖也不阻止内存学习并有一次提示、删档重读等于清除、把档案放回重读等于导入、写盘目标无法写入时按键仍被处理且失败有计数有上限、提示与错误文本里不出现任何拼写或文字，共 90 条断言；同样只用私有 HOME/XDG 与注入的临时档案路径。真实守护进程端到端 `e2e.sh`（CTest `fcitx5-e2e`）在私有 HOME/XDG 与私有 session bus 下启动真实 `fcitx5`、加载 `DESTDIR` 暂存安装的插件，客户端经框架自身的 `org.fcitx.Fcitx.InputMethod1`/`InputContext1` D-Bus 接口建立真实输入上下文、送按键并在 `CommitString` 信号里断言上屏文本，覆盖 `nihao`+空格→`你好`、`nihao`+Esc→不上屏、`nihao`+`2`→第二条候选三个场景；该路径不需要 X 服务器，不启动 Xvfb。缺 `fcitx5`/`dbus-daemon`/`cmake` 或该 fcitx5 不带 `dbusfrontend` addon 时以退出码 77 跳过。两层都不启动 compositor、GTK/Qt 应用或真实候选窗，不验证光标定位。C++ 测试另以 AddressSanitizer/UndefinedBehaviorSanitizer 运行；Rust 静态库及系统库未做 sanitizer 插桩。
 
-已知限制：本批只对齐页宽、联想、模糊音与键盘纠错四项，**未持久保存用户词频**（学习开关在本批不提供，调用共享核心时学习位固定为该核心的默认值 true，即维持现状）；**多词库管理**、中文标点、中英切换与 Shift 切换未接入；Linux 配置界面当前只加载严格 TSV，尚未接入 Windows 的搜狗导入/追加界面；实际桌面焦点/导航/协议测试尚未完成。后台加载不等于无限容量：TSV 构建仍有临时内存峰值，磁盘/内核阻塞和正在执行的 Rust 构建不能瞬间取消，关闭插件需要等待工作线程结束。
+已知限制：页宽、联想、模糊音、键盘纠错与**本机持久选词学习**已对齐 Windows；**多词库管理**、中文标点、中英切换与 Shift 切换未接入；Linux 配置界面当前只加载严格 TSV，尚未接入 Windows 的搜狗导入/追加界面；实际桌面焦点/导航/协议测试尚未完成。后台加载不等于无限容量：TSV 构建仍有临时内存峰值，磁盘/内核阻塞和正在执行的 Rust 构建不能瞬间取消，关闭插件需要等待工作线程结束。

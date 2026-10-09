@@ -65,6 +65,7 @@ int main() {
     TemporaryDirectory directory;
     assert(::setenv("XDG_CONFIG_HOME", (directory.path + "/config").c_str(), 1) == 0);
     assert(::setenv("FCITX_CONFIG_HOME", (directory.path + "/config/fcitx5").c_str(), 1) == 0);
+    assert(::setenv("XDG_DATA_HOME", (directory.path + "/data").c_str(), 1) == 0);
 
     const auto full = directory.path + "/full.tsv";
     const auto custom = directory.path + "/custom.tsv";

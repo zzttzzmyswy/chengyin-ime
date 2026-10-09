@@ -220,7 +220,10 @@ int main() {
     // written.
     const auto configHome = directory.path + "/config";
     if (::setenv("XDG_CONFIG_HOME", configHome.c_str(), 1) != 0 ||
-        ::setenv("FCITX_CONFIG_HOME", (configHome + "/fcitx5").c_str(), 1) != 0) {
+        ::setenv("FCITX_CONFIG_HOME", (configHome + "/fcitx5").c_str(), 1) != 0 ||
+        // Learning is on by default, so the data directory has to be private too:
+        // otherwise this suite would write the developer's own profile.
+        ::setenv("XDG_DATA_HOME", (directory.path + "/data").c_str(), 1) != 0) {
         std::cerr << "FAIL: cannot point fcitx at a private configuration directory" << std::endl;
         return 1;
     }
@@ -233,7 +236,8 @@ int main() {
 
     fcitx::InputContextManager manager;
     fcitx::EventLoop loop;
-    chengyin::Engine engine(manager, loop);
+    // The profile path is injected, so the test never depends on StandardPaths.
+    chengyin::Engine engine(manager, loop, "", directory.path + "/data/chengyin/profile.bin");
     Context context(manager);
     Driver driver(engine, context);
 

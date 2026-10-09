@@ -54,6 +54,7 @@ int main() {
     assert(::setenv("XDG_CONFIG_HOME", configHome.c_str(), 1) == 0);
     // Fcitx-specific overrides must not send fixture writes to a user's config.
     assert(::setenv("FCITX_CONFIG_HOME", (configHome + "/fcitx5").c_str(), 1) == 0);
+    assert(::setenv("XDG_DATA_HOME", (directory.path + "/data").c_str(), 1) == 0);
     const auto first = directory.path + "/first.tsv";
     const auto second = directory.path + "/second.tsv";
     const auto bad = directory.path + "/bad.tsv";
