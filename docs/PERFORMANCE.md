@@ -1,5 +1,104 @@
 # 性能预算与复现
 
+## 迭代 I15 全规则长串逐键尾延迟：剖析与优化 · 2026-10-09
+
+硬件：13.24 开发机，Intel Core i9-10900X 10C/20T（3.70 GHz 基频），251 GiB 内存，
+Arch Linux，Rust release（thin LTO、codegen-units=1）。词库为仓库内置
+`data/daily.mswydict`（184,173 条，26,998,882 B），会话开立即分段，匹配 flag 为
+`fuzzy::OPTIONS_MASK`（11 条模糊音 + SWAP/OMIT/NEIGHBOR/REPEAT）。
+范围仅为共享 Rust 核心的 `process` 与全部可见候选标注，**不含** TSF/IPC/UI/DWM/磁盘，
+也不是 thin-LTO 生产二进制的端到端延迟。基线源码 `0665ac5`，优化后为本分支。
+
+### 一、剖析结论（perf，热点与占比）
+
+`perf record -F 999` + `perf report --children`，语料为
+`zhnag/zhng/zhsng/zhaang/nizhnaghao/jintiantianqihenhao` 六串逐键。
+inclusive 占比（`--children`）与 self 占比（`--no-children`）分别为：
+
+| 符号 | self | 说明 |
+| --- | ---: | --- |
+| `Decoder::transition` | 32.2% | inclusive **70.7%**：含下列全部被调 |
+| `Decoder::compute` | 22.7% | 逐 start 位置的词图 DP 主循环 |
+| `language::bonus` | 11.6% | `transition` 内每个 (left,right) 都查一次搭配表 |
+| `Dictionary::entry` | 10.5% | `transition` 内取两侧词条 |
+| `SipHash hash_one::<&u128>` | 8.5% | 仅来自 `boundary_words` 的 `HashSet<u128>` 探测 |
+| `reset_tolerant` | 3.5% | 容错根集合 |
+| `language::encode` | 1.8% | `bonus` 的上下文后缀编码 |
+
+关键测量（同机插桩，非猜测）：
+
+- `transition` 每轮被测语料被调用 **978,419 次**，而 distinct `(left,right)` 仅
+  **537,871** 个 —— 冗余度 1.8×，即该 memo 并未失效，命中率 15.3% 是它 128 槽
+  直接映射表的容量上限，不是 bug。
+- 对照实验（编译期变体、独立构建，表大小 128→65536、索引哈希换成全域混合）
+  **P99 全部落在 18.5–19.0 ms**，即扩大/改良 memo **没有收益**。这条否定了最初
+  「memo 太小/哈希只用低 7 位」的假设，也是本次没有动 memo 的原因。
+
+因此优化对象是 **miss 路径的常量开销**，而不是缓存命中率。
+
+### 二、改动（均不改变任何输出）
+
+1. `boundary_words`：`HashSet<u128>`（SipHash，键是 126 位无冲突编码）换成
+   `BoundaryIndex` —— 64 KiB 位图预过滤 + 同键的快速哈希精确集合。
+   位图 524,288 位、19,196 个键实际置位 18,825 位（**误判率 3.6%**），
+   即约 96% 的「不存在」探测用一次位测即可否决，不再触碰多兆字节的哈希表。
+   位图对每个成员都置位，因此**不可能有假阴性**；置位后仍查精确集合，答案与原先完全一致。
+2. `language::bonus(context, …)` 从 `Decoder::compute` 的逐 rank 循环内提到循环外：
+   该值只依赖当前词与 `context`，原先在最多 16 次 rank 迭代里被重复求值。
+   词法分支与 `matches_fast` 分支各一处。
+3. 同步修正 `estimated_heap_bytes` 对边界索引的核算（改由 `BoundaryIndex::heap_bytes` 报告）。
+
+### 三、正确性证据
+
+- **逐候选全等**：对 8 组输入（含 64 字节长串、四条单规则纠错、全规则长串）
+  优化前后各自 dump 每页每个候选的 `text|pinyin`，**104 行完全逐字节相同**。
+- `crates/ime-core/tests/long_input.rs` 新增 5 条回归，其中
+  `prefiltered_index_agrees_with_a_plain_set_on_every_encoding`（`dictionary.rs` 内单元测试）
+  用独立重建的 `HashSet` 作为 oracle 覆盖全部 19,196 个编码，并对每个真实成员做
+  4 种扰动（±1、±2^21、±2^42）比对成员判定，同时要求误判率确实很低。
+- `tests/allocations.rs` 的零按键分配与 64 KiB 会话上限保持通过（曾因中途插桩
+  多出 24 次分配而被该守门测试拦下，插桩清除后恢复为 0）。
+
+### 四、微基准（同机、同轮、AB 交替）
+
+`cargo bench -p chengyin-core --bench latency --locked`，基线 `0665ac5` 与本分支
+各自编译为独立二进制，**每轮 before/after 交替执行**以抵消后台负载漂移。
+单位 µs。
+
+<!-- I15-BENCH-TABLE -->
+
+| 场景 | 轮次 | 基线 P50 | 优化 P50 | 基线 P95 | 优化 P95 | 基线 P99 | 优化 P99 | P99 Δ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 全规则六纠错/长串逐键 | 1 | 309.9 | 294.1 | 12995.3 | 10897.3 | 19066.1 | 15922.3 | −16.5% |
+| 同上 | 2 | 303.3 | 289.2 | 12459.8 | 10529.6 | 18290.3 | 15492.2 | −15.3% |
+| `yingshe/yinshe/yignshe` 逐键 | 1 | 404.9 | 352.3 | 4659.9 | 4070.4 | 5104.8 | 4206.9 | −17.6% |
+| 无规则五串逐键（含 60 B） | 1 | 106.5 | 95.0 | 3903.0 | 3315.2 | 4905.3 | 4158.1 | −15.2% |
+| 首拼/混输六串逐键 | 1 | 37.3 | 37.5 | 2231.5 | 1846.7 | 2340.7 | 1938.0 | −17.2% |
+
+原始输出：`build/i15-bench-before-r{1,2}.txt`、`build/i15-bench-after-r{1,2}.txt`
+（`after` 为 r1/r2 两轮；第 3 轮测量期间 load average 升至 ~9，
+不作为结论依据，故表中取前两轮）。
+
+**判读**：目标场景 P99 下降 **15–17%**，P95 同幅，P50 约 −5%；
+其余四个场景的 P99 同为 −15% 至 −18%，**没有一个场景回退**
+（首拼场景 P50 37.25→37.49 µs 属噪声量级，P95/P99 均为明显下降）。
+但距离任务卡的 **P99 −50%** 仍有差距，见下节。
+
+后台负载未控制（13.24 为共享开发机，测量期间 load average 见原始日志），
+单次差值不构成性能归因；上表为 2 轮有效观测。
+
+### 五、结论与限制
+
+- 本次**未达到**性能预算（单键 P99 ≤ 0.5 ms），也**未达到**任务卡希望的
+  「全规则长串逐键 P99 下降 ≥ 50%」；如实记录，不以修改场景定义凑数。
+- 已消除的两项开销（SipHash 8.5% self、重复 `bonus` 求值）在剖析上确实消失，
+  但它们在 inclusive 口径下只占一部分，剩余时间仍在 `transition` 的 miss 路径
+  （`bonus` 查表 + `entry` 取词 + 谓词判定）与 `compute` 的逐 start 位置 DP 上。
+- 下一步的方向应由新的剖析决定，候选：把 `transition` 的输入从「词条 id 对」
+  改为可直接缓存的「文本对摘要」、对 `bonus` 建立按 `(context 后缀, 首字节)` 的
+  预计算表、以及减少 `compute` 对每个 start 位置重复展开的前缀工作。
+
+
 ## preview23 准确句末与前缀 · 2026-10-06
 
 Win11 build26200 / Ryzen 9 9950X 16C32T / Rust1.99 MSVC目标。

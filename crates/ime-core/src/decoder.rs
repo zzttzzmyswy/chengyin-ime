@@ -238,6 +238,14 @@ impl Decoder {
             }
             d.matches(input, start, BEAM, |id, end| {
                 let cost = d.word_cost(id);
+                // The context bonus depends on this word and `context` only, never
+                // on the rank it is reached at, so it is hoisted out of the loop
+                // below (which runs up to BEAM times per word).
+                let context_bonus = if start == 0 {
+                    crate::language::bonus(context, d.entry(id).text)
+                } else {
+                    0.0
+                };
                 for rank in 0..self.lengths[end] as usize {
                     let pair = if end < size {
                         self.transition(d, id, self.paths[end][rank].id)
@@ -261,13 +269,7 @@ impl Decoder {
                         continue;
                     }
                     let item = Path {
-                        cost: cost + self.paths[end][rank].cost
-                            - pair.bonus
-                            - if start == 0 {
-                                crate::language::bonus(context, d.entry(id).text)
-                            } else {
-                                0.0
-                            },
+                        cost: cost + self.paths[end][rank].cost - pair.bonus - context_bonus,
                         id,
                         next: end as u8,
                         rank: rank as u8,
@@ -323,6 +325,12 @@ impl Decoder {
                     // Full spellings have priority; abbreviations participate in the
                     // same word graph with an explicit ambiguity penalty per word.
                     let cost = d.word_cost(id) + 6.0;
+                    // Same loop-invariant hoist as the lexical branch above.
+                    let context_bonus = if start == 0 {
+                        crate::language::bonus(context, d.entry(id).text)
+                    } else {
+                        0.0
+                    };
                     for rank in 0..self.lengths[end] as usize {
                         let pair = if end < size {
                             self.transition(d, id, self.paths[end][rank].id)
@@ -342,11 +350,7 @@ impl Decoder {
                             Path {
                                 cost: cost + self.paths[end][rank].cost
                                     - pair.bonus
-                                    - if start == 0 {
-                                        crate::language::bonus(context, d.entry(id).text)
-                                    } else {
-                                        0.0
-                                    },
+                                    - context_bonus,
                                 id,
                                 next: end as u8,
                                 rank: rank as u8,

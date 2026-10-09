@@ -11,7 +11,7 @@
 # pkgver/pkgrel separator and cannot appear inside pkgver. The dot form is the same
 # version text with a legal separator, and vercmp keeps it monotonic.
 pkgname=fcitx5-chengyin
-pkgver=0.1.0.preview27
+pkgver=0.1.0.preview28
 pkgrel=1
 pkgdesc="澄音输入法全拼原型（Fcitx 5，含完整词库）"
 arch=('x86_64')
