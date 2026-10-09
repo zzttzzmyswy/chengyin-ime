@@ -106,6 +106,18 @@ Windows 一次 SetText 写 commit+preedit，再将 composition 起点 ShiftStart
 数字、鼠标及宿主候选 Finalize 统一 editKey 路径；异步去重、代际检查和敏感字段透传保留。
 
 
+## Fcitx5 适配层回归怎么跑（I13）
+
+第 1 层是真实 `fcitx::Instance` 集成测试 `platforms/fcitx5/test_instance.cpp`（CTest 名 `fcitx5-instance`）：
+插件由框架按 addon 配置加载，按键经 `testfrontend` 进入 `InputMethodManager` 路由，126 条断言。
+依赖 `Fcitx5ModuleTestFrontend` / `Fcitx5ModuleTestIM` 两个 CMake 包与 `fcitx-utils/testing.h`；
+发行版不带 testing 模块时 CMake `find_package(... QUIET)` 失败即不注册该测试，属预期跳过而非失败。
+
+第 2 层是真实守护进程端到端 `platforms/fcitx5/e2e.sh <build-dir>`：私有 HOME/XDG、私有 session bus、
+`Xvfb -displayfd` 取空闲显示号、`DESTDIR` 暂存安装插件、真实 `fcitx5` + 真实 XIM 连接 + `xdotool` XTEST 注入。
+缺 `Xvfb`/`xdotool`/`dbus-daemon`/`fcitx5`/`cc`/libX11 头时输出原因并以退出码 77 跳过。
+**当前该层未注册进 CTest**：它能把插件加载起来并让按键到达适配层，但上屏文本尚未能在本机回收到 XIM 客户端，
+阻塞点与已尝试做法写在脚本头部注释里。
 ## 工程边界
 
 | 目录 | 职责 |
