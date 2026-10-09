@@ -1,6 +1,8 @@
 # 项目状态
 
-## Fcitx5 适配层真实 Instance 回归与守护进程端到端 I13 · 2026-10-08
+## Fcitx5 适配层真实 Instance 回归与守护进程端到端 I13 · 2026-10-09 已合并（PR #22，squash `633327b`）
+
+评审结论：第 1 层通过；技术负责人重跑 `check.sh`、`version.py --check`、ctest 3 次（4/4）、进程集合不变，并独立复现 3 处阴性对照（去敏感保护→5 条失败；去 `select` revision 判断→12.4/12.5 失败；`clear()` 不重置会话→多条失败）；缺 testing 模块时以 `CMAKE_DISABLE_FIND_PACKAGE_Fcitx5ModuleTestFrontend=ON` 模拟，仅跳过且其余 3 项通过。第 2 层降级收下（脚本入库、未注册 CTest），后续迭代 I14 解决。未改产品代码，未发版（仍 preview27）。
 
 新增**真实框架集成测试** `platforms/fcitx5/test_instance.cpp`
 （CTest `fcitx5-instance`）：启动真实 `fcitx::Instance`，由框架按 addon 配置加载
