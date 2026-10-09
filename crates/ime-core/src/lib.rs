@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Platform-independent full-pinyin prototype. No I/O, threads or runtime dependencies.
 #![forbid(unsafe_code)]
 

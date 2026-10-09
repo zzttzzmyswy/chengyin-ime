@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Run in an elevated, 64-bit Windows PowerShell. Changes only Chengyin's registration.
 [CmdletBinding()]
 param()

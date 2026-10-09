@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 #include <fcitx-config/configuration.h>
 #include <fcitx-config/option.h>

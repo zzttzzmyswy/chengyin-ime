@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Versioned C ABI. Pointer validity, exclusivity and lifetime are caller contracts.
 #![deny(unsafe_op_in_unsafe_fn)]
 #![allow(clippy::missing_safety_doc)] // The complete caller contract is in include/chengyin_ime.h.

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Single, audited release-version source (review R13).
 
 `version.json` at the repository root is the only place a release version is

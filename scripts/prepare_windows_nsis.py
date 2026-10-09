@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Prepare NSIS 3.11's missing AMD64 stubs in an isolated build directory."""
 from __future__ import annotations
 

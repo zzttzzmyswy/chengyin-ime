@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Small explainable offline transition baseline, shared and immutable. Mutable
 //! context/recency stays in each Session and is discarded on reset/focus loss.
 use std::sync::OnceLock;

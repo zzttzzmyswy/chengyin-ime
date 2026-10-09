@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "theme_art.h"
 #include <objidl.h>
 #include <gdiplus.h>

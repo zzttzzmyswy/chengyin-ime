@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 use crate::decoder::{Decoder, Word};
 use crate::dictionary::valid_input;
 use crate::{

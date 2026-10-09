@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "language_bar.h"
 #include "preferences.h"
 #include <shellapi.h>

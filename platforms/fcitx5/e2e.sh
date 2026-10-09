@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Real-daemon end-to-end Fcitx 5 check for the Chengyin plugin (I14).
 #
 # Runs a REAL chain: private session bus -> real fcitx5 daemon with the staged

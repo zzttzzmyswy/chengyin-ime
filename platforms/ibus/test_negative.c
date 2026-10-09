@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 /* Differential control for the COMMIT contract.
  *
  * test_engine.c asserts that a commit is read after a process call that reports

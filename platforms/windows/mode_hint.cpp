@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "mode_hint.h"
 #include "theme_art.h"
 #include <algorithm>

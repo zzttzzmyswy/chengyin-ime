@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 use chengyin_core::{fuzzy::OPTIONS_MASK, Dictionary, Key, Modifiers, Session};
 use std::sync::Arc;
 fn press(s: &mut Session, k: Key) {

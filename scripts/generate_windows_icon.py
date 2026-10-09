@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Generate our flat C/wave icon; only Python's standard library is required."""
 from pathlib import Path
 import math

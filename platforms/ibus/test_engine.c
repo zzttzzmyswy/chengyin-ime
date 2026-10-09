@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 /* A-level tests for the IBus engine core: no daemon, no D-Bus, no display.
  *
  * Covers the four behaviours the task card calls out: IBus key mapping, the

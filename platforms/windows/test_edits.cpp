@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // A deterministic in-memory TSF host. This tests our actual COM service, not
 // Windows' text store or GUI. Faults are injected before/after text mutation.
 #include "test_stubs.h"

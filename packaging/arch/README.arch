@@ -46,7 +46,7 @@ sudo pacman -U ./fcitx5-chengyin-0.1.0.preview27-1-x86_64.pkg.tar.zst
 | THUOCL | MIT |
 | phrase-pinyin-data | MIT |
 
-代码许可是 MIT，见 `/usr/share/doc/fcitx5-chengyin/copyright`；它不替代词库许可。
+代码许可是 GPL-3.0-or-later，见 `/usr/share/doc/fcitx5-chengyin/copyright`；它不替代词库许可。
 
 ## 卸载
 

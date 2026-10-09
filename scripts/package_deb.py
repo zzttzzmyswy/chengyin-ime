@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Build a native Debian preview from an already configured CMake build.
 
 Requires Python 3.11+, CMake, dpkg-dev and matching Fcitx development packages.

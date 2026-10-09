@@ -11,12 +11,12 @@
 # pkgver/pkgrel separator and cannot appear inside pkgver. The dot form is the same
 # version text with a legal separator, and vercmp keeps it monotonic.
 pkgname=fcitx5-chengyin
-pkgver=0.1.0.preview28
+pkgver=0.1.0.preview29
 pkgrel=1
 pkgdesc="澄音输入法全拼原型（Fcitx 5，含完整词库）"
 arch=('x86_64')
 url="https://github.com/zzttzzmyswy/chengyin-ime"
-license=('MIT')
+license=('GPL-3.0-or-later')
 # Runtime links come from the built module: libFcitx5{Core,Config,Utils} belongs
 # to fcitx5, libstdc++/libgcc_s to gcc-libs, and libc/libm to glibc. The Rust
 # core is linked statically, so no separate chengyin shared library is required.

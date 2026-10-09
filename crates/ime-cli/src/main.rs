@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 use chengyin_core::{demo_dictionary, Dictionary, Key, Modifiers, Session, MAX_DICTIONARY_BYTES};
 use std::io::{self, BufRead, Read, Write};
 use std::sync::Arc;

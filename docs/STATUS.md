@@ -1,5 +1,30 @@
 # 项目状态
 
+## 迭代 I16 项目代码许可改为 GPL-3.0-or-later · 2026-10-09 已交付待验收（preview29）
+
+**结果先行**：项目自有代码许可由 MIT 改为 **GPL-3.0-or-later**，词库与美术素材许可保持原样
+（独立于代码），preview28 及更早版本仍按当时 MIT 授予、不追溯。`LICENSE` 换为 GPLv3 官方全文
+（232 行，首行 `GNU GENERAL PUBLIC LICENSE` / `Version 3, 29 June 2007`）。
+
+**版本**：任务卡要求 bump 到 preview28，但 **preview28 在任务卡创建前已被 I15 发版占用**
+（`v0.1.0-preview28` tag 落在 I15 合并提交 `253e13e`，release 已发布 6 个资产）。同一版本号
+不能承载两份不同内容，故改为 **preview29**，并同步 `version.json`、`version_generated.h`
+与 Arch `pkgver`（`version.py --check` 通过）。已作为偏差记录在交付说明中。
+
+**改动面**：`Cargo.toml`、`packaging/arch/PKGBUILD`（`license=('GPL-3.0-or-later')`）、
+Windows 安装器 `LegalCopyright`、设置「关于」页（协议名 + 许可对话框）、`README.md`、
+`platforms/windows/THIRD_PARTY.md`、`platforms/windows/README.md`、`packaging/windows/README.md`、
+`platforms/fcitx5/README.md`、`platforms/fcitx5/CMakeLists.txt`、`packaging/arch/README.arch`、
+`docs/ARCHITECTURE.md`、`docs/QUALITY_BASELINE.md`、`data/README.md`；首方源码文件头加
+`SPDX-License-Identifier: GPL-3.0-or-later`；新增 `docs/LICENSING.md`。
+
+**未决点**：`docs/LICENSING.md` 第 4.3 节记录 MSVC C/C++ 静态运行库的 GPLv3 兼容性——
+按 GPLv3 第 1 段 System Libraries 定义（含 "a compiler used to produce the work"）与第 6 段，
+Static link 的 MSVC CRT 可作为 System Library 排除在 Corresponding Source 之外，但 FSF 未就
+此具体情形给出明确答复，且 Microsoft 再分发条款非自由软件许可。**该项标记为未决，不作兼容性
+断言**，已按任务卡要求写明；其余随包第三方组件（Rust 运行时、NSIS zlib/LZMA、MinGW GCC、
+Windows 系统组件）均给出"兼容"结论及依据。
+
 ## 迭代 I15 全规则长串逐键尾延迟：剖析优先、常量开销优化 · 2026-10-09 已合并（PR #26，squash `253e13e`，preview28）
 
 评审结论：通过（性能目标未达成，如实收下）。技术负责人亲自重跑 `check.sh`、`version.py --check`（`0.1.0-preview28`）；`quality_report` 在基线 `0665ac5` 与本分支输出逐行相同（仅词库加载耗时不同）；独立复现阴性对照（把预过滤改为按 `code^1` 查精确集合 → `prefiltered_index_agrees_with_a_plain_set_on_every_encoding` 与 `boundary_attestation_matches_a_direct_encoding_oracle` 失败，11 passed / 2 failed）。基准在 13.24 共享开发机上基线/本分支二进制交替执行 3 轮，全规则长串逐键 P99：第 1 轮 33.6→17.7 ms（两端负载不等，不作结论）、第 2 轮 21.9→17.9 ms（−18.6%）、第 3 轮 18.9→15.2 ms（−19.3%）；负载 4–20，受后台进程影响大。结论与开发方一致：约 −16%~−19%，**未达 −50%，也远高于 ≤0.5 ms 目标**，不声称达标；范围仅共享核心，不含 TSF/IPC/UI。

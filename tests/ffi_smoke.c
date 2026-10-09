@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "chengyin_ime.h"
 #include <assert.h>
 #include <stdio.h>

@@ -13,12 +13,13 @@ Windows 预载 184,173 条字词，不需要下载。`demo.tsv` 是本项目手�
 
 每个来源的原始文件、完整许可、修订和 SHA256 保存在 `sources/`。
 Rime 原始词典说明派生于 Android 开源 PinyinIME，保留原始头部和署名。
-代码的 MIT 许可不替代词库许可；Windows 安装包的 RUNTIME_LICENSES.zip
+代码的 GPL-3.0-or-later 许可不替代词库许可；Windows 安装包的 RUNTIME_LICENSES.zip
 同时保留四项词库的 LICENSE、README 和 SOURCE.json。
 
-主动排除的两个候选来源（避免许可风险）：`rime/rime-essay` 为 LGPL-3.0，
-与本仓库 MIT 分发不兼容；phrase-pinyin-data 的 `large_pinyin.txt` 混入
-CC-CEDICT（CC BY-SA）与汉典数据，再分发许可不清，只取该仓库中 README
+主动排除的两个候选来源：`rime/rime-essay` 为 LGPL-3.0——排除发生在项目仍按 MIT
+分发时（当时不兼容）；改用 GPL-3.0-or-later 后 LGPL-3.0 已可并入，本任务不改变
+这一既定的词库取舍，是否重新评估由维护者决定。phrase-pinyin-data 的 `large_pinyin.txt`
+混入 CC-CEDICT（CC BY-SA）与汉典数据，再分发许可不清，只取该仓库中 README
 明示为 MIT 血统的 `pinyin.txt`。
 
 `python3 scripts/import_daily.py` 校验四个来源的原始文件哈希，离线重建

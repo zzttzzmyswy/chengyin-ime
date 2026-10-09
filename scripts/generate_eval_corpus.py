@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Deterministic generator for the independent quality annotation set (review R11).
 
 Provenance and licensing

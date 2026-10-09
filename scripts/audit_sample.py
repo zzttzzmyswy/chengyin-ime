@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Random 200-entry audit sample of the words the I05 sources contributed.
 
 The sample is drawn from the live build (`import_daily.build()`), so it cannot

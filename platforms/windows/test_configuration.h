@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Private regression interface; compiled into chengyin_tsf_fixture only.
 #pragma once
 #include "common.h"
