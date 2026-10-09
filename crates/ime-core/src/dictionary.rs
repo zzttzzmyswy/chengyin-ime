@@ -85,6 +85,67 @@ impl Default for BoundaryIndex {
     }
 }
 
+/// Bits in the [`AdjacencyFilter`] prefilter. Same 64 KiB budget as
+/// [`BoundaryIndex`], and enough to keep the shipped lexicon's ~179k distinct
+/// internal pairs down to a 28.9% occupancy — measured, along with the 66.5% of
+/// real `transition` calls it rejects, in `docs/PERFORMANCE.md` (I16).
+const ADJACENCY_FILTER_BITS: usize = 1 << 19;
+
+/// Which `(last scalar of left, first scalar of right)` pairs can occur *inside*
+/// a boundary word.
+///
+/// Every probe [`Dictionary::attests_boundary`] makes joins a suffix of `left` to
+/// a prefix of `right`, so the pair straddling that join is always
+/// `(left's last scalar, right's first scalar)` — a pair that must occur inside
+/// some boundary word for the probe to succeed. Testing that one pair first
+/// rejects a false join from a single bit of a resident array instead of walking
+/// up to nine encodings, each landing on a random slot of the multi-megabyte
+/// exact set below.
+///
+/// Only a *necessary* condition is tested, and a bit is set for every real
+/// internal pair, so a clear bit proves the answer is `false`. Set bits are just
+/// false positives that fall through to the unchanged exact probes; there are no
+/// false negatives.
+#[derive(Debug)]
+struct AdjacencyFilter {
+    bits: Box<[u64]>,
+}
+impl AdjacencyFilter {
+    /// A `char` scalar is at most 21 bits, so the pair fills 42 bits of one `u64`
+    /// with no aliasing. Mixing and taking the *top* 19 bits spreads the low bits
+    /// CJK scalars differ in across the whole array; masking the low bits instead
+    /// would map every scalar sharing a high bit to the same slot, which is how a
+    /// near-useless prefilter looks like a working one.
+    fn bit(left: u32, right: u32) -> (usize, u64) {
+        let key = (u64::from(left) << 21) | u64::from(right);
+        let mixed = key.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        let at = (mixed >> (64 - 19)) as usize;
+        (at >> 6, 1 << (at & 63))
+    }
+    fn build(pairs: impl Iterator<Item = (u32, u32)>) -> Self {
+        let mut bits = vec![0u64; ADJACENCY_FILTER_BITS / 64].into_boxed_slice();
+        for (left, right) in pairs {
+            let (word, mask) = Self::bit(left, right);
+            bits[word] |= mask;
+        }
+        Self { bits }
+    }
+    /// Sound one-sided test: `false` means the pair occurs inside no boundary
+    /// word, so no join crossing it can be attested.
+    pub(crate) fn may_contain(&self, left: u32, right: u32) -> bool {
+        let (word, mask) = Self::bit(left, right);
+        self.bits[word] & mask != 0
+    }
+    fn heap_bytes(&self) -> usize {
+        self.bits.len() * 8
+    }
+}
+impl Default for AdjacencyFilter {
+    fn default() -> Self {
+        Self::build(std::iter::empty())
+    }
+}
+
 pub const MAX_INPUT_BYTES: usize = 63;
 pub const MAX_PINYIN_BYTES: usize = 255;
 pub const MAX_TEXT_BYTES: usize = 256;
@@ -130,6 +191,42 @@ struct Entry {
     cost: f32,
     pinyin_len: u16,
     text_len: u16,
+}
+/// Scalar-level facts about one entry's text, packed so `Decoder::transition` can
+/// settle a candidate boundary without touching the string pool.
+///
+/// `transition` is the hottest function in the decoder and almost every call is a
+/// miss that ends in `allowed == false`. Deciding that needs the pair's scalars and
+/// a handful of "is this text X" predicates, all of which are properties of the
+/// entry alone — but reading them from `&str` means two pool slices, a UTF-8 walk
+/// per character predicate, and up to ten `str` comparisons for the pronoun frame.
+/// Precomputing them here turns that into two indexed loads and a few bit tests
+/// (`docs/PERFORMANCE.md`, I16).
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct EntryMeta {
+    pub(crate) first: u32,
+    pub(crate) last: u32,
+    flags: u8,
+}
+impl EntryMeta {
+    /// Text is a single Unicode scalar, i.e. `a_single` / `b_single`.
+    pub(crate) const SINGLE: u8 = 1 << 0;
+    /// Text is one of the pronoun frame's members.
+    pub(crate) const PRONOUN: u8 = 1 << 1;
+    /// Text is one of the terminal particles `吧吗呢啊呀`.
+    pub(crate) const PARTICLE: u8 = 1 << 2;
+    /// Text is exactly `的`.
+    pub(crate) const DE: u8 = 1 << 3;
+    /// Text starts with `不` (necessary for `b.strip_prefix('不') == Some(a)`).
+    pub(crate) const STU_PREFIX: u8 = 1 << 4;
+    /// Text ends with `不` (necessary for `a.strip_suffix('不') == Some(b)`).
+    pub(crate) const STU_SUFFIX: u8 = 1 << 5;
+    pub(crate) fn has(self, flag: u8) -> bool {
+        self.flags & flag != 0
+    }
+    pub(crate) fn is_single(self) -> bool {
+        self.has(Self::SINGLE)
+    }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Candidate<'a> {
@@ -197,6 +294,10 @@ pub struct Dictionary {
     shortcuts: Vec<u32>,
     text_index: Vec<u32>,
     boundary_words: BoundaryIndex,
+    /// Scalar pairs that occur inside a boundary word; see [`AdjacencyFilter`].
+    adjacency: AdjacencyFilter,
+    /// Per-entry scalar facts; see [`EntryMeta`]. Same length as `entries`.
+    meta: Vec<EntryMeta>,
     max_letters: usize,
     initials_keys: String,
     initials_groups: Vec<InitialGroup>,
@@ -439,6 +540,8 @@ impl Dictionary {
             shortcuts: Vec::new(),
             text_index: Vec::new(),
             boundary_words: BoundaryIndex::default(),
+            adjacency: AdjacencyFilter::default(),
+            meta: Vec::new(),
             max_letters: 0,
             initials_keys: String::new(),
             initials_groups: Vec::new(),
@@ -549,6 +652,67 @@ impl Dictionary {
                 }
                 (count >= 2).then_some(code)
             }));
+        // Scalar pairs that occur *inside* a boundary word, i.e. every adjacent
+        // pair except one straddling the whole word's own ends. A join can only be
+        // attested when the pair straddling it occurs in a word, so this lets one
+        // resident bit reject the false joins that dominate `attests_boundary`.
+        self.adjacency = {
+            let mut pairs = Vec::new();
+            let mut chars = [0u32; 6];
+            for id in 0..self.entries.len() as u32 {
+                let mut len = 0;
+                for c in self.entry(id).text.chars() {
+                    if len == chars.len() {
+                        len = 0;
+                        break;
+                    }
+                    chars[len] = u32::from(c);
+                    len += 1;
+                }
+                if len >= 2 {
+                    for at in 0..len - 1 {
+                        pairs.push((chars[at], chars[at + 1]));
+                    }
+                }
+            }
+            AdjacencyFilter::build(pairs.into_iter())
+        };
+        // Per-entry scalar facts, derived once. `transition` is called ~1e6 times
+        // per benchmark run and misses on ~85% of them; reading these from the pool
+        // each time costs two slices, a UTF-8 walk per predicate and a ten-way
+        // `str` comparison for the pronoun frame (`docs/PERFORMANCE.md`, I16).
+        self.meta = (0..self.entries.len() as u32)
+            .map(|id| {
+                let text = self.entry(id).text;
+                let mut flags = 0u8;
+                if text.chars().nth(1).is_none() {
+                    flags |= EntryMeta::SINGLE;
+                }
+                if matches!(
+                    text,
+                    "我" | "你" | "他" | "她" | "它" | "我们" | "你们" | "他们" | "她们" | "它们"
+                ) {
+                    flags |= EntryMeta::PRONOUN;
+                }
+                if matches!(text, "吧" | "吗" | "呢" | "啊" | "呀") {
+                    flags |= EntryMeta::PARTICLE;
+                }
+                if text == "的" {
+                    flags |= EntryMeta::DE;
+                }
+                if text.starts_with('不') {
+                    flags |= EntryMeta::STU_PREFIX;
+                }
+                if text.ends_with('不') {
+                    flags |= EntryMeta::STU_SUFFIX;
+                }
+                EntryMeta {
+                    first: text.chars().next().map_or(u32::MAX, u32::from),
+                    last: text.chars().next_back().map_or(u32::MAX, u32::from),
+                    flags,
+                }
+            })
+            .collect();
         self.max_letters = (0..self.entries.len() as u32)
             .map(|id| {
                 self.entry(id)
@@ -794,6 +958,7 @@ impl Dictionary {
             + self.initials_groups.capacity() * std::mem::size_of::<InitialGroup>()
             + self.initials_words.capacity() * 4
             + self.boundary_words.heap_bytes()
+            + self.adjacency.heap_bytes()
     }
     pub(crate) fn entry(&self, id: u32) -> Candidate<'_> {
         let e = self.entries[id as usize];
@@ -802,6 +967,14 @@ impl Dictionary {
             text: &self.pool[e.text as usize..e.text as usize + e.text_len as usize],
             frequency: e.frequency,
         }
+    }
+    pub(crate) fn entry_meta(&self, id: u32) -> EntryMeta {
+        self.meta[id as usize]
+    }
+    /// Sound one-sided adjacency test; see [`AdjacencyFilter`]. `false` proves no
+    /// join crossing the pair can be attested.
+    pub(crate) fn adjacency_may_contain(&self, left: u32, right: u32) -> bool {
+        self.adjacency.may_contain(left, right)
     }
     /// Evidence for learning promotion must attest both text and pronunciation.
     pub(crate) fn attests(&self, text: &str, input: &str, flags: u32) -> bool {
@@ -825,6 +998,36 @@ impl Dictionary {
     }
     /// A lexical witness must cross the boundary, not merely occur on one side.
     pub(crate) fn attests_boundary(&self, left: &str, right: &str) -> bool {
+        // Every probe below joins a suffix of `left` to a prefix of `right`, so the
+        // pair straddling that join is always `(last scalar of left, first scalar
+        // of right)`. If that pair occurs inside no boundary word, no probe can
+        // succeed — a single resident bit answers the call instead of walking up
+        // to nine encodings that each miss the multi-megabyte exact set.
+        let (Some(l), Some(r)) = (left.chars().next_back(), right.chars().next()) else {
+            return false;
+        };
+        if !self.adjacency.may_contain(u32::from(l), u32::from(r)) {
+            return false;
+        }
+        for (start, _) in left.char_indices().rev().take(3) {
+            let mut code = left[start..]
+                .chars()
+                .fold(0u128, |v, c| (v << 21) | u128::from(u32::from(c) + 1));
+            for c in right.chars().take(3) {
+                code = (code << 21) | u128::from(u32::from(c) + 1);
+                if self.boundary_words.contains(code) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    /// The same suffix/prefix split walk as [`Self::attests_boundary`], without the
+    /// adjacency prefilter. Test-only: it is the oracle the gate has to agree with
+    /// on every "not attested" answer, and it is the implementation the gate was
+    /// carved out of, so the two must stay in step (I16).
+    #[cfg(test)]
+    pub(crate) fn boundary_probe_unfiltered(&self, left: &str, right: &str) -> bool {
         for (start, _) in left.char_indices().rev().take(3) {
             let mut code = left[start..]
                 .chars()
@@ -1280,6 +1483,8 @@ impl Dictionary {
             shortcuts: Vec::new(),
             text_index: Vec::new(),
             boundary_words: BoundaryIndex::default(),
+            adjacency: AdjacencyFilter::default(),
+            meta: Vec::new(),
             max_letters: 0,
             initials_keys: String::new(),
             initials_groups: Vec::new(),
@@ -1826,5 +2031,105 @@ mod boundary_index_tests {
                 "{left}+{right}"
             );
         }
+    }
+
+    /// I16 added an adjacency prefilter in front of the exact probes: it answers
+    /// `false` from one resident bit when the pair straddling the join occurs
+    /// inside no boundary word. That is a necessary condition, so it may only
+    /// short-circuit answers the exact walk would also have given as `false`.
+    ///
+    /// The ten hand-picked pairs above cannot catch a filter that is right on
+    /// curated examples and wrong in general, so this sweeps the shipped lexicon
+    /// against itself — the pairs where real joins live — and against perturbed
+    /// partners that deliberately misalign the straddling pair.
+    #[test]
+    fn adjacency_gate_rejects_only_joins_the_exact_walk_also_rejects() {
+        let source = include_str!("../../../data/daily.tsv");
+        let d = Dictionary::from_tsv(source).unwrap();
+        let words: Vec<&str> = (0..d.entry_count() as u32)
+            .map(|id| d.entry(id).text)
+            .collect();
+        let (mut checked, mut rejected) = (0usize, 0usize);
+        for (at, &left) in words.iter().enumerate() {
+            // A stride keeps the sweep to a few seconds while still covering every
+            // word length and every script range in the lexicon.
+            if at % 13 != 0 {
+                continue;
+            }
+            for &right in words.iter().skip(at).take(4) {
+                let gated = d.attests_boundary(left, right);
+                let exact = d.boundary_probe_unfiltered(left, right);
+                assert_eq!(gated, exact, "gated={gated} exact={exact} {left}+{right}");
+                checked += 1;
+                rejected += usize::from(!gated);
+            }
+            // A partner whose last scalar is replaced: the straddling pair changes,
+            // which is precisely the case the gate is meant to decide.
+            if let Some(head) = left.chars().next() {
+                let mismatched: String = std::iter::once(head)
+                    .chain("的".chars())
+                    .chain(left.chars().skip(2))
+                    .collect();
+                let gated = d.attests_boundary(left, &mismatched);
+                assert_eq!(gated, d.boundary_probe_unfiltered(left, &mismatched));
+                checked += 1;
+                rejected += usize::from(!gated);
+            }
+        }
+        assert!(checked > 2_000, "sweep too small: {checked}");
+        // A gate that always answered "go ahead" would pass the equality checks
+        // while removing none of the work it exists to remove.
+        assert!(
+            rejected * 2 > checked,
+            "gate rejects too little: {rejected}/{checked}"
+        );
+        // The gate is only worth its 64 KiB if a *rejecting* answer really does come
+        // from one bit rather than the exact walk. Assert the filter's own occupancy
+        // and disagreement rate, so a hash that silently maps most scalars to the
+        // same slot — which would leave every answer a false positive — fails here
+        // instead of quietly restoring the old cost.
+        let words: Vec<&str> = (0..d.entry_count() as u32)
+            .map(|id| d.entry(id).text)
+            .collect();
+        let mut filter_says_yes = 0usize;
+        let mut filter_total = 0usize;
+        for (at, &left) in words.iter().enumerate() {
+            if at % 101 != 0 {
+                continue;
+            }
+            let (Some(l), Some(r)) = (
+                left.chars().next_back(),
+                words[at + 1 % words.len()].chars().next(),
+            ) else {
+                continue;
+            };
+            filter_total += 1;
+            filter_says_yes += usize::from(d.adjacency.may_contain(u32::from(l), u32::from(r)));
+        }
+        let set_bits: u32 = d.adjacency.bits.iter().map(|w| w.count_ones()).sum();
+        assert_eq!(
+            d.adjacency.bits.len() * 64,
+            ADJACENCY_FILTER_BITS,
+            "filter size changed"
+        );
+        // The shipped lexicon has ~179k distinct internal pairs, which occupy 28.9%
+        // of the 2^19 bits. That is the honest occupancy of a filter sized for this
+        // lexicon, not saturation: a *broken* hash (the one this test was written
+        // after) collapsed the left scalar onto 7 bits and drove occupancy to 99.9%,
+        // which is what the ceiling below is set to catch.
+        assert!(
+            set_bits * 3 < ADJACENCY_FILTER_BITS as u32,
+            "filter is saturated: {set_bits} of {ADJACENCY_FILTER_BITS} bits set"
+        );
+        // The sampled pairs above are arbitrary adjacent dictionary words, which are
+        // *less* favourable than the joins the decoder actually probes; on the real
+        // transition calls this filter rejects 66.5%. Requirement here is only that it
+        // clearly beats a coin flip on the harsher sample, which a filter that had
+        // lost most of a scalar to a bad mix (the failure this test was written after)
+        // cannot do.
+        assert!(
+            filter_says_yes * 2 < filter_total,
+            "filter admits nearly every probe: {filter_says_yes}/{filter_total}"
+        );
     }
 }
