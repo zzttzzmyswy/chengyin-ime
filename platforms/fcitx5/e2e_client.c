@@ -45,6 +45,12 @@
 #define STAGE_TIMEOUT_MS 10000
 #define POLL_MS 10
 
+/* After the Escape scenario's composition has cleared, keep draining signals
+ * for this long before ruling a stray commit out: the claim is that nothing was
+ * committed, so it must not rest on the order in which two signals happened to
+ * arrive. Long enough for any commit the daemon had already queued to land. */
+#define SETTLE_MS 250
+
 #define MAX_TEXT 256
 #define MAX_FAILURE 256
 
@@ -74,7 +80,8 @@ typedef struct {
     gboolean done;
     gboolean failed;
     char failure[MAX_FAILURE];
-    gint64 deadline; /* µs, current stage */
+    gint64 deadline;     /* µs, current stage */
+    gint64 settle_until; /* µs, escape scenario's post-clear drain */
 } Client;
 
 static gint64 now_us(void) { return g_get_monotonic_time(); }
@@ -215,10 +222,16 @@ static gboolean step(gpointer user_data) {
         return G_SOURCE_CONTINUE;
     }
 
-    /* escape: success is the composition clearing with nothing committed. The
-     * cleared preedit arrives in the same batch as any commit would, so this
-     * is also the point at which a stray commit becomes visible. */
+    /* escape: success is the composition clearing with nothing committed. A
+     * commit would be emitted before the cleared preedit, but "nothing was
+     * committed" is exactly the claim under test, so it is not inferred from
+     * that ordering: once the composition is gone the client keeps pumping for
+     * a bounded settle window and only then rules a stray commit out. */
     if (client->preedit[0] == '\0') {
+        if (client->settle_until == 0) {
+            client->settle_until = now_us() + SETTLE_MS * 1000;
+        }
+        if (now_us() < client->settle_until) { return G_SOURCE_CONTINUE; }
         if (client->commits > 0) {
             fail(client, "%s committed \"%s\" although the composition was cancelled",
                  client->scenario->final_name, client->last_commit);
@@ -252,7 +265,10 @@ static gboolean call_void(Client *client, const char *object_path,
  * window - a daemon that is not up yet is a "not yet", not a failure - and
  * report the last error if it never succeeds. */
 static char *create_context(Client *client) {
-    char last_error[MAX_FAILURE] = "";
+    /* Smaller than the failure buffer on purpose: this is embedded in a longer
+     * message, and the two together must provably fit at every optimisation
+     * level (-Wformat-truncation is level-dependent). */
+    char last_error[128] = "";
     for (int attempt = 0; attempt < 100; ++attempt) {
         GError *error = NULL;
         GVariantBuilder args;
