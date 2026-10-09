@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 /* D-Bus frontend end-to-end client for platforms/fcitx5/e2e.sh (I14).
  *
  * This is the real application side of the chain: a real session bus, a real

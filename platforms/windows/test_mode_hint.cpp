@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Native regression for the 中/英 mode hint and its preference. Read-only: no
 // user preference file, profile or registration is touched.
 #include "mode_hint.h"

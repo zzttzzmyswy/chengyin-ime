@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Run only on an isolated Windows CI runner. Registers this preview temporarily.
 [CmdletBinding()]
 param([Parameter(Mandatory = $true)][string]$Package)

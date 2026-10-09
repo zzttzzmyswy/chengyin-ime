@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Destructive installer lifecycle tests: use a clean isolated Windows runner/Wine prefix."""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Read-only native UI regression. No Save/import/clear action is dispatched.
 #include "settings.h"
 #include <commctrl.h>

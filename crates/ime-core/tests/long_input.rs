@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! I15 long-input tail-latency optimization: behaviour-preservation regressions.
 //!
 //! The optimization (see `docs/PERFORMANCE.md`, I15) replaced the boundary-word

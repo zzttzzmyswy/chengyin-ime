@@ -159,7 +159,7 @@ python3 scripts/generate_eval_corpus.py
 | 来源 | 许可 | 在标注集中的用法 |
 | --- | --- | --- |
 | `data/daily.tsv`（Rime pinyin-simp 固定修订 + jieba） | Apache-2.0 + MIT，见 `data/README.md` | 提供全部拼音、文字与词频 |
-| 本脚本自写规则 | 本仓库 MIT | 派生模糊音、键盘失误、组合长句、学习场景 |
+| 本脚本自写规则 | 本仓库 GPL-3.0-or-later | 派生模糊音、键盘失误、组合长句、学习场景 |
 
 - 不读取、不依赖任何真实用户输入历史；不含个人词库或学习记录。
 - 生成是确定性的：种子固定、依赖已固定的 `data/daily.tsv`，因此 sha256 可复现

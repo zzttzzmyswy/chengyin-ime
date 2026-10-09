@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Per-session bounded adaptive history-query cache. No shared mutable state.
 #[derive(Clone, Copy, Default)]
 pub(crate) struct HistorySelection {

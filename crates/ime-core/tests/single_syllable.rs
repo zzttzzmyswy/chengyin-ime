@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 use chengyin_core::{
     fuzzy::{NEIGHBOR, OMIT, OPTIONS_MASK, PHONETIC_MASK, REPEAT, SWAP},
     Dictionary, Key, Modifiers, Profile, Session,

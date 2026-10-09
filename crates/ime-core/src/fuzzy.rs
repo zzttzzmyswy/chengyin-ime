@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Optional phonetic equivalences and bounded keyboard-error alignment.
 //! No I/O, heap allocation or changes to the caller's raw composition.
 pub const PHONETIC_MASK: u32 = (1 << 11) - 1;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Portable local selection preferences. Loading, recording and serialization
 //! allocate; platform adapters call them outside the decoding hot path.
 use crate::{MAX_INPUT_BYTES, MAX_TEXT_BYTES};

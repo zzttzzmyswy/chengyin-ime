@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 use chengyin_core::*;
 use std::sync::Arc;
 fn input(s: &mut Session, text: &str) {

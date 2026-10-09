@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! R12 resource report: what a multi-vocabulary custom library costs.
 //!
 //! A Windows custom-vocabulary library holds up to 64 vocabularies that are merged

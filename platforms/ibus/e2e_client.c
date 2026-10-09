@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 /* Headless IBus client used by platforms/ibus/e2e.sh.
  *
  * Creates a real input context on a real session bus, selects the chengyin engine

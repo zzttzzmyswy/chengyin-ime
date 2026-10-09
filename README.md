@@ -79,5 +79,5 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platforms\windows\Buil
 - [架构](docs/ARCHITECTURE.md)、[C ABI](include/chengyin_ime.h)、[搜狗格式兼容](docs/SOGOU_COMPATIBILITY.md)。
 - [词库来源](data/README.md)、[第三方许可](platforms/windows/THIRD_PARTY.md)、[集中实测门槛](docs/WINDOWS_RELEASE_GATE.md)。
 
-代码采用 [MIT License](LICENSE)。词库分别使用 Apache-2.0 与 MIT，转换来源、固定修订和原始许可
-保存在 `data/sources`。Windows 系统字体只通过系统 API 使用，不随项目分发。
+代码采用 [GPL-3.0-or-later](LICENSE)。词库分别使用 Apache-2.0 与 MIT，转换来源、固定修订和原始许可
+保存在 `data/sources`；词库与美术素材的许可独立于代码，清单见[许可说明](docs/LICENSING.md)。Windows 系统字体只通过系统 API 使用，不随项目分发。

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "settings.h"
 #include "dictionary_source.h"
 #include "preferences.h"

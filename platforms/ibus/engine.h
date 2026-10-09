@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #ifndef CHENGYIN_IBUS_ENGINE_H
 #define CHENGYIN_IBUS_ENGINE_H
 

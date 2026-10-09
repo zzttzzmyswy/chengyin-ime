@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Bounded, all-or-nothing local dictionary import. No platform I/O.
 use crate::{Dictionary, DictionaryError, MAX_DICTIONARY_BYTES, MAX_PINYIN_BYTES, MAX_TEXT_BYTES};
 use std::collections::BTreeMap;

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Build one offline Windows x64 installer EXE; never register it on the host."""
 from __future__ import annotations
 

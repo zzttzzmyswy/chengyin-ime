@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Test-only defaults: unimplemented TSF operations must fail explicitly.
 #pragma once
 #include "common.h"

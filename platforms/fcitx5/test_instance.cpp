@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Real-framework integration test for the Fcitx 5 adapter (iteration I13).
 //
 // test_engine.cpp constructs an Engine and a fake InputContext by hand, so it

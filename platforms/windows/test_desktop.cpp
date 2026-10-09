@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Build-only settings host: process-local COM activation of the new fixture.
 // No system registration or user history changes.
 #include "common.h"

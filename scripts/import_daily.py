@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Offline, deterministic rebuild of the shipped daily vocabulary.
 
 Sources (each pinned and hash-verified against its own `SOURCE.json`):

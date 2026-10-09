@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Independent quality baseline over the annotated corpus (review R11).
 //!
 //! Measures only the shared Rust core: no UI, no disk, no platform adapter. The

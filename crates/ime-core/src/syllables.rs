@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Compile-time token offsets into the sorted, audited syllable source.
 // The display path probes up to six bytes with binary searches; no runtime cache.
 const SOURCE: &str = include_str!("../../../data/syllables.txt");

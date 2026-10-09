@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 use chengyin_core::{demo_dictionary, Dictionary, Key, Modifiers, Profile, Session};
 use std::hint::black_box;
 use std::sync::Arc;

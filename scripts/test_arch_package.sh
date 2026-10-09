@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Exercise the Arch package lifecycle in an isolated pacman root, never on the
 # host. Runtime dependency checks are skipped on purpose: this validates the
 # payload, file tracking and user-data preservation, not dependency resolution

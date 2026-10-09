@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #ifndef CHENGYIN_IME_H
 #define CHENGYIN_IME_H
 

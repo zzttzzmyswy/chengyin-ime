@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "common.h"
 #include "settings.h"
 #include "preferences.h"
@@ -439,7 +440,7 @@ void Settings::buildPage() {
         paragraph(
             L"版本：" CHENGYIN_VERSION L" · Windows x64\n本机离线输入；采用共享 Rust 核心与 Windows TSF。");
         paragraph(
-            L"代码开源协议：MIT License · Copyright 2026 Myswy IM contributors\n允许使用、修改和分发，须保留版权和许可声明；软件按现状提供。词库及运行库有各自许可，随安装包提供。");
+            L"代码开源协议：GPL-3.0-or-later · Copyright (C) 2026 Myswy IM contributors\n本程序是自由软件，按 GNU 通用公共许可证第 3 版或更高版本发布；按现状提供，不附带任何担保。完整协议文本见安装目录的 LICENSE。词库及运行库有各自许可，随安装包提供。");
         buttons(605, L"开源协议", 606, L"仓库链接", 607, L"发行说明");
         end();
         begin(L"自动更新");
@@ -915,13 +916,19 @@ void Settings::command(int id, int event) {
         return;
     }
     if (id == 605) {
-        // Show the full bundled license even when installed offline.
+        // GPLv3 is ~35 KB, too large for a message box, so this dialog shows the
+        // copyright notice, the warranty disclaimer and where the full text lives.
+        // GPLv3 section 4 requires the licence itself to accompany every copy, and
+        // that copy is the LICENSE file installed next to the DLL; the installer's
+        // own license page renders the same file.
         MessageBoxW(window_,
-            L"MIT License\n\nCopyright (c) 2026 Myswy IM contributors\n\n"
-            L"Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the Software), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\n"
-            L"The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\n"
-            L"THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
-            L"澄音开源协议 · MIT", MB_OK);
+            L"GNU General Public License v3.0 or later (GPL-3.0-or-later)\n\n"
+            L"Copyright (C) 2026 Myswy IM contributors\n\n"
+            L"This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.\n\n"
+            L"This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.\n\n"
+            L"You should have received a copy of the GNU General Public License along with this program; the complete text is the LICENSE file installed with 澄音输入法. If not, see https://www.gnu.org/licenses/.\n\n"
+            L"词库与美术素材有各自许可，独立于代码；随安装包提供。",
+            L"澄音开源协议 · GPL-3.0-or-later", MB_OK);
         return;
     }
     if (id == 606) {
@@ -962,7 +969,7 @@ void Settings::command(int id, int event) {
                     L"• 修复设置字体生命周期，改进 DPI、工作区和滚动。\n"
                     L"• 自定义词库列表支持添加、启用、停用和删除。\n"
                     L"• 空格提交原始拼音；数字和鼠标选词；Shift 组合键透传。\n"
-                    L"• 关于页包含 MIT、仓库、发行说明和可校验更新。\n\n完整发行历史见项目 GitHub Releases。",
+                    L"• 关于页包含 GPL-3.0-or-later、仓库、发行说明和可校验更新。\n\n完整发行历史见项目 GitHub Releases。",
                     L"澄音发行说明", MB_OK);
         if (release_.available && !release_.notes.empty())
             MessageBoxW(window_, release_.notes.c_str(), release_.version.c_str(), MB_OK);

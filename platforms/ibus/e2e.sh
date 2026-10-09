@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Headless end-to-end IBus check for the Chengyin engine (I09 acceptance).
 #
 # Runs a REAL chain: private session bus -> real ibus-daemon -> the shipped

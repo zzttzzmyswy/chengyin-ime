@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 /* IBus engine for the Chengyin shared core.
  *
  * Unlike the Fcitx5 addon, an IBus engine is a separate process: ibus-daemon

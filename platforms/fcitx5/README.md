@@ -17,7 +17,7 @@ DESTDIR="$PWD/build/stage" cmake --install build/fcitx5
 
 最后一步只把文件放在 `build/stage`，不修改系统。默认动态插件目录取自发行版 Fcitx SDK 的 `FCITX_INSTALL_ADDONDIR`；Debian amd64 通常为 `/usr/lib/x86_64-linux-gnu/fcitx5`。可用 `-DCHENGYIN_ADDON_DIR=...` 指定，但必须匹配框架实际查找目录。交叉编译时通过 `-DCHENGYIN_RUST_LIBRARY=/path/to/libchengyin_ime.a` 指向同一目标架构的 Rust 静态库。
 
-插件静态链接本项目 Rust 核心，动态依赖 Fcitx 框架；不需另装 `libchengyin_ime.so`。打包时保留 `LICENSE` 并列明平台依赖许可证。
+插件静态链接本项目 Rust 核心，动态依赖 Fcitx 框架；不需另装 `libchengyin_ime.so`。打包时保留 `LICENSE`（GPL-3.0-or-later）并列明平台依赖许可证。
 
 ## 在测试桌面安装
 

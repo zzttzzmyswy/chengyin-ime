@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Exercise Debian package lifecycle in an empty temporary root, never on the host.
 
 Dependencies are deliberately skipped in this file-only fixture; it does not

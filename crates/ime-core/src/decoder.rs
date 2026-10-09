@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 use crate::{Dictionary, LookupError, MAX_INPUT_BYTES, MAX_TEXT_BYTES};
 
 /// Bounded lexical Viterbi baseline with attested boundary constraints.

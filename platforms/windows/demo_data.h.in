@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 namespace chengyin {
 inline constexpr char kDemoTsv[] = R"chengyinlex(@CHENGYIN_DEMO_TSV@)chengyinlex";

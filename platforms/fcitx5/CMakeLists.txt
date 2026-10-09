@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 cmake_minimum_required(VERSION 3.20)
 project(chengyin-fcitx5 VERSION 0.1.0 LANGUAGES C CXX)
 include(GNUInstallDirs)
@@ -81,7 +82,7 @@ if(CHENGYIN_PACKAGED_DATA)
           DESTINATION "${CHENGYIN_LEXICON_DIR}" RENAME DICTIONARY.md)
   # Upstream licenses and fixed-revision provenance records: the redistributed
   # lexicon must carry its attribution, and its data license stays separate from
-  # the code's MIT license.
+  # the code's GPL-3.0-or-later license.
   foreach(_source jieba rime-pinyin-simp thuocl phrase-pinyin-data)
     install(FILES "${CHENGYIN_ROOT}/data/sources/${_source}/LICENSE"
             DESTINATION "${CHENGYIN_LEXICON_DIR}/licenses" RENAME LICENSE.${_source})

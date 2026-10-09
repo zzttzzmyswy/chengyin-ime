@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "configuration.h"
 #include "language_bar.h"
 #include "punctuation.h"
