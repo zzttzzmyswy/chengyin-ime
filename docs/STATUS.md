@@ -29,7 +29,11 @@ Static link 的 MSVC CRT 可作为 System Library 排除在 Corresponding Source
 断言**，已按任务卡要求写明；其余随包第三方组件（Rust 运行时、NSIS zlib/LZMA、MinGW GCC、
 Windows 系统组件）均给出"兼容"结论及依据。
 
-## 迭代 I17 解码器算法级优化：`transition` miss 路径元数据预判 · 2026-10-09 待评审（preview30）
+## 迭代 I17 解码器算法级优化：`transition` miss 路径元数据预判 · 2026-10-09 已合并（PR #31，squash `0d0e363`，preview30）
+
+评审结论：通过（目标 −30% 未达，如实记录）。技术负责人亲自重跑：`check.sh` 全绿、`version.py --check`/`--verify-bump`；`quality_report` 前后仅词库加载耗时行不同；独立编写的逐候选 dump（22 输入 × 3 context × 2 配置，共 15,066 行）前后 `cmp` 逐字节相同；阴性对照（对调 `adjacency_may_contain` 参数）使 2 条 decoder 单测与 3 条 long_input 回归失败、dump 出现 282 行差异；独立二进制 A/B 交替 3 轮（13.24 负载约 20），目标场景 P99 −25.7%/−32.6%/−31.6%（开发方低负载 −24.7%/−22.0%/−24.2%），故按 **约 −22%～−33%** 记录，不声称达到 −30%。非目标场景个别亚毫秒项 P50/P99 波动在高负载下为噪声（`shi`+20 页单独交替复测无系统差异）。
+发版：[v0.1.0-preview30](https://github.com/zzttzzmyswy/chengyin-ime/releases/tag/v0.1.0-preview30)（target `0d0e363`，Windows EXE、Ubuntu deb 取自 Actions 37962960103，6 作业成功；Arch 包由固定源码重建，容器内 CTest 5/5、隔离 pacman 生命周期通过；PKGBUILD 已 pin，归档 SHA256 `7e36a9fe…` 两次下载一致）。仍为预发布，未做实机验收；仍未达单键 P99 ≤ 0.5 ms，不声称尾延迟达标。
+**版本说明**：任务卡写 preview29/I16，但二者已被许可迭代（PR #28）占用，开发方改记 I17/preview30，评审认可。
 
 **结果先行**：目标场景（全规则六纠错/长串逐键）P99 三轮结果见 `docs/PERFORMANCE.md`
 I17 一节末表；**未达任务卡的 −30%，也仍远高于单键 P99 ≤ 0.5 ms 的预算**，
