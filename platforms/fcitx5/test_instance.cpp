@@ -18,7 +18,8 @@
 //
 // The lexicon is authored here so candidate order is deterministic and does not
 // depend on data/daily.tsv: nihao -> 你好 with 拟好 second, zhongguo -> 中国, and
-// ma has twenty entries so paging has a well-defined second page.
+// ma has twenty entries so paging has well-defined later pages, and the shipped
+// default page width is five rows.
 #include "engine.h"
 #include <cstdio>
 #include <cstdlib>
@@ -391,26 +392,40 @@ void case_digit_selection(fcitx::Instance &instance, fcitx::AddonInstance *front
 }
 
 // Case 4: paging moves the candidate window, and digits then address the page
-// that is actually displayed.
+// that is actually displayed. The page is five rows wide, which is the shipped
+// default and what Windows calls 每页候选数=5; the eleventh candidate is
+// therefore the first row of page three.
 void case_paging(fcitx::Instance &instance, fcitx::AddonInstance *frontend, CommitRecorder &recorder) {
     Session session(instance, frontend, "paging");
     session.type("ma");
-    checkCount(static_cast<size_t>(session.candidateCount()), 9, "4.1 first page holds nine candidates");
+    checkCount(static_cast<size_t>(session.candidateCount()), 5, "4.1 first page holds five candidates");
     checkEqual(session.candidate(0), "马", "4.2 first page starts at 马");
 
     // `=` is mapped to page down by the adapter, exactly as Fcitx's own default
     // paging keys are; PageDown must behave the same way.
     session.send(fcitx::Key("equal"));
-    checkEqual(session.candidate(0), "麦", "4.3 '=' pages forward to the eleventh candidate");
+    checkEqual(session.candidate(0), "嘛", "4.3 '=' pages forward to the sixth candidate");
     session.send(fcitx::Key("minus"));
     checkEqual(session.candidate(0), "马", "4.4 '-' pages back to the first page");
 
     session.send(fcitx::Key("Page_Down"));
-    checkEqual(session.candidate(0), "麦", "4.5 PageDown pages forward as well");
+    checkEqual(session.candidate(0), "嘛", "4.5 PageDown pages forward as well");
     recorder.clear();
     session.selectDigit(1);
-    checkEqual(recorder.joined(), "麦", "4.6 a digit selects from the displayed page, not the first");
+    checkEqual(recorder.joined(), "嘛", "4.6 a digit selects from the displayed page, not the first");
     checkCount(recorder.all().size(), 1, "4.7 paged selection commits exactly once");
+
+    // The digits past the page width address nothing: the panel shows five rows,
+    // so a sixth press must not commit the first row of the next page. The core
+    // still consumes the key as an in-composition digit, which is its long-standing
+    // behaviour and not something this batch changes; what matters here is that no
+    // candidate is taken from a row the page is not showing.
+    session.type("ma");
+    const std::string before = session.candidate(0);
+    session.selectDigit(6);
+    checkEqual(recorder.joined(), "嘛", "4.8 a digit past the page width commits nothing");
+    checkEqual(session.candidate(0), before, "4.9 and leaves the displayed page alone");
+    session.send(fcitx::Key("Escape"));
 }
 
 // Case 5: editing keys. Enter's behaviour is recorded, not prescribed: the

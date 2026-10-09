@@ -1,5 +1,27 @@
 # 项目状态
 
+## 迭代 I17 Fcitx 设置对齐 Windows（第一批：页宽/联想/模糊音/键盘纠错） · 2026-10-09 待评审
+
+**结果先行**：Fcitx 5 插件的设置页从“只有词典路径”扩到本批四组与 Windows 语义、默认值一致的项——
+每页候选数（`PageSize`，枚举 5/7/9，**默认由硬编码 9 改为 5**）、联想词（`Associations`，默认开）、
+模糊音 11 项与键盘纠错 4 项（`Fuzzy`/`Correction` 子分组，默认全关）。保存后对运行中的空闲会话立即生效，
+**活跃组合不丢键、不改组合**；只改这些设置不重载词典。
+
+**改动面**：`platforms/fcitx5/config.h`（选项定义与“选项→匹配位”的唯一映射表）、`engine.h`/`engine.cpp`
+（设置快照与版本、`State` 记录已应用的页宽与版本、`applySettings`/`synchronizeAll`、面板页宽与数字键、
+`select()` 的索引上限、设置写回失败提示）、`platforms/fcitx5/test_settings.cpp`（新增，122 条断言）、
+`platforms/fcitx5/test_instance.cpp`（翻页用例改为默认页宽 5 并补数字键越界断言，122 → 128 条断言）、
+`platforms/fcitx5/README.md`、`platforms/fcitx5/CMakeLists.txt`（注册 `fcitx5-settings`）。未改 `crates/`、
+`include/`、`platforms/windows/`；**未 bump 版本**（本卡不发版）。
+
+**证据**：`bash scripts/check.sh` 退出 0；`python3 scripts/version.py --check` 通过（`0.1.0-preview29`，未变）；
+全新构建后 `ctest` 连续 3 次 6/6 通过，运行前后 `pgrep -a fcitx5` 集合不变（本机真实 Fcitx 未受影响）。
+阴性对照两处各自复现预期失败：去掉 `PageSize` 的应用 → 页宽/数字键用例失败；把模糊音映射故意错一位 →
+位映射与 `zh/z` 行为用例失败（均为本地临时变体，未提交）。
+
+**未断言**：本批只覆盖无头与真实 `fcitx::Instance`；配置工具界面的实际渲染、真实桌面的候选窗与数字键
+体验未验证。学习（持久词频）、多词库管理、中文标点、中英切换与 Shift 切换不在本批。
+
 ## 迭代 I16 项目代码许可改为 GPL-3.0-or-later · 2026-10-09 已合并（PR #28，squash `c519407`，preview29）
 
 评审结论：通过。技术负责人亲自重跑 `check.sh`、`version.py --check`（`0.1.0-preview29`）、Fcitx CTest 5/5、暂存安装后包内 `copyright` 首行为 GPLv3；逐行核对 diff，除 SPDX 头外只有许可文案、版本源与「关于」页文案，无产品逻辑改动。**评审中发现并修正**：交付的 `LICENSE` 由网页转换而来（弯引号、`©`、段落重排），不是官方原文；追加提交 `203e39d` 换成 gnu.org `gpl-3.0.txt`（ASCII，674 行，sha256 `3972dc97…`）。PR #29 统一了文档内的旧仓库名链接。
