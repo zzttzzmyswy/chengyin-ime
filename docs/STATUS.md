@@ -1,6 +1,11 @@
 # 项目状态
 
-## 迭代 I15 全规则长串逐键尾延迟：剖析优先、常量开销优化 · 2026-10-09 已交付待验收
+## 迭代 I15 全规则长串逐键尾延迟：剖析优先、常量开销优化 · 2026-10-09 已合并（PR #26，squash `253e13e`，preview28）
+
+评审结论：通过（性能目标未达成，如实收下）。技术负责人亲自重跑 `check.sh`、`version.py --check`（`0.1.0-preview28`）；`quality_report` 在基线 `0665ac5` 与本分支输出逐行相同（仅词库加载耗时不同）；独立复现阴性对照（把预过滤改为按 `code^1` 查精确集合 → `prefiltered_index_agrees_with_a_plain_set_on_every_encoding` 与 `boundary_attestation_matches_a_direct_encoding_oracle` 失败，11 passed / 2 failed）。基准在 13.24 共享开发机上基线/本分支二进制交替执行 3 轮，全规则长串逐键 P99：第 1 轮 33.6→17.7 ms（两端负载不等，不作结论）、第 2 轮 21.9→17.9 ms（−18.6%）、第 3 轮 18.9→15.2 ms（−19.3%）；负载 4–20，受后台进程影响大。结论与开发方一致：约 −16%~−19%，**未达 −50%，也远高于 ≤0.5 ms 目标**，不声称达标；范围仅共享核心，不含 TSF/IPC/UI。
+后续方向（下一迭代候选）：`Decoder::transition` miss 路径（inclusive 70.7%）与 `compute` 逐 start DP 的算法级改造，如 `bonus` 按 `(context 后缀, 首字节)` 预计算、减少逐 start 重复前缀展开；须同样守住质量零回退。
+发版：preview28，见 Releases；Arch 包由固定源码 `253e13e` 重建（PKGBUILD 已 pin），隔离 pacman 安装/升级/重装/卸载通过。
+
 
 **结果先行**：目标场景三轮 P99 分别为 19.07→15.92 ms（−16.5%）、
 18.29→15.49 ms（−15.3%）、20.68→17.30 ms（−16.4%），三轮一致；
