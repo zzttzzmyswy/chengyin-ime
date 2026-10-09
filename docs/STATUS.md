@@ -1,6 +1,13 @@
 # 项目状态
 
-## 迭代 I19 Fcitx 选词学习持久化（`Learning` 开关 + Profile 落盘） · 2026-10-10 已交付待评审
+## 迭代 I19 Fcitx 选词学习持久化（`Learning` 开关 + Profile 落盘） · 2026-10-10 已合并（PR #36，squash `23ed2b9`，随 preview31 发版）
+
+评审结论：第 2 轮通过（第 1 轮打回：CI `fcitx5-learning` I.4/I.6 依赖墙钟、陈旧会话快照会覆盖其他上下文刚学到的选词）。技术负责人亲自核对并重跑：`Engine::learn` 按 `baselineCurrent` 分流（基线落后时直接记入主档案；`ChengyinProfile` 为 `Arc`+`make_mut` 写时复制，`crates/ime-ffi/src/lib.rs:119`，不重复计数）；新增 case J（两上下文交错学习，阴性对照复现失败）、case I 改为 `flushLearning` 等终态；`check.sh` 通过，全新构建 ctest 连续 3 次 7/7，`taskset -c 0` 单核重复通过，真实 `fcitx5` 进程集合不变，`~/.local/share/fcitx5` 无 `chengyin/`；PR CI 6/6。
+已知限制：单进程共享、无跨进程锁；无 GUI 清除/导入按钮（删/换 `profile.bin` 后 `fcitx5-remote -r`）；配置工具实际渲染与真实桌面未验证。
+发版：[v0.1.0-preview31](https://github.com/zzttzzmyswy/chengyin-ime/releases/tag/v0.1.0-preview31)（target `7a0df0c`，含 I18 设置对齐；Windows EXE/deb 取自 Actions 38001813951；Arch 包固定源码重建，容器内 CTest 7/7、隔离 pacman 生命周期通过；PKGBUILD 已 pin，归档 SHA256 `00c82805…` 两次下载一致）。仍为预发布，未做实机验收。
+未做（后续）：I-C 多词库管理；中文标点、中英切换、Shift 切换（需先判断复用 Fcitx 自带能力还是共用 Windows 逻辑）。
+
+（以下为执行方交付记录）
 
 分支 `codex/fcitx-persistent-learning`。**本卡不发版**：`version.json` 未改，仍为 preview30。
 
@@ -32,7 +39,7 @@ learning 位）、`engine.h`/`engine.cpp`（主档案与 profileRevision、`appl
 **未断言**：只验证无头与真实 `fcitx::Instance`；配置工具界面的实际渲染、真实桌面候选窗/多屏未验证。
 不声称「Linux 学习已与 Windows 完全一致」：单进程无跨进程锁与 generation/revision 通道，无 GUI 清除/导入按钮。
 
-## 迭代 I18 Fcitx 设置对齐 Windows（第一批：页宽/联想/模糊音/键盘纠错） · 2026-10-09 已合并（PR #34，squash `f8951ca`，未发版）
+## 迭代 I18 Fcitx 设置对齐 Windows（第一批：页宽/联想/模糊音/键盘纠错） · 2026-10-09 已合并（PR #34，squash `f8951ca`，随 preview31 发版）
 
 编号说明：本迭代在 MYS-2041 中按 I17 派出，合并时 I17 已被并行的解码器优化迭代（PR #31，preview30）占用，故更名为 I18。
 评审结论：通过。技术负责人亲自重跑 `check.sh`、`version.py --check`（preview29 未 bump）、全新构建后 ctest 连续 3 次 6/6（含新增 `fcitx5-settings` 与 `fcitx5-e2e`）、运行前后 `fcitx5` 进程集合不变；PR CI 6/6 通过。逐行审阅 `config.h`/`engine.cpp`：学习位取核心默认 `true`、页宽用枚举、`applySettings` 仅在空闲会话应用（BUSY 保持旧版本待下次）、面板页宽与核心页宽同源。对“只改设置不重载词典”的条件收紧（设置确有变化且路径未变）认可：避免回归“手工换同路径 TSV 后重读”。
