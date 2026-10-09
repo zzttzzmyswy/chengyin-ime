@@ -315,7 +315,7 @@ Notepad3/浏览器/WinUI/UWP/管理员/RDP 的完整应用矩阵；发布带 dig
 
 交付包：`build/packages/chengyin-windows-x64-0.1.0-preview7-msvc.exe`，4,312,794 bytes，
 SHA-256 `9c8f4d22e324808a5a378b93856ceda0cee8d1cd6931cb222e67835e0a5faa3d`。
-源码提交 `b14116e`；[通过的原生 CI](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37212769471)。
+源码提交 `b14116e`；[通过的原生 CI](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37212769471)。
 已取回 artifact 并验证 ZIP/EXE 哈希、大小与 PE64；原 GNU 内部 preview7 包保留。
 验证日志位于忽略的 `build/core-check-preview7.txt`、`build/windows-test-preview7-final.txt`、
 `build/ui-preview7.txt`、`build/installer-preview7-final.txt`；原生验证摘要

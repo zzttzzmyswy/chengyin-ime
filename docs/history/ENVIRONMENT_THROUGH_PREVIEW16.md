@@ -61,9 +61,9 @@ python scripts/package_windows.py --build-dir build/windows-msvc --toolchain msv
 # 开发环境与复现
 
 更新：2026-10-04。仓库工作目录为 `/workspace/myswyIm`，远程仓库为
-https://github.com/zzttzzmyswy/myswyIm 。源码不依赖该绝对路径。`main` 已推送并跟踪 `origin/main`；
+https://github.com/zzttzzmyswy/chengyin-ime 。源码不依赖该绝对路径。`main` 已推送并跟踪 `origin/main`；
 初始实现提交 `7cbb7e4`；交付代码 `b14116e` 的远程 CI 六个 job 全部通过。
-验证运行：https://github.com/zzttzzmyswy/myswyIm/actions/runs/37212769471 。
+验证运行：https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37212769471 。
 
 ## 当前云环境
 

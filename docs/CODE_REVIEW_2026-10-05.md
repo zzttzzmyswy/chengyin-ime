@@ -1,7 +1,7 @@
 # 项目代码审查 · 2026-10-05
 
 基线：main `d07fe57`（preview17）。用户要求的 12 个未推送提交已快进合入并推送；
-[Actions 37309334271](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37309334271)
+[Actions 37309334271](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37309334271)
 六项作业通过，包括 Linux 核心/ABI、MSRV、portable core、Fcitx、Windows Rust、
 原生 TSF 和隔离安装/升级/回滚/卸载。修复分支：`codex/review-hardening`。
 
@@ -194,5 +194,5 @@ Linux 桌面、Android、ARM64/x86 和双拼沿用路线图的未完成状态。
 
 最终结果：preview18 77 Rust、fmt/Clippy、零分配/64 KiB、C ABI、原生 7/7 CTest（28.50 s）、
 UI fixture/截图、完整负载/许可/COM/三二进制校验通过。核心百分位和同期间基线见 PERFORMANCE。
-源码 ad84c9d 已推送 main；[Actions 37314439254](https://github.com/zzttzzmyswy/myswyIm/actions/runs/37314439254) 六作业及隔离安装生命周期通过。
+源码 ad84c9d 已推送 main；[Actions 37314439254](https://github.com/zzttzzmyswy/chengyin-ime/actions/runs/37314439254) 六作业及隔离安装生命周期通过。
 这覆盖本批代码，不代表 R07–R09/R11–R14 已实现或实装矩阵已完成。
