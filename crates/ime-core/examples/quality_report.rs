@@ -10,8 +10,22 @@
 //!     cargo run --release -p chengyin-core --example quality_report --locked
 //!
 //! Every row is replayed key by key through one fresh [`Session`] so rows cannot
-//! influence each other. Rows with a `train` column first replay the recorded
-//! host-confirmed selections, which is what builds the learning profile.
+//! influence each other. A `train` cell holds `;`-separated steps, applied in the
+//! order written, which is what lets a row say *when* something was learned:
+//!
+//! * `record:<spelling>=><text>` — one host-confirmed selection written straight
+//!   into the profile. Unattested text is never offered on the candidate page, so
+//!   this is the only way to train it; it is the same call the platform adapter
+//!   makes when it loads a saved profile.
+//! * `ctx:<spelling>=><text>` — one host-confirmed selection *replayed on the
+//!   session*: type the spelling, pick the text on the candidate page, acknowledge
+//!   the write. It trains through `Profile::record_selection` (so the same key's
+//!   competing readings are also observed as skipped) and, because the commit is
+//!   real, it leaves `text` as the session's preceding-word context for whatever
+//!   step or measured input follows.
+//! * `idle:<n>` — `n` selections of one unrelated key. They observe nothing about
+//!   the row's key and exist only to advance the profile's event clock, which is
+//!   the clock `Preference::recent` decays against (one epoch per 256 events).
 
 use chengyin_core::{Dictionary, Key, Modifiers, Profile, Session};
 use std::collections::BTreeMap;
@@ -31,13 +45,47 @@ struct Row {
     bucket: String,
 }
 
-/// One host-confirmed selection to apply before the row is measured.
-struct TrainStep {
+/// One state-setting step applied before the row is measured.
+enum TrainStep {
     /// `record:key=>text`: written straight into the profile. An unattested
     /// selection is never on the candidate page, so it cannot be selected there.
-    record: bool,
-    spelling: String,
-    text: String,
+    Record { spelling: String, text: String },
+    /// `ctx:key=>text`: replayed on the session so its committed word becomes the
+    /// preceding-word context. See the module docs.
+    Context { spelling: String, text: String },
+    /// `idle:n`: `n` selections of one unrelated key, to advance the event clock.
+    Idle(u32),
+}
+
+/// The throwaway key the `idle:` step records against. It exists only to make the
+/// profile's event counter advance; no row in the corpus is measured on it, so its
+/// own entry never competes with a measured key.
+const IDLE_KEY: &str = "chengyinidlekey";
+const IDLE_TEXT: &str = "闲";
+
+/// Split one `train` cell entry into its step. The cell is generated, so an
+/// unrecognized form is a generator bug and fails loudly rather than being
+/// silently skipped as an empty step.
+fn parse_step(step: &str) -> TrainStep {
+    if let Some(rest) = step.strip_prefix("idle:") {
+        return TrainStep::Idle(rest.parse().expect("idle count"));
+    }
+    let (head, text) = step
+        .split_once("=>")
+        .unwrap_or_else(|| panic!("train step {step:?}"));
+    let (context, spelling) = match head.strip_prefix("ctx:") {
+        Some(rest) => (true, rest),
+        None => (
+            false,
+            head.strip_prefix("record:").expect("train step prefix"),
+        ),
+    };
+    let (spelling, text) = (spelling.to_owned(), text.to_owned());
+    if context {
+        TrainStep::Context { spelling, text }
+    } else {
+        TrainStep::Record { spelling, text }
+    }
 }
 
 fn load(source: &str) -> Vec<Row> {
@@ -57,21 +105,7 @@ fn load(source: &str) -> Vec<Row> {
         let train = if fields[5].is_empty() {
             Vec::new()
         } else {
-            fields[5]
-                .split(';')
-                .map(|step| {
-                    let (head, text) = step.split_once("=>").expect("train step");
-                    let (record, spelling) = match head.strip_prefix("record:") {
-                        Some(rest) => (true, rest),
-                        None => (false, head),
-                    };
-                    TrainStep {
-                        record,
-                        spelling: spelling.to_owned(),
-                        text: text.to_owned(),
-                    }
-                })
-                .collect()
+            fields[5].split(';').map(parse_step).collect()
         };
         rows.push(Row {
             category: fields[0].to_owned(),
@@ -116,22 +150,56 @@ fn find_paged(session: &mut Session, text: &str) -> Option<(usize, usize)> {
     }
 }
 
-/// Build the profile the row measures. Every `train` step is a selection the host
-/// already confirmed, so it is applied straight to the profile — the same entry
-/// point the platform adapter uses when it loads a saved profile. Unattested text
-/// is never offered on the candidate page, so it could not be selected there.
+/// Build the profile the row measures. `record:` steps are applied straight to it
+/// — the same entry point the platform adapter uses when it loads a saved profile,
+/// and the only way to train unattested text, which the candidate page never
+/// offers. `idle:` steps run on the profile too, since they only advance its event
+/// clock. `ctx:` steps are left to [`apply_context_steps`], which needs the live
+/// session, and are applied in the order written among themselves.
 fn build_profile(row: &Row) -> Profile {
     let mut profile = Profile::default();
     for step in &row.train {
-        assert!(step.record, "only record: steps are supported");
-        assert!(
-            profile.record(&step.spelling, &step.text),
-            "rejected train step {} => {}",
-            step.spelling,
-            step.text
-        );
+        match step {
+            TrainStep::Record { spelling, text } => assert!(
+                profile.record(spelling, text),
+                "rejected train step {spelling} => {text}"
+            ),
+            TrainStep::Idle(count) => {
+                for _ in 0..*count {
+                    assert!(profile.record(IDLE_KEY, IDLE_TEXT));
+                }
+            }
+            TrainStep::Context { .. } => {}
+        }
     }
     profile
+}
+
+/// Replay the row's `ctx:` steps on the session, in written order. Each one types
+/// its spelling, selects the named text from the candidate page, and acknowledges
+/// the host write — the same three calls a platform adapter makes. Because the
+/// commit is real, the text also becomes the session's preceding-word context for
+/// the next step and for the row's own measured input.
+fn apply_context_steps(session: &mut Session, row: &Row) {
+    for step in &row.train {
+        let TrainStep::Context { spelling, text } = step else {
+            continue;
+        };
+        session.reset();
+        type_keys(session, spelling);
+        let (at, _) = find_paged(session, text)
+            .unwrap_or_else(|| panic!("ctx step {spelling} => {text}: not on any page"));
+        assert!(
+            session
+                .process(Key::Select(at), Modifiers::default())
+                .handled
+        );
+        assert_eq!(session.commit(), text, "ctx step {spelling} => {text}");
+        assert!(
+            session.learn_commit(),
+            "ctx step {spelling} => {text}: write not acknowledged"
+        );
+    }
 }
 
 /// One row's outcome.
@@ -156,6 +224,11 @@ fn score(dictionary: &Arc<Dictionary>, row: &Row, incremental: bool) -> Score {
     let profile = build_profile(row);
     assert!(session.set_profile(Arc::new(profile)));
     session.reset();
+    // Context steps run on this same session and the last one leaves it with an
+    // empty composition and the committed word as its context — which is exactly
+    // the state the measured input must start from. `Session::reset` would clear
+    // that context, so it is deliberately not called again here.
+    apply_context_steps(&mut session, row);
     type_keys(&mut session, &row.input);
 
     let mut result = Score::default();
