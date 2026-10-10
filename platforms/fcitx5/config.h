@@ -32,6 +32,14 @@ inline constexpr int kUnconfiguredPageSize = 9;
 enum class PageSize { Five = 0, Seven = 1, Nine = 2 };
 FCITX_CONFIG_ENUM_NAME(PageSize, "5", "7", "9")
 
+// Which Shift keys participate in the tap-to-switch gesture. The Windows
+// settings page offers exactly these three choices with this wording, and
+// "左 Shift" is the default there too. An enum rather than an integer range, for
+// the same reason PageSize is one: the config tool only offers these values, and
+// a hand-edited value outside the set keeps the option's default.
+enum class ShiftSwitch { Disabled = 0, Left = 1, Both = 2 };
+FCITX_CONFIG_ENUM_NAME(ShiftSwitch, "不使用 Shift", "左 Shift", "左右 Shift")
+
 // One switch paired with the matching flag it contributes and the rule it names.
 // The two sub-configs below write each switch down exactly once, so the option
 // list, the flag word and the tests that walk bit by bit cannot drift apart.
@@ -113,6 +121,13 @@ public:
     // as well. Turning it off stops this build from recording selections and from
     // writing the profile, and tells the core to drop the session-local recency
     // and phrase state it had accumulated.
+    //
+    // DefaultEnglish, ShiftSwitch and ChinesePunctuation are the Windows 输入模式 /
+    // 标点与联想 page's own three settings, with its own wording and defaults. The
+    // adapter reads them itself instead of handing them to the core, but they are
+    // part of EngineSettings all the same: a save that moves only one of them must
+    // still count as a settings change, or setConfig() would rebuild the lexicon
+    // for an option that has nothing to do with it.
     explicit EngineConfig(std::string defaultDictionaryPath = CHENGYIN_DEFAULT_DICTIONARY_PATH)
         : dictionaryPath{this, "DictionaryPath",
               "词典 TSV 绝对路径（默认使用随包安装的完整词典；清空则使用内置演示词典）",
@@ -121,6 +136,9 @@ public:
           associations{this, "Associations",
               "提交中文后显示联想词；Tab 或鼠标确认，空格、数字和 Enter 交给应用", true},
           learning{this, "Learning", "根据选词习惯排序（本机保存，不联网）", true},
+          defaultEnglish{this, "DefaultEnglish", "启动输入服务时默认使用英文", false},
+          shiftSwitch{this, "ShiftSwitch", "Shift 切换键", ShiftSwitch::Left},
+          chinesePunctuation{this, "ChinesePunctuation", "中文模式使用中文标点", true},
           fuzzy{this, "Fuzzy", "模糊音（双向匹配）", FuzzyConfig{}},
           correction{this, "Correction", "常见键盘失误", CorrectionConfig{}} {}
     const char *typeName() const override { return "ChengyinConfig"; }
@@ -171,6 +189,9 @@ public:
     fcitx::Option<PageSize> pageSize;
     fcitx::Option<bool> associations;
     fcitx::Option<bool> learning;
+    fcitx::Option<bool> defaultEnglish;
+    fcitx::Option<ShiftSwitch> shiftSwitch;
+    fcitx::Option<bool> chinesePunctuation;
     fcitx::Option<FuzzyConfig> fuzzy;
     fcitx::Option<CorrectionConfig> correction;
 };
@@ -186,15 +207,30 @@ struct EngineSettings {
     // core drops its session-local recency and phrase state when it goes off.
     bool learning = true;
     uint32_t matching = 0;
+    // The three mode/punctuation settings. They are compared like the rest, so a
+    // save that moves one of them is a settings change; unlike the rest they are
+    // not forwarded to the core (see applySettings).
+    bool defaultEnglish = false;
+    ShiftSwitch shiftSwitch = ShiftSwitch::Left;
+    bool chinesePunctuation = true;
     bool operator==(const EngineSettings &other) const {
         return pageSize == other.pageSize && associations == other.associations &&
-               learning == other.learning && matching == other.matching;
+               learning == other.learning && matching == other.matching &&
+               defaultEnglish == other.defaultEnglish && shiftSwitch == other.shiftSwitch &&
+               chinesePunctuation == other.chinesePunctuation;
     }
     bool operator!=(const EngineSettings &other) const { return !(*this == other); }
 };
 
 inline EngineSettings settingsOf(const EngineConfig &config) {
-    return EngineSettings{config.pageSizeValue(), *config.associations, *config.learning,
-                          config.matchingFlags()};
+    EngineSettings settings;
+    settings.pageSize = config.pageSizeValue();
+    settings.associations = *config.associations;
+    settings.learning = *config.learning;
+    settings.matching = config.matchingFlags();
+    settings.defaultEnglish = *config.defaultEnglish;
+    settings.shiftSwitch = *config.shiftSwitch;
+    settings.chinesePunctuation = *config.chinesePunctuation;
+    return settings;
 }
 } // namespace chengyin

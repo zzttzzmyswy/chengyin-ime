@@ -120,6 +120,27 @@ if(BUILD_TESTING)
   # It walks several cases, each with a selection loop and a bounded store flush.
   set_tests_properties(fcitx5-learning PROPERTIES TIMEOUT 180)
 
+  # The mode/punctuation suite (I20). It drives the real Engine through key events,
+  # setConfig(), reloadConfig() and the two status-area actions, and owns both the
+  # lexicon it reads and the profile path it writes.
+  add_executable(chengyin-mode-punctuation-test test_mode_punctuation.cpp)
+  target_link_libraries(chengyin-mode-punctuation-test PRIVATE chengyin-engine)
+  target_compile_options(chengyin-mode-punctuation-test PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+  add_test(NAME fcitx5-mode-punctuation COMMAND chengyin-mode-punctuation-test)
+  set_tests_properties(fcitx5-mode-punctuation PROPERTIES TIMEOUT 120)
+
+  # The two punctuation tables are written out separately, so this is what keeps
+  # them from drifting: it compiles both and compares every character and both pair
+  # states. It needs no Fcitx, no lexicon and no temporary directory -- just the two
+  # pure headers, which is why it can also run as a plain compile-time check on any
+  # host that can build this directory at all.
+  add_executable(chengyin-punctuation-parity-test test_punctuation_parity.cpp)
+  target_include_directories(chengyin-punctuation-parity-test PRIVATE
+    "${CHENGYIN_ROOT}/platforms/windows")
+  target_compile_options(chengyin-punctuation-parity-test PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+  add_test(NAME fcitx5-punctuation-parity COMMAND chengyin-punctuation-parity-test)
+  set_tests_properties(fcitx5-punctuation-parity PROPERTIES TIMEOUT 15)
+
   add_executable(chengyin-reload-test test_dictionary_reload.cpp)
   target_link_libraries(chengyin-reload-test PRIVATE chengyin-engine)
   target_compile_options(chengyin-reload-test PRIVATE -Wall -Wextra -Werror -UNDEBUG)

@@ -49,6 +49,8 @@
 #include <fcitx/inputmethodmanager.h>
 #include <fcitx/inputpanel.h>
 #include <fcitx/instance.h>
+#include <fcitx/userinterfacemanager.h>
+#include <fcitx/statusarea.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include "chengyin_ime.h"
@@ -776,11 +778,59 @@ void case_uppercase_snapshot(fcitx::Instance &instance, fcitx::AddonInstance *fr
     checkEqual(session.preedit(), "", "15.9 Escape still clears the composition");
 }
 
+// Case 16: the two status-area actions through a real fcitx::Instance. The
+// headless suite drives them directly, so what this case adds is the framework
+// around them: that both were registered with the UserInterfaceManager under the
+// names this addon owns, and that they ride in the context's own InputMethod
+// status group, which is what a desktop panel reads.
+void case_status_actions(fcitx::Instance &instance, fcitx::AddonInstance *frontend,
+                         CommitRecorder &recorder, chengyin::Engine *engine) {
+    check(engine != nullptr, "16.1 the addon exposes a chengyin Engine");
+    if (!engine) { return; }
+    check(engine->modeAction().id() > 0, "16.2 the mode action is registered");
+    check(engine->punctuationAction().id() > 0, "16.3 the punctuation action is registered");
+    check(instance.userInterfaceManager().lookupAction("chengyin-mode") == &engine->modeAction(),
+          "16.4 the mode action is reachable by name");
+    check(instance.userInterfaceManager().lookupAction("chengyin-punctuation") ==
+              &engine->punctuationAction(),
+          "16.5 the punctuation action is reachable by name");
+
+    Session session(instance, frontend, "actions");
+    // The framework only runs the engine's activate() once the context has focus,
+    // and a fresh context gets focus on its first key event. Sending one is
+    // therefore what makes this case observe the state a desktop session would
+    // have, rather than a context the adapter has never been activated for.
+    session.send(fcitx::Key("Escape"));
+    auto group = session.ic()->statusArea().allActions();
+    const bool hasMode = std::find(group.begin(), group.end(), &engine->modeAction()) != group.end();
+    const bool hasPunctuation =
+        std::find(group.begin(), group.end(), &engine->punctuationAction()) != group.end();
+    check(hasMode, "16.6 the mode action rides in the context's InputMethod status group");
+    check(hasPunctuation, "16.7 and so does the punctuation action");
+
+    // A real key event through the framework converts punctuation, and a click on
+    // the action turns that off for this context.
+    recorder.clear();
+    session.send(fcitx::Key("comma"));
+    checkEqual(recorder.joined(), "，", "16.8 a comma is converted through the real pipeline");
+    recorder.clear();
+    engine->punctuationAction().activate(session.ic());
+    session.send(fcitx::Key("comma"));
+    checkEqual(recorder.joined(), "", "16.9 with the action off the comma is forwarded instead");
+    engine->punctuationAction().activate(session.ic());
+    recorder.clear();
+    session.send(fcitx::Key("comma"));
+    checkEqual(recorder.joined(), "，", "16.10 and turning it back on restores the conversion");
+    // The recorder is shared with the cases that run after this one, so leave it
+    // empty: case 14 asserts that the reload itself committed nothing.
+    recorder.clear();
+}
+
 // Every synchronous case, in order. Kept separate from main so the caller can
 // wait for the configured lexicon before running any of them; case 14 is the
 // only asynchronous one and is driven by the caller instead.
 void runForegroundCases(fcitx::Instance &instance, fcitx::AddonInstance *frontend,
-                        CommitRecorder &recorder) {
+                        CommitRecorder &recorder, chengyin::Engine *engine) {
     case_registration(instance, frontend);
     case_basic_commit(instance, frontend, recorder);
     case_digit_selection(instance, frontend, recorder);
@@ -795,6 +845,7 @@ void runForegroundCases(fcitx::Instance &instance, fcitx::AddonInstance *fronten
     case_mouse_selection(instance, frontend, recorder);
     case_long_input(instance, frontend, recorder);
     case_uppercase_snapshot(instance, frontend, recorder);
+    case_status_actions(instance, frontend, recorder, engine);
 }
 
 } // namespace
@@ -835,7 +886,7 @@ struct Runner {
         }
         if (phase == 0) {
             phase = 1;
-            runForegroundCases(instance, frontend, recorder);
+            runForegroundCases(instance, frontend, recorder, engine);
             reloadSession = std::make_unique<Session>(instance, frontend, "reload");
             case_dictionary_reload_start(instance, *reloadSession, harness);
             return;
