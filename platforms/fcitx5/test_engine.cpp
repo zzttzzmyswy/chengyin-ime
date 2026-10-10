@@ -85,16 +85,24 @@ int main() {
     assert(!press(a, FcitxKey_space, fcitx::KeyStates(), true));
     assert(a.committed == "你好");
     type(a, "xi'an");
-    assert(!press(a, FcitxKey_comma));
-    assert(a.committed == "你好西安");
+    // I20 changed this assertion. Chinese punctuation is on by default, so a comma
+    // with a composition on screen is no longer passed through: the core commits
+    // the candidate the composition selected and the comma is appended to that same
+    // commit, which is exactly the "candidate + punctuation in one write" rule the
+    // Windows adapter follows inside its TSF edit. The key is therefore consumed.
+    assert(press(a, FcitxKey_comma));
+    assert(a.committed == "你好西安，");
     type(a, "shi");
     auto stale = a.inputPanel().candidateList();
     assert(press(a, FcitxKey_Down));
     stale->candidate(0).select(&a);
-    assert(a.committed == "你好西安"); // stale mouse click cannot commit a changed list
+    // The comma above is part of the accumulated text now, so the two assertions
+    // that follow carry it: what they are about is that a stale click commits
+    // nothing and that a live click commits its own row.
+    assert(a.committed == "你好西安，"); // stale mouse click cannot commit a changed list
     auto list = a.inputPanel().candidateList();
     list->candidate(1).select(&a);
-    assert(a.committed == "你好西安时");
+    assert(a.committed == "你好西安，时");
     type(a, "ni");
     fcitx::InputContextEvent reset(&a, fcitx::EventType::InputContextReset);
     engine.reset(entry, reset);
@@ -107,7 +115,7 @@ int main() {
     a.setCapabilityFlags(fcitx::CapabilityFlag::Password);
     assert(!press(a, FcitxKey_n));
     assert(a.inputPanel().empty());
-    assert(a.committed == "你好西安时");
+    assert(a.committed == "你好西安，时");
     a.setCapabilityFlags(fcitx::CapabilityFlag::Sensitive);
     assert(!press(a, FcitxKey_n));
     assert(a.inputPanel().empty());

@@ -35,11 +35,14 @@
 #include <fcitx-utils/capabilityflags.h>
 #include <fcitx-utils/key.h>
 #include <fcitx-utils/log.h>
+#include <fcitx-utils/utf8.h>
 #include <fcitx/candidatelist.h>
 #include <fcitx/inputcontext.h>
 #include <fcitx/inputcontextmanager.h>
 #include <fcitx/inputpanel.h>
+#include <fcitx/statusarea.h>
 #include <fcitx/userinterface.h>
+#include <fcitx/userinterfacemanager.h>
 
 #include "engine.h"
 
@@ -156,8 +159,64 @@ std::string text(ChengyinSession *session, uint32_t field, size_t index = 0) {
     return {reinterpret_cast<const char *>(buffer.data()), static_cast<size_t>(required - 1)};
 }
 
+// The status-area action names, unique across the whole framework because
+// UserInterfaceManager::registerAction() keys on them.
+const char *const kModeActionName = "chengyin-mode";
+const char *const kPunctuationActionName = "chengyin-punctuation";
+
 bool sensitive(fcitx::InputContext *ic) {
     return bool(ic->capabilityFlags() & fcitx::CapabilityFlag::PasswordOrSensitive);
+}
+
+// The codepoints a rendered punctuation key produces, as UTF-8.
+std::string renderPunctuation(const PunctuationState &state, char c, bool chinese) {
+    char32_t codepoints[3] = {};
+    const int length = state.render(c, chinese, codepoints);
+    std::string output;
+    for (int i = 0; i < length; ++i) { output += fcitx::utf8::UCS4ToUTF8(codepoints[i]); }
+    return output;
+}
+
+// The ASCII punctuation key this event carries, or 0 when it is not one at all.
+// Only the symbols the shared table covers are reported, so a letter, a control
+// key or an unsupported symbol can never be turned into Chinese punctuation.
+//
+// Fcitx has already normalised the key by the time an engine sees it: a shifted
+// symbol such as Shift+';' arrives as the colon keysym with no Shift state bit.
+// The table is therefore keyed on the character the key actually types, which is
+// exactly what mapKey() hands the core.
+char punctuationKey(const fcitx::Key &key) {
+    const auto unicode = fcitx::Key::keySymToUnicode(key.sym());
+    if (unicode == 0 || unicode > 0x7f) { return 0; }
+    const auto c = static_cast<char>(unicode);
+    return PunctuationState::supported(c) ? c : 0;
+}
+
+// Whether the event is a shortcut chord. Shift is deliberately not part of this:
+// a shifted symbol is a punctuation key in its own right on Fcitx, and the
+// Windows adapter draws the same line (its `shortcut` ignores the Shift bit).
+bool shortcutChord(fcitx::KeyStates states) {
+    return states.testAny(fcitx::KeyStates({fcitx::KeyState::Ctrl, fcitx::KeyState::Alt,
+                                            fcitx::KeyState::Super, fcitx::KeyState::Super2,
+                                            fcitx::KeyState::Hyper, fcitx::KeyState::Hyper2,
+                                            fcitx::KeyState::Meta, fcitx::KeyState::Mod5}));
+}
+
+// Whether Caps Lock is on, and whether this press is an auto-repeat. Both are
+// read from the RAW key: Key::normalize() keeps only the modifier bits it treats
+// as part of the key identity and drops everything else, so a CapsLock-on press
+// and a repeated press are indistinguishable from plain ones by the time
+// event.key() is read. Windows refuses to convert punctuation under Caps Lock and
+// never arms the Shift gesture on a repeat (platforms/windows/service.cpp:235 and
+// keymap.h ShiftSwitch::down), so the raw key is what has to be consulted.
+bool capsLock(const fcitx::KeyEvent &event) {
+    return event.rawKey().states().test(fcitx::KeyState::CapsLock) ||
+           event.origKey().states().test(fcitx::KeyState::CapsLock);
+}
+
+bool repeated(const fcitx::KeyEvent &event) {
+    return event.rawKey().states().test(fcitx::KeyState::Repeat) ||
+           event.origKey().states().test(fcitx::KeyState::Repeat);
 }
 
 class Word final : public fcitx::CandidateWord {
@@ -213,14 +272,18 @@ std::string Engine::DefaultProfilePath() {
 }
 
 Engine::Engine(fcitx::InputContextManager &manager, fcitx::EventLoop &loop, std::string defaultDictionaryPath,
-               std::string profilePath, LearningRetryPolicy policy)
-    : manager_(manager), config_(std::move(defaultDictionaryPath)), settings_(settingsOf(config_)),
+               std::string profilePath, LearningRetryPolicy policy, fcitx::UserInterfaceManager *uiManager)
+    : manager_(manager), uiManager_(uiManager), config_(std::move(defaultDictionaryPath)),
+      settings_(settingsOf(config_)),
       store_(std::make_unique<ProfileStore>(std::move(profilePath), policy)),
       dictionary_(demoDictionary()),
-      factory_([this](fcitx::InputContext &) { return new State(dictionary_); }) {
+      factory_([this](fcitx::InputContext &) {
+          return new State(dictionary_, settings_.defaultEnglish, settings_.chinesePunctuation);
+      }) {
     if (chengyin_ime_abi_version() != CHENGYIN_ABI_VERSION || !manager.registerProperty("chengyinState", &factory_)) {
         throw std::runtime_error("Chengyin IM ABI mismatch or duplicate property");
     }
+    registerActions();
     // The master profile is built from exactly the bytes the store adopted: the
     // file's own content, or empty for an absent or unusable one. An empty profile
     // is still a working profile, so a damaged file leaves learning enabled in
@@ -266,6 +329,9 @@ void Engine::reloadConfig() {
     config_.pageSize.setValue(*config.pageSize);
     config_.associations.setValue(*config.associations);
     config_.learning.setValue(*config.learning);
+    config_.defaultEnglish.setValue(*config.defaultEnglish);
+    config_.shiftSwitch.setValue(*config.shiftSwitch);
+    config_.chinesePunctuation.setValue(*config.chinesePunctuation);
     config_.fuzzy.setValue(*config.fuzzy);
     config_.correction.setValue(*config.correction);
     // Every path that re-reads settings also re-reads the profile: this is the one
@@ -329,6 +395,12 @@ void Engine::applySettings(State &state) {
     // The panel is built at the width the core now pages at, so the two cannot
     // disagree about which row a digit selects.
     state.pageSize = settings_.pageSize;
+    // The 中文标点 switch is re-seeded from the option on every settings change.
+    // The status-area action is an override that lives until the next save, which
+    // is what makes the option authoritative when the user actually presses Apply.
+    // The 中/英 mode is deliberately NOT re-seeded: the Windows settings text says
+    // changing the default mode "不会改变当前的中英文状态", and this matches.
+    state.punctuation = settings_.chinesePunctuation;
     ++state.revision;
 }
 
@@ -514,21 +586,201 @@ ProfileStoreStats Engine::profileStats() const { return store_ ? store_->stats()
 
 bool Engine::flushLearning(uint64_t timeoutMs) { return store_ ? store_->flush(timeoutMs) : true; }
 
+void Engine::registerActions() {
+    // A click is the framework's, not a key event's: the signal carries the context
+    // whose status area was clicked. Wired before the registration guard below,
+    // because a click works whether or not this build has a framework Instance.
+    modeAction_.connect<fcitx::SimpleAction::Activated>(
+        [this](fcitx::InputContext *ic) { toggleEnglish(ic); });
+    punctuationAction_.connect<fcitx::SimpleAction::Activated>(
+        [this](fcitx::InputContext *ic) { togglePunctuation(ic); });
+    // Registering the names is what needs the UserInterfaceManager. A plain source
+    // build's test has none and drives the actions directly.
+    if (!uiManager_) { return; }
+    // Both actions are the same shape: a checkable entry whose text and icon
+    // describe the state of whichever context the status area is asking about.
+    // registerAction() keys on the name across the whole framework, so the names
+    // carry this addon's own prefix.
+    for (const auto *name : {kModeActionName, kPunctuationActionName}) {
+        fcitx::SimpleAction &action = name == kModeActionName ? modeAction_ : punctuationAction_;
+        action.setCheckable(true);
+        if (!uiManager_->registerAction(name, &action)) {
+            FCITX_WARN() << "Chengyin IM: status action " << name << " already registered";
+        }
+    }
+}
+
+void Engine::activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) {
+    // Instance::activateInputMethod() clears StatusGroup::InputMethod immediately
+    // before this call, so re-adding here is what keeps both actions in the status
+    // area for the input method that is now active.
+    auto *ic = event.inputContext();
+    if (!uiManager_ || !ic) { return; }
+    auto *state = ic->propertyFor(&factory_);
+    updateActions(ic, *state);
+    ic->statusArea().addAction(fcitx::StatusGroup::InputMethod, &modeAction_);
+    ic->statusArea().addAction(fcitx::StatusGroup::InputMethod, &punctuationAction_);
+    FCITX_WARN() << "DBG-ACT " << static_cast<void *>(ic) << " n=" << ic->statusArea().allActions().size();
+}
+
+void Engine::updateActions(fcitx::InputContext *ic, State &state) {
+    // The text is what the input status area and the tray menu actually render;
+    // the icons are Fcitx's own punctuation glyphs, shipped by
+    // fcitx5-chinese-addons, whose own punctuation toggle uses the same pair.
+    modeAction_.setShortText(state.english ? "英" : "中");
+    modeAction_.setLongText(state.english ? "当前为英文模式，点击切换到中文" : "当前为中文模式，点击切换到英文");
+    modeAction_.setChecked(!state.english);
+    punctuationAction_.setShortText(state.punctuation ? "中文标点" : "英文标点");
+    punctuationAction_.setLongText("中文模式下按 ASCII 标点输入对应中文标点");
+    punctuationAction_.setIcon(state.punctuation ? "fcitx-punc-active" : "fcitx-punc-inactive");
+    punctuationAction_.setChecked(state.punctuation);
+    // setShortText/setChecked do not notify, so the repaint has to be asked for.
+    // Without a UI manager there is nothing listening and update() would only walk
+    // an empty action registry.
+    if (!uiManager_) { return; }
+    modeAction_.update(ic);
+    punctuationAction_.update(ic);
+}
+
+bool Engine::english(fcitx::InputContext *ic) { return ic->propertyFor(&factory_)->english; }
+
+bool Engine::chinesePunctuation(fcitx::InputContext *ic) { return ic->propertyFor(&factory_)->punctuation; }
+
+void Engine::toggleEnglish(fcitx::InputContext *ic) {
+    if (sensitive(ic)) { return; }
+    auto *state = ic->propertyFor(&factory_);
+    // Windows drops the composition here rather than committing its raw spelling:
+    // toggleEnglish() calls unbind() before it flips the flag
+    // (platforms/windows/service.cpp:1190), and unbind() resets the session and the
+    // paired-quote state (service.cpp:1224-1227). Deliberately the same here, so a
+    // half-typed syllable is discarded rather than typed out as Latin letters.
+    state->english = !state->english;
+    state->punctuationState.reset();
+    state->shift.reset();
+    // clear() resets the core session and repaints the panel, so the preedit and
+    // candidates of the discarded composition go away in the same step.
+    clear(ic);
+    updateActions(ic, *state);
+}
+
+void Engine::togglePunctuation(fcitx::InputContext *ic) {
+    if (sensitive(ic)) { return; }
+    auto *state = ic->propertyFor(&factory_);
+    state->punctuation = !state->punctuation;
+    updateActions(ic, *state);
+}
+
+void Engine::retire(State &state) {
+    // What the Windows adapter's unbind() clears besides the composition itself.
+    state.punctuationState.reset();
+    state.shift.reset();
+}
+
 void Engine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &event) {
     auto *ic = event.inputContext();
-    if (sensitive(ic)) { clear(ic); return; }
-    if (event.isRelease()) { return; }
+    if (sensitive(ic)) {
+        retire(*ic->propertyFor(&factory_));
+        clear(ic);
+        return;
+    }
+    auto *state = ic->propertyFor(&factory_);
+    const auto sym = event.key().sym();
     const auto states = event.key().states();
+    // A chord belongs to the application: the Windows adapter draws the same line
+    // (its `shortcut` ignores the Shift bit, because a shifted symbol is a
+    // punctuation key in its own right).
+    const bool shortcut = shortcutChord(states);
+    const auto setting = settings_.shiftSwitch;
+    if (event.isRelease()) {
+        // The only release that means anything here is the end of a Shift tap.
+        // Everything else is left to the application, exactly as before.
+        if (state->shift.up(sym, setting, shortcut)) {
+            toggleEnglish(ic);
+            event.filterAndAccept();
+        }
+        return;
+    }
+    // Every press is offered to the tap machine first: another key arriving while
+    // Shift is held is precisely what turns the gesture into a chord, and the
+    // machine has to see that key to know.
+    state->shift.down(sym, setting, shortcut, repeated(event));
+    if (ShiftTap::matches(sym, setting)) {
+        // The Shift key itself is a modifier, never input: it passes through so the
+        // application keeps its own modifier state.
+        return;
+    }
+    if (state->english) {
+        // English mode forwards everything, letters included, untouched.
+        return;
+    }
+    // Windows' conversion conditions in full: Chinese mode, no shortcut, no Caps
+    // Lock, the punctuation switch on, and the character in the shared table
+    // (platforms/windows/service.cpp:236). The Shift bit is deliberately not
+    // tested: Fcitx has already folded it into the keysym, so Shift+';' arrives as
+    // the colon keysym with no Shift state, which is the character the user meant.
+    const char ascii = punctuationKey(event.key());
+    const bool convertible = ascii != 0 && state->punctuation && !shortcut && !capsLock(event);
+    // Whether the core is currently holding something the user is looking at: a
+    // composition, or the association list a commit produced.
+    const bool association = chengyin_session_is_association(state->session.get()) > 0;
+    if (convertible && (!active(*state) || association)) {
+        // Windows takes its standalone punctuation action here, for exactly this
+        // pair of situations: nothing on screen, or an association list to close
+        // (`!active || association`). The punctuation is inserted on its own and
+        // the session is retired, with no candidate involved.
+        ic->commitString(renderPunctuation(state->punctuationState, ascii, true));
+        state->punctuationState.accepted(ascii, true);
+        resetSession(ic);
+        event.filterAndAccept();
+        return;
+    }
+    // With a composition on screen the key goes to the core instead, which is what
+    // keeps `'` a syllable separator: planKey() routes the apostrophe to the core
+    // with no punctuation attached (platforms/windows/keymap.h:135), so `xi'an`
+    // still splits syllables rather than becoming ‘. Every other supported
+    // punctuation character is handed over with itself attached, and process()
+    // appends it only once the core has actually committed.
+    const char appended = convertible && !association && ascii != '\'' ? ascii : 0;
+    // Consumed when the core handled the key OR when this event actually converted
+    // its punctuation. The second half is why a key that ended a composition is not
+    // handed to the application on top of the text it just produced, and it is also
+    // why a key whose conversion was switched off still passes through even though
+    // the core committed the candidate first -- exactly the split the Windows
+    // adapter makes with `eaten = (result & CHENGYIN_HANDLED) || hasCommit` for the
+    // converted case and a bare passthrough for the other.
+    const auto outcome = process(ic, mapKey(sym), modifiersOf(states), appended);
+    if (outcome.result >= 0 && ((outcome.result & CHENGYIN_HANDLED) || outcome.converted)) {
+        event.filterAndAccept();
+    }
+}
+
+// Whether the core is showing the user something right now: a composition, or the
+// association list a commit produced. This is the Windows adapter's `active(context)`
+// (platforms/windows/service.cpp:1186), and it is what decides whether punctuation
+// is inserted on its own or handed to the core.
+bool Engine::active(State &state) {
+    return chengyin_session_is_association(state.session.get()) > 0 ||
+           !text(state.session.get(), CHENGYIN_TEXT_PREEDIT).empty();
+}
+
+void Engine::resetSession(fcitx::InputContext *ic) {
+    auto *state = ic->propertyFor(&factory_);
+    chengyin_session_reset(state->session.get());
+    synchronize(*state);
+    ++state->revision;
+    refresh(ic);
+}
+
+uint32_t Engine::modifiersOf(fcitx::KeyStates states) {
     uint32_t modifiers = 0;
     if (states & fcitx::KeyState::Ctrl) { modifiers |= CHENGYIN_MOD_CONTROL; }
     if (states & (fcitx::KeyStates(fcitx::KeyState::Alt) | fcitx::KeyState::Mod5)) { modifiers |= CHENGYIN_MOD_ALT; }
     if (states & (fcitx::KeyStates(fcitx::KeyState::Super) | fcitx::KeyState::Super2 | fcitx::KeyState::Meta |
                   fcitx::KeyState::Hyper | fcitx::KeyState::Hyper2)) { modifiers |= CHENGYIN_MOD_SUPER; }
-    const auto result = process(ic, mapKey(event.key().sym()), modifiers);
-    if (result >= 0 && (result & CHENGYIN_HANDLED)) { event.filterAndAccept(); }
+    return modifiers;
 }
 
-int32_t Engine::process(fcitx::InputContext *ic, uint32_t key, uint32_t modifiers) {
+Engine::Outcome Engine::process(fcitx::InputContext *ic, uint32_t key, uint32_t modifiers, char punctuation) {
     auto *state = ic->propertyFor(&factory_);
     synchronize(*state);
     // Same place as the dictionary switch, and for the same reason: a session is
@@ -540,10 +792,38 @@ int32_t Engine::process(fcitx::InputContext *ic, uint32_t key, uint32_t modifier
     applyProfile(*state);
     const auto result = chengyin_session_process(state->session.get(), key, modifiers);
     ++state->revision;
-    if (result < 0) { clear(ic); return result; }
+    if (result < 0) { clear(ic); return {result, false}; }
+    bool converted = false;
     const auto commit = text(state->session.get(), CHENGYIN_TEXT_COMMIT);
     // Commit is delivered even when punctuation is forwarded to the application.
-    if (!commit.empty()) { ic->commitString(commit); }
+    //
+    // `punctuation` is a character from the shared table to render and append to
+    // the core's own commit. Appending it here makes candidate and punctuation a
+    // single commitString, so the application never sees the original key apart
+    // from the text it produced -- the same reason the Windows adapter fills
+    // plan.punctuation into the TSF edit it is already writing
+    // (platforms/windows/service.cpp:831-835) rather than letting the host's own
+    // key race an asynchronous commit.
+    //
+    // Three things make this conditional, and all three match Windows:
+    //  * only when the core really committed (`hasCommit`), so the apostrophe that
+    //    merely splits a syllable is neither converted nor eaten;
+    //  * only then does the quote pair state advance, which is what keeps a
+    //    half-written pair from desynchronising after a failed write;
+    //  * never for a passthrough, which is why the appended form is reserved for
+    //    the composition path.
+    if (!commit.empty()) {
+        if (punctuation != 0) {
+            ic->commitString(commit + renderPunctuation(state->punctuationState, punctuation, true));
+            state->punctuationState.accepted(punctuation, true);
+            converted = true;
+        } else {
+            // A passthrough: the core committed its candidate, and the punctuation
+            // key itself is left to the application. The caller must not consume it,
+            // or the character the user typed would be swallowed.
+            ic->commitString(commit);
+        }
+    }
     // The host has accepted the text, so this is the one moment learning may be
     // acknowledged. Two conditions beyond the commit itself:
     //
@@ -563,7 +843,7 @@ int32_t Engine::process(fcitx::InputContext *ic, uint32_t key, uint32_t modifier
     // the next input, exactly as a settings change does.
     applyProfile(*state);
     refresh(ic, (result & CHENGYIN_LIMITED) != 0);
-    return result;
+    return {result, converted};
 }
 
 void Engine::refresh(fcitx::InputContext *ic, bool limited) {
@@ -621,6 +901,18 @@ void Engine::refresh(fcitx::InputContext *ic, bool limited) {
 void Engine::clear(fcitx::InputContext *ic) {
     auto *state = ic->propertyFor(&factory_);
     chengyin_session_reset(state->session.get());
+    // The pair state and a half-finished Shift tap are transient in exactly the
+    // same way the composition is, so they go with it. The 中/英 mode and the
+    // punctuation switch do NOT: Windows keeps both across a reset and a focus
+    // change (its unbind() clears punctuation_ and shift_ and leaves english_
+    // alone, service.cpp:1224-1227), and a user who switched to English does not
+    // expect the next window to switch back.
+    //
+    // The standalone punctuation path deliberately does NOT come through here: it
+    // retires the session through resetSession() alone, because the quote it just
+    // inserted is the first half of a pair whose second half has to follow. That is
+    // the same split Windows makes between endLocked() and unbind().
+    retire(*state);
     synchronize(*state);
     // A reset leaves the session showing nothing, so this is the second place a
     // pending snapshot can land -- and the one every key of a sensitive context

@@ -1,5 +1,46 @@
 # 项目状态
 
+## 迭代 I20 Fcitx 中/英文模式与中文标点（Shift 切换、状态栏动作、配置项） · 执行方交付记录（待评审）
+
+分支 `codex/fcitx-mode-punctuation`。**本卡不发版**：`version.json` 未改，仍为 preview31。
+
+**改动面**：新增 `platforms/common/punctuation.h`（`char32_t` 版共享标点表，与 `platforms/windows/punctuation.h` 逐字符一致，由新 CTest 钉住）；
+`platforms/fcitx5/config.h` 新增 `DefaultEnglish` / `ShiftSwitch`（枚举 不使用/左 Shift/左右 Shift）/ `ChinesePunctuation`，并入 `EngineSettings`；
+`engine.h` 新增 `ShiftTap` 轻按状态机与 `State` 的 `english`/`punctuation`/`PunctuationState`/`ShiftTap`；
+`engine.cpp` 把 `keyEvent` 改成 Windows `translate()` 的三路分流（独立标点 / 交给核心并合并提交 / 透传），
+新增 `activate()`、两个 `SimpleAction`（`chengyin-mode`、`chengyin-punctuation`）与 `updateActions()`；
+`factory.cpp` 传入 `Instance::userInterfaceManager()`；`CMakeLists.txt` 注册两个新测试；
+新增 `test_mode_punctuation.cpp`、`test_punctuation_parity.cpp`；`test_engine.cpp` 逗号断言按新行为更新；
+`test_instance.cpp` 新增 case 16（真实 `fcitx::Instance` 下的注册、状态栏分组与动作点击）；`README.md` 新增一节。
+未改 `crates/`、`include/chengyin_ime.h`、`platforms/windows/`、`version.json`、`.github/workflows`。
+
+**关键取值依据（切换时丢组合）**：与 Windows 一致，**丢弃组合**而不是提交原文。依据：`toggleEnglish()` 先调用 `unbind()`
+（`platforms/windows/service.cpp:1190`），而 `unbind()` 会 `chengyin_session_reset()` 并把 `punctuation_`/`shift_` 清空
+（`service.cpp:1224-1227`）——组合因此被丢掉，不会以拉丁字母形式上屏。Fcitx 侧同样先清会话再切模式（`toggleEnglish()`）。
+
+**状态栏动作 API 版本兼容**：`SimpleAction`/`setShortText`/`setIcon`/`setChecked`/`activate`/`UserInterfaceManager::registerAction(name, action)`/
+`StatusArea::addAction`/`StatusGroup::InputMethod` 均存在于 Fcitx 5.1.7（CI 的 Ubuntu 24.04 为 5.1.x），本机 5.1.23 亦一致，
+没有引入需要版本宏的新接口；`activate()` 覆写是 `InputMethodEngine` 既有虚函数。`Instance::activateInputMethod()` 在调用
+`engine->activate()` 前会 `statusArea().clearGroup(StatusGroup::InputMethod)`，因此两个动作在 `activate()` 里重新加入。
+
+**与设计的偏差**：
+1. 设计写“有组合时先用 `chengyin_session_process` 处理……再 `commitString` 合并”，实现按 Windows `translate()` 的真实分流落地：
+   只有**有组合**时标点才随核心的提交一起写入；**没有组合**时走 Windows 的独立标点动作（直接上屏，不经过核心），
+   因为 `chengyin_session_process` 在无组合时对不可打印字符返回 0，不会产出任何提交。偏差原因：完全按设计写会让无组合的标点无法上屏。
+2. 设计写“非 Ctrl/Alt/Win、未按 Shift”，实现**不额外判 Shift**：Windows 的 `translate()` 判 Shift 是因为 Win32 下 Shift+';' 仍报 VK_OEM_1；
+   Fcitx 的 `Key::normalize()` 已把 Shift 折进键符（Shift+';' 到达时就是 colon 键符、无 Shift 位），再判 Shift 会把冒号误判成组合键。Windows 自身也是按“已折叠后的字符”取标点。
+3. 设计提到“先读 `/usr/include/Fcitx5/Core/fcitx` 确认 API”：已读；`action.h`/`statusarea.h`/`userinterfacemanager.h` 与实现一致，无需版本宏。
+4. 本机 `pgrep -a fcitx5` 在测试前后输出一致（真实 Fcitx 未受影响），`~/.local/share/fcitx5` 下无 `chengyin/`。
+
+**证据**：`bash scripts/check.sh` 退出 0；`python3 scripts/version.py --check` 通过（`0.1.0-preview31`，未变）；
+全新构建后 `ctest` 连续 3 次 9/9；`taskset -c 0 ctest -R "mode-punctuation|punctuation-parity" --repeat until-fail:10` 全过；
+阴性对照三处各自复现预期失败（本地临时变体，未提交）：拆开合并提交 → 单次写入断言失败；
+去掉 Shift 组合作废 → 组合键用例失败；标点提交也学习 → 学习用例失败。
+
+**未断言**：只跑无头与真实 `fcitx::Instance`；真实桌面的输入状态栏渲染、配置工具界面与多屏未验证。
+不声称“Linux 中英/标点已与 Windows 完全一致”：无切换提示窗，Ctrl+Space 由 Fcitx 全局控制。
+
+
 ## 迭代 I19 Fcitx 选词学习持久化（`Learning` 开关 + Profile 落盘） · 2026-10-10 已合并（PR #36，squash `23ed2b9`，随 preview31 发版）
 
 评审结论：第 2 轮通过（第 1 轮打回：CI `fcitx5-learning` I.4/I.6 依赖墙钟、陈旧会话快照会覆盖其他上下文刚学到的选词）。技术负责人亲自核对并重跑：`Engine::learn` 按 `baselineCurrent` 分流（基线落后时直接记入主档案；`ChengyinProfile` 为 `Arc`+`make_mut` 写时复制，`crates/ime-ffi/src/lib.rs:119`，不重复计数）；新增 case J（两上下文交错学习，阴性对照复现失败）、case I 改为 `flushLearning` 等终态；`check.sh` 通过，全新构建 ctest 连续 3 次 7/7，`taskset -c 0` 单核重复通过，真实 `fcitx5` 进程集合不变，`~/.local/share/fcitx5` 无 `chengyin/`；PR CI 6/6。
