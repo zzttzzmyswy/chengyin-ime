@@ -620,7 +620,6 @@ void Engine::activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent 
     updateActions(ic, *state);
     ic->statusArea().addAction(fcitx::StatusGroup::InputMethod, &modeAction_);
     ic->statusArea().addAction(fcitx::StatusGroup::InputMethod, &punctuationAction_);
-    FCITX_WARN() << "DBG-ACT " << static_cast<void *>(ic) << " n=" << ic->statusArea().allActions().size();
 }
 
 void Engine::updateActions(fcitx::InputContext *ic, State &state) {
