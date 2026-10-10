@@ -22,7 +22,13 @@
 - 合并上限 250,000 条来自核心，`merge_all` 返回 NULL 时归因到最后一条启用条目并报「合并后超过 250000 条」，不静默截断；测试里用相同两个句柄直接调 `chengyin_dictionary_merge_all` 对拍，证明该上限是核心的真实行为。
 - 核心 `merge_all` 只接受 1..=64 个句柄，基础词库占一个，因此最多 63 个条目可同时启用；第 64 个启用条目被拒绝并提示，列表本身允许 64 项。
 - 内存峰值：逐个 import 后立即释放原始字节，只保留已编译句柄到合并。
-## 迭代 I22 核心 ü 变体拼写（jv/qv/xv/yv、lve/nve）· 2026-10-10 交付待评审
+## 迭代 I22 核心 ü 变体拼写 jv/qv/xv/yv 与 lve/nve（算法改进 A1） · 2026-10-10 已合并（PR #43，随 preview34 发版）
+
+评审结论：通过。技术负责人亲自核对与重跑：`check.sh` 通过；`quality_report`（默认与 `--incremental`）在 `main` 与本分支上，**既有 9 个类别逐行完全相同**（仅新增 44 条 `alias` 行及含其的 `all/dev/test` 汇总变化；`alias` 改动前 0% → 改动后 Top-1/Top-9/可达 100%）；`variants` 与 `allocations` 测试通过；PR CI 6/6。性能由评审独立复测：13.24（i9-10900X，共享机）`CHENGYIN_BENCH_ROUNDS=300`，main 4 轮 / 分支 3 轮交替取 P99 中位数，会话类场景差 −0.0%…+1.9%，`woxihuanzhongwen + space` +4.8%（两侧区间重叠），未改动的 `Dictionary::lookup` 场景同样漂移 −19%…+9%，单轮读数有 ±20% 离群，故按中位数与区间重叠判断：未见可判定的劣化。
+认可执行方对规则 2 的收窄（仅当 `l/n` 之前已是完整音节序列时才改写 `v`，否则 `nver`=女儿、`xialnver` 等既有用例回退），及学习键取规范拼写的依据；`generate_eval_corpus.py` 改为追加式以免改写已冻结的 488 行。
+已知限制：`lve/nve` 一律解释为 lüe/nüe（与搜狗一致），要表示 `lv`+`e` 需键入 `lv'e`；变体仅用于查询，预编辑显示仍是键入原样；Windows 同享该核心但未做实机验证。
+
+（以下为执行方交付记录）
 
 分支 `codex/core-v-variants`（基线 `main` @ `64956a3`，交付前已 rebase 到 `92595df`/preview33）。
 **本卡不发版**：`version.json` 未改，仍为 `0.1.0`/preview33；未改 C ABI、`platforms/`、
