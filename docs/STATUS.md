@@ -22,6 +22,54 @@
 - 合并上限 250,000 条来自核心，`merge_all` 返回 NULL 时归因到最后一条启用条目并报「合并后超过 250000 条」，不静默截断；测试里用相同两个句柄直接调 `chengyin_dictionary_merge_all` 对拍，证明该上限是核心的真实行为。
 - 核心 `merge_all` 只接受 1..=64 个句柄，基础词库占一个，因此最多 63 个条目可同时启用；第 64 个启用条目被拒绝并提示，列表本身允许 64 项。
 - 内存峰值：逐个 import 后立即释放原始字节，只保留已编译句柄到合并。
+## 迭代 I22 核心 ü 变体拼写 jv/qv/xv/yv 与 lve/nve（算法改进 A1） · 2026-10-10 已合并（PR #43，随 preview34 发版）
+
+评审结论：通过。技术负责人亲自核对与重跑：`check.sh` 通过；`quality_report`（默认与 `--incremental`）在 `main` 与本分支上，**既有 9 个类别逐行完全相同**（仅新增 44 条 `alias` 行及含其的 `all/dev/test` 汇总变化；`alias` 改动前 0% → 改动后 Top-1/Top-9/可达 100%）；`variants` 与 `allocations` 测试通过；PR CI 6/6。性能由评审独立复测：13.24（i9-10900X，共享机）`CHENGYIN_BENCH_ROUNDS=300`，main 4 轮 / 分支 3 轮交替取 P99 中位数，会话类场景差 −0.0%…+1.9%，`woxihuanzhongwen + space` +4.8%（两侧区间重叠），未改动的 `Dictionary::lookup` 场景同样漂移 −19%…+9%，单轮读数有 ±20% 离群，故按中位数与区间重叠判断：未见可判定的劣化。
+认可执行方对规则 2 的收窄（仅当 `l/n` 之前已是完整音节序列时才改写 `v`，否则 `nver`=女儿、`xialnver` 等既有用例回退），及学习键取规范拼写的依据；`generate_eval_corpus.py` 改为追加式以免改写已冻结的 488 行。
+已知限制：`lve/nve` 一律解释为 lüe/nüe（与搜狗一致），要表示 `lv`+`e` 需键入 `lv'e`；变体仅用于查询，预编辑显示仍是键入原样；Windows 同享该核心但未做实机验证。
+
+（以下为执行方交付记录）
+
+分支 `codex/core-v-variants`（基线 `main` @ `64956a3`，交付前已 rebase 到 `92595df`/preview33）。
+**本卡不发版**：`version.json` 未改，仍为 `0.1.0`/preview33；未改 C ABI、`platforms/`、
+`data/syllables.txt`、词库来源与 `.github/workflows`。
+
+**改动面**：`crates/ime-core/src/syllables.rs` 新增纯函数 `canonicalize`（`v→u` 两条规则的
+等长改写，含单元测试）；`crates/ime-core/src/session.rs` 新增会话内定长缓冲 `canonical` 与
+`canonicalized` 标志、自由函数 `query_spelling`，并把全部词库读取（游标 reset/reset_fast/
+reset_tolerant、`initials_range`、`attests`、`corrected_pronunciation`、`fuzzy::*`、解码器、
+历史缓存与学习键）改经该查询拼写；新增 `crates/ime-core/tests/variants.rs`（8 个用例）；
+`crates/ime-core/tests/allocations.rs` 追加变体输入的逐键零分配场景；
+`crates/ime-core/tests/quality_corpus.rs` 把 `alias` 计入类别门禁；
+`scripts/generate_eval_corpus.py` 新增 `alias` 类并改为**追加式**生成；
+`data/eval/quality.tsv` 追加 44 行（+44/−0）；`docs/ARCHITECTURE.md` 增一节规则说明；
+`docs/QUALITY_BASELINE.md` 增一节前后对照。
+
+**规则 2 的收窄（与设计的偏差，也是唯一偏差）**：设计写“紧跟 `l n` 且紧接着 `e` 的 `v`
+视为 `u`”。按字面实现会改写 `nver`→`nuer`，破坏 女儿（`nv'er` 是词库中 nü 的规范写法）：
+实测既有 488 条中 `typo/neighbor` 的 `xialnver`（纠错后的 小女儿）由可达变为不可达，
+`combo` 由 0.4% 升至 0.6%。故实现收窄为“仅当该 `l`/`n` 之前已是完整音节序列时改写”，
+`nve`/`lveduo` 仍照常改写，`nver`/`xialnver`/`lv'e` 保持原样。这是任务卡“若某条规则使既有
+质量集用例变化则该规则不得合入（收窄或去掉）”所要求的收窄。
+
+**学习键取值**：取**查询用的规范拼写**而非原始输入。依据：`refresh` 的历史道以
+`row.key == 查询拼写` 判定 `accurate`（`session.rs`），`dictionary.attests` 也以查询拼写
+对齐；若按原始输入记录，`jveding` 选中的行在下次输入 `jueding` 时永远查不到。这与既有
+“键盘纠错后学习键”一致——纠错按原始键查询，故记原始键；变体按规范拼写查询，故记规范拼写。
+
+**证据摘要**（同机 Intel i9-10900X / 20 核 / Arch Linux / rustc 1.98.0）：
+`bash scripts/check.sh` 退出 0（25 个测试二进制全绿，含 FFI 冒烟与 CLI 查询）；
+`cargo test -p chengyin-core --test allocations --locked` 通过（新增 `jvn`/`jveding`/`xvan`/
+`lve`/`lvequ`/`nvedai` 逐键零分配）；`quality_report` 与 `--incremental` 两模式下既有 488 条
+九个类别逐类逐字段**完全相同**（Top-1 93.4% / Top-9 98.6% / 可达 99.6% / 错误组合率 0.2%），
+新增 `alias` 44 条由改动前 Top-1 0.0% 提升至 **100.0%**。
+
+性能（同机交替 A/B×3 轮，`CHENGYIN_BENCH_ROUNDS=1000`）：20 个场景中**没有任何场景的 P99
+前后差超过其自身轮间波动**（轮间极差占中位数 16%–61%，前后差 0.1%–42%，无一例外被噪声淹没）。
+弱工具校验：32 个基准输入串**没有一个含 `v`**，故本次改动在全部被测按键上都走 `memchr`
+快路径直接返回原切片；`demo.lookup` / `synthetic.lookup` 调用的是未改动的
+`Dictionary::lookup`，其 P99 仍在 −8.4%/+4.8% 间摆动，与改动无关。本机为共享开发机，
+单轮数据不可用作劣化判据。
 
 ## 迭代 I20 Fcitx 中/英文模式与中文标点（Shift 切换、状态栏动作、配置项） · 2026-10-10 已合并（PR #39，随 preview32 发版）
 

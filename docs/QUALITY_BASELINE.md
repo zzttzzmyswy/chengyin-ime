@@ -151,6 +151,46 @@ python3 scripts/generate_eval_corpus.py
 
 原始输出：`build/quality-baseline.txt`、`build/bench-i03-baseline.txt`。
 
+## I22 ü 变体拼写（`alias` 类） · 2026-10-10
+
+新增 `alias` 类（44 条，dev 24 / test 20），覆盖两条变体规则：`jv/qv/xv/yv`
+（`al;jv`/`al;qv`/`al;xv`/`al;yv`，共 24 条）与 `lve/nve`（`al;lue` 14 条、`al;nue` 6 条）。
+每行取一个真实词典读音，把首音节改写成变体，`expected` 仍取该读音词频最高的词，
+于是问题就是“变体能否找到规范拼写找到的东西”。
+
+命令（前后完全相同）：
+
+```sh
+cargo run --release -p chengyin-core --example quality_report --locked
+cargo run --release -p chengyin-core --example quality_report --locked -- --incremental
+```
+
+`--incremental` 用 `--` 传参；直接写 `--incremental` 会被当成语料路径。
+
+| 范围 | n | 指标 | 改动前 | 改动后 | Δ |
+| --- | ---: | --- | ---: | ---: | ---: |
+| `alias` | 44 | Top-1 | 0.0% | **100.0%** | +100.0 |
+| `alias` | 44 | Top-9 | 0.0% | **100.0%** | +100.0 |
+| `alias` | 44 | 可达 | 0.0% | **100.0%** | +100.0 |
+| `alias` | 44 | 错误组合率 | 2.3% | **0.0%** | −2.3 |
+| 全部 | 532 | Top-1 | 85.7% | **94.0%** | +8.3 |
+| 全部 | 532 | Top-9 | 90.4% | **98.7%** | +8.3 |
+| 全部 | 532 | 可达 | 91.4% | **99.6%** | +8.2 |
+
+逐分档（改动后）：`al;jv` 5 条、`al;qv` 3、`al;xv` 6、`al;yv` 10、`al;lue` 14、`al;nue` 6，
+全部 Top-1/Top-9/可达 = 100.0%，错误组合率 0.0%。改动前这六档 Top-1/Top-9/可达 均为 0.0%，
+即**变体输入在此之前完全匹配不到**（`al;lue` 另有 7.1% 错误组合率，是残缺前缀被当成组合）。
+
+**既有 488 条零回退**：九个既有类别（`whole_word` / `single_char` / `long_sentence` /
+`homophone` / `fuzzy` / `typo` / `initials` / `prefix` / `learning`）在改动前后的
+Top-1、Top-9、可达、组合率、错误组合率、按键 P50/P95 **逐类逐字段完全相同**；
+`--incremental` 两种模式亦同。整体 488 条 Top-1 93.4% / Top-9 98.6% / 可达 99.6% /
+错误组合率 0.2% 不变，与 I05 基线一致。唯一变化来自新增的 44 条 `alias` 行。
+
+标注集为**追加式**：`scripts/generate_eval_corpus.py` 保留已提交文件中既有类别的每一行，
+只生成尚未出现的类别。原因是词库在标注集冻结（I03）之后翻倍（I05），现在整体重算会把
+既有 488 行全部改写、使它们所引用的基线失效；脚本仍是该文件的唯一作者，没有任何行是手工编辑的。
+
 ## 二、标注集来源与许可
 
 标注集在 `data/eval/quality.tsv`，共 488 条，由 `scripts/generate_eval_corpus.py`

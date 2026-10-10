@@ -28,6 +28,12 @@ Design rules
   built directly, the same way the platform adapter loads a saved profile.)
 * Inputs are unseparated ASCII pinyin (the dominant real typing style) except in
   the categories that explicitly require another form.
+* The set is append-only. A category already in the committed file is kept from
+  it verbatim and only a new category is generated, because the lexicon was
+  doubled after the set was frozen (I05) and regenerating every category from
+  today's `data/daily.tsv` would rewrite all 488 existing rows and silently
+  retire the baseline they are quoted against. This script stays their sole
+  author either way — no row is ever hand-edited.
 
 Run:
     python3 scripts/generate_eval_corpus.py
@@ -82,6 +88,7 @@ PER_SPLIT = {
     "initials": 20,
     "prefix": 15,
     "learning": 10,
+    "alias": 12,
 }
 
 rows: list[dict] = []
@@ -538,6 +545,74 @@ def learning_groups() -> list[tuple[str, list[tuple]]]:
     return groups
 
 
+# --------------------------------------------------------------------- alias
+
+def alias_groups() -> list[tuple[str, list[tuple]]]:
+    """The `ü` variant spellings other IMEs accept, against their canonical form.
+
+    Two rules, mirrored from `crates/ime-core/src/syllables.rs` (I22):
+    1. `v` directly after `j q x y` is `u`, so a user may type `jv`/`qve`/`xvan`
+       where canonical pinyin writes `ju`/`que`/`xuan`;
+    2. `v` directly after `l`/`n` and immediately before a syllable-final `e` is
+       `u`, so `lve`/`nve` reach `lue`/`nue` (lüe/nüe).
+
+    Each row takes a real dictionary spelling and rewrites one syllable into its
+    variant, so the typed string is one a user actually produces; `expected` is
+    that spelling's own top word, exactly as in the neighbouring categories. The
+    row then asks whether the variant finds what the canonical spelling finds.
+
+    The whole point of the category is the *negative* baseline: before I22 these
+    inputs matched nothing at all. `canonical` records the spelling the row
+    derives from, so the two can be compared row by row.
+    """
+    # (rule label, canonical prefix, variant prefix). `yu` is included for `yv`
+    # even though `yu`+`e` is written `yue`, since the rule is purely the letter
+    # after the `v`.
+    rule_one = [
+        ("jv", "ju", "jv"), ("jv", "jue", "jve"), ("jv", "juan", "jvan"),
+        ("jv", "jun", "jvn"),
+        ("qv", "qu", "qv"), ("qv", "que", "qve"), ("qv", "quan", "qvan"),
+        ("qv", "qun", "qvn"),
+        ("xv", "xu", "xv"), ("xv", "xue", "xve"), ("xv", "xuan", "xvan"),
+        ("xv", "xun", "xvn"),
+        ("yv", "yu", "yv"), ("yv", "yue", "yve"), ("yv", "yuan", "yvan"),
+        ("yv", "yun", "yvn"),
+    ]
+    groups: list[tuple[str, list[tuple]]] = []
+    collected: list[tuple] = []
+    for label, canonical_head, variant_head in rule_one:
+        for spelling in sorted(by_key):
+            parts = syllables(spelling)
+            head = parts[0]
+            if head != canonical_head or len(letters(spelling)) > MAX_LETTERS:
+                continue
+            # Two or three syllables keeps the row comparable with `whole_word`;
+            # a single rewritten syllable alone would be a `single_char` row.
+            if len(parts) not in (2, 3):
+                continue
+            typed = variant_head + "".join(parts[1:])
+            text, frequency = top_of[spelling]
+            collected.append((0, typed, text, "", f"al;{label}", freq_bucket(frequency)))
+    groups.append(("alias/rule1", collected))
+
+    rule_two: list[tuple] = []
+    for canonical_head, variant_head in (("lue", "lve"), ("nue", "nve")):
+        for spelling in sorted(by_key):
+            parts = syllables(spelling)
+            if parts[0] != canonical_head or len(letters(spelling)) > MAX_LETTERS:
+                continue
+            if len(parts) not in (2, 3):
+                continue
+            typed = variant_head + "".join(parts[1:])
+            text, frequency = top_of[spelling]
+            rule_two.append((0, typed, text, "", f"al;{canonical_head}",
+                             freq_bucket(frequency)))
+    groups.append(("alias/rule2", rule_two))
+    # The two rules are emitted separately so the category reports each one's
+    # coverage; `emit` re-splits by input as every other category does.
+    return groups
+
+
 # ----------------------------------------------------------------- write out
 
 emit("whole_word", whole_word_specs(), PER_SPLIT["whole_word"])
@@ -552,24 +627,48 @@ emit("initials", initials_specs(), PER_SPLIT["initials"])
 emit("prefix", prefix_specs(), PER_SPLIT["prefix"])
 for name, collected in learning_groups():
     emit(name, collected, PER_SPLIT["learning"])
+for name, collected in alias_groups():
+    emit(name, collected, PER_SPLIT["alias"])
 
 # `fuzzy/<rule>` and `typo/<kind>` groups report as one category each.
 for row in rows:
     row["category"] = row["category"].split("/", 1)[0]
 
+# Append-only merge with the committed artifact. The lexicon was doubled after
+# this set was frozen (I05), so regenerating every category from today's
+# `data/daily.tsv` would rewrite all 488 existing rows and silently retire the
+# baseline they are quoted against. A category already present in the committed
+# file is therefore kept verbatim from it, and only a category that is new is
+# generated. That keeps this script the sole author of the file — nothing here is
+# hand-edited — while new categories such as `alias` (I22) are added by rule.
+OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+frozen: dict[str, list[str]] = defaultdict(list)
+if OUTPUT.exists():
+    for line in OUTPUT.read_text(encoding="utf-8").splitlines():
+        if not line or line.startswith("#"):
+            continue
+        frozen[line.split("\t", 1)[0]].append(line)
+
+rows = [row for row in rows if row["category"] not in frozen]
+body = [line for category in sorted(frozen) for line in frozen[category]]
+
 rows.sort(key=lambda row: (row["category"], row["split"], row["input"], row["expected"],
                            row["bucket"], row["note"], row["flags"]))
-dev_inputs = {row["input"] for row in rows if row["split"] == "dev"}
-test_inputs = {row["input"] for row in rows if row["split"] == "test"}
-overlap = dev_inputs & test_inputs
-if overlap:
-    raise SystemExit(f"dev/test input overlap: {sorted(overlap)[:10]}")
-
-body = [
+new_body = [
     "\t".join([row["category"], row["split"], str(row["flags"]), row["input"],
                row["expected"], row["train"], row["bucket"], row["note"]])
     for row in rows
 ]
+# The dev/test split must stay disjoint across the whole file, frozen rows
+# included — the check covers the merged result, not just this run's output.
+split_of_input: dict[str, str] = {}
+for line in body + new_body:
+    fields = line.split("\t")
+    spelling, split = fields[3], fields[1]
+    previous = split_of_input.setdefault(spelling, split)
+    if previous != split:
+        raise SystemExit(f"dev/test input overlap on {spelling!r}")
+body += new_body
 header = [
     "# 澄音输入法独立质量标注集（审查 R11）。由 scripts/generate_eval_corpus.py 生成，请勿手工编辑。",
     "# 来源与许可：全部派生自 data/daily.tsv（Rime pinyin-simp Apache-2.0 + jieba MIT）与本仓库自写规则；",
@@ -584,12 +683,14 @@ text = "\n".join(header + body) + "\n"
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 OUTPUT.write_text(text, encoding="utf-8", newline="\n")
 
-per_category = defaultdict(lambda: defaultdict(int))
-for row in rows:
-    per_category[row["category"]][row["split"]] += 1
-print(f"wrote {OUTPUT.relative_to(ROOT)}: {len(rows)} rows")
-for category in sorted(per_category):
-    counts = per_category[category]
+merged = defaultdict(lambda: defaultdict(int))
+for line in body:
+    fields = line.split("\t")
+    merged[fields[0]][fields[1]] += 1
+print(f"wrote {OUTPUT.relative_to(ROOT)}: {len(body)} rows "
+      f"({len(new_body)} generated, {len(body) - len(new_body)} kept from the committed set)")
+for category in sorted(merged):
+    counts = merged[category]
     print(f"  {category:<15} dev={counts['dev']:<4} test={counts['test']:<4}")
 print("split input overlap: 0")
 print(f"sha256={hashlib.sha256(text.encode()).hexdigest()}")
