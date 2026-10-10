@@ -145,6 +145,19 @@ if(BUILD_TESTING)
   target_link_libraries(chengyin-reload-test PRIVATE chengyin-engine)
   target_compile_options(chengyin-reload-test PRIVATE -Wall -Wextra -Werror -UNDEBUG)
   add_test(NAME fcitx5-dictionary-reload COMMAND chengyin-reload-test)
+  # The attached-lexicon suite (I21). It drives the real Engine through setConfig()
+  # with a list of extra lexicons, and asserts what that list does: every supported
+  # file format is recognised, several entries merge into one lexicon, a disabled
+  # entry is neither read nor validated, any enabled entry that fails keeps the
+  # previous lexicon and names itself, the 250,000-row and 64-entry ceilings are
+  # reported rather than applied silently, and an active composition is untouched.
+  add_executable(chengyin-dictionary-library-test test_dictionary_library.cpp)
+  target_link_libraries(chengyin-dictionary-library-test PRIVATE chengyin-engine)
+  target_compile_options(chengyin-dictionary-library-test PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+  add_test(NAME fcitx5-dictionary-library COMMAND chengyin-dictionary-library-test)
+  # One case builds a 250,000-row lexicon and merges it, which is the slowest step
+  # in any suite here; the rest are file-sized.
+  set_tests_properties(fcitx5-dictionary-library PROPERTIES TIMEOUT 180)
   add_executable(chengyin-default-dictionary-test test_default_dictionary.cpp)
   target_link_libraries(chengyin-default-dictionary-test PRIVATE chengyin-engine)
   # The regression loads a private copy of the shipped lexicon, so it proves the

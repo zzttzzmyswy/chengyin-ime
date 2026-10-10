@@ -8,7 +8,9 @@
 #include <fcitx-config/option.h>
 #include <string>
 #include <utility>
+#include <vector>
 #include "chengyin_ime.h"
+#include "dictionary_loader.h"
 
 namespace chengyin {
 // Distribution packages compile in the lexicon they install, so a profile with
@@ -96,6 +98,19 @@ FCITX_CONFIGURATION(CorrectionConfig,
                                 {&repeat, CHENGYIN_CORRECT_REPEAT, "repeat"}}};
                     })
 
+// One entry of the attached-lexicon list. This is a sub-configuration rather than
+// a plain string so the framework's own list editor renders it as a list of
+// entries it can add to and remove from; `Enabled` defaults to true, which is what
+// makes a newly added file take effect without a second step. An empty Name falls
+// back to the file name, and the file itself is never copied or modified: the
+// entry is a reference to a path the user owns.
+FCITX_CONFIGURATION(DictionaryEntryConfig,
+                    fcitx::Option<std::string> name{this, "Name",
+                        "显示名（留空则用文件名）", ""};
+                    fcitx::Option<std::string> path{this, "Path",
+                        "词库文件绝对路径（SCEL / UTF-8 或 UTF-16 文本 / TSV / 本项目二进制）", ""};
+                    fcitx::Option<bool> enabled{this, "Enabled", "启用该词库", true};)
+
 // The 11 + 4 switches in bit order: phonetic pairs first, keyboard-error rules
 // after, so the table index and the flag's bit position agree.
 inline MatchingSwitchList matchingSwitchList(const FuzzyConfig &fuzzy, const CorrectionConfig &correction) {
@@ -140,8 +155,32 @@ public:
           shiftSwitch{this, "ShiftSwitch", "Shift 切换键", ShiftSwitch::Left},
           chinesePunctuation{this, "ChinesePunctuation", "中文模式使用中文标点", true},
           fuzzy{this, "Fuzzy", "模糊音（双向匹配）", FuzzyConfig{}},
-          correction{this, "Correction", "常见键盘失误", CorrectionConfig{}} {}
+          correction{this, "Correction", "常见键盘失误", CorrectionConfig{}},
+          dictionaries{this, "Dictionaries",
+              "附加词库：每项一个文件，可单独启用或停用；与基础词库（DictionaryPath）合并使用",
+              {}} {}
     const char *typeName() const override { return "ChengyinConfig"; }
+
+    // The attached list in the form the loader takes. An entry whose Path is blank
+    // is not a usable lexicon -- there is nothing to open -- but it is still carried
+    // through so the configuration round-trips byte for byte; the loader refuses it
+    // by name if it is enabled, which is what makes a half-filled entry visible
+    // instead of silently ignored.
+    std::vector<DictionarySource> dictionarySources() const {
+        std::vector<DictionarySource> sources;
+        sources.reserve(dictionaries->size());
+        for (const auto &entry : *dictionaries) {
+            sources.push_back(DictionarySource{*entry.name, *entry.path, *entry.enabled});
+        }
+        return sources;
+    }
+
+    // How many entries the list holds. Compared separately from the list's content
+    // so a save that only adds or removes an entry still counts as a lexicon change,
+    // and so the 64-entry ceiling can be reported.
+    size_t dictionaryCount() const { return dictionaries->size(); }
+
+    bool dictionaryLimitExceeded() const { return dictionaryCount() > kMaxEntries; }
 
     // The width the core is configured with, counted in candidate rows.
     int pageSizeValue() const {
@@ -194,6 +233,11 @@ public:
     fcitx::Option<bool> chinesePunctuation;
     fcitx::Option<FuzzyConfig> fuzzy;
     fcitx::Option<CorrectionConfig> correction;
+    // The attached-lexicon list. A List of sub-configs is what makes the config
+    // tool render it as a list it can add to and remove from rather than one
+    // free-text field; a profile written before this option existed simply reads
+    // back empty.
+    fcitx::Option<std::vector<DictionaryEntryConfig>> dictionaries;
 };
 
 // Everything the adapter pushes into a session, in a form that is cheap to
