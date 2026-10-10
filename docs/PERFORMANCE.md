@@ -583,3 +583,12 @@ nizhnaghao/jintiantianqihenhao；五无规则串沿用 bench 源码的日常语�
 加载 70.068 ms，词库堆估算 13209127 bytes，Session inline+预留仍 64902 bytes，零按键分配回归通过。
 后台负载未控制，不能以本批与 preview18 的差值证明性能改进；长串预算仍未达标，
 本批拍照个例和五个新增回归也不替代独立语义质量集。
+
+## 待办：来自开源方案调研的两项热路径候选（2026-10-10，MYS-2037）
+
+MYSWY 已同意把下列两项**并入性能迭代线**（不另开独立迭代，避免与 `decoder.rs` / `session.rs` 的性能改动冲突）。依据见 [`docs/PINYIN_MATCHING_SURVEY.md`](PINYIN_MATCHING_SURVEY.md)；两项都以 `data/eval/quality.tsv` 零回退（含 `alias` 类）和 P99 不劣化为合入门槛，先剖析再改。
+
+1. **A2 整句触发条件与候选截断。** librime 仅在“没有精确系统词/用户词且至少 2 个音节”时才做整句（`script_translator.cc` 约 498 行）；libime 用 `scoreFilter` 把与最优分差超过阈值的候选挡在首页之外、用 `wordCandidateLimit` 限制词候选数。澄音当前每键都展开整句 DP。做法：先在质量集与基准输入上统计“存在等音节精确词时，整句候选作为首选的比例”，只有统计证明门控不改变任何既有 Top-1/Top-9 时才实现；若有任何回退，改为只做候选截断并如实记录。
+2. **A3 逐键增量复用。** libime 的切分图 `merge`（复用未变前缀）+ 词格节点复用 + 两级 LRU（`segmentgraph.cpp`、`decoder.cpp`）。对应 I15/I17 之后仍剩的 `Decoder::transition` miss 路径与逐 start DP 重复展开。约束：必须守住零堆分配与 64 KiB 会话预算（固定容量缓存），输出逐候选不变。
+
+已排除（已核实澄音已具备）：时间衰减与上限的学习模型——见 I23 的评估（MYS-2067）。
