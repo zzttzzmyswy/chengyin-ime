@@ -27,6 +27,7 @@
 评审结论：通过。技术负责人亲自核对与重跑：`check.sh` 通过；`quality_report`（默认与 `--incremental`）在 `main` 与本分支上，**既有 9 个类别逐行完全相同**（仅新增 44 条 `alias` 行及含其的 `all/dev/test` 汇总变化；`alias` 改动前 0% → 改动后 Top-1/Top-9/可达 100%）；`variants` 与 `allocations` 测试通过；PR CI 6/6。性能由评审独立复测：13.24（i9-10900X，共享机）`CHENGYIN_BENCH_ROUNDS=300`，main 4 轮 / 分支 3 轮交替取 P99 中位数，会话类场景差 −0.0%…+1.9%，`woxihuanzhongwen + space` +4.8%（两侧区间重叠），未改动的 `Dictionary::lookup` 场景同样漂移 −19%…+9%，单轮读数有 ±20% 离群，故按中位数与区间重叠判断：未见可判定的劣化。
 认可执行方对规则 2 的收窄（仅当 `l/n` 之前已是完整音节序列时才改写 `v`，否则 `nver`=女儿、`xialnver` 等既有用例回退），及学习键取规范拼写的依据；`generate_eval_corpus.py` 改为追加式以免改写已冻结的 488 行。
 已知限制：`lve/nve` 一律解释为 lüe/nüe（与搜狗一致），要表示 `lv`+`e` 需键入 `lv'e`；变体仅用于查询，预编辑显示仍是键入原样；Windows 同享该核心但未做实机验证。
+发版：[v0.1.0-preview34](https://github.com/zzttzzmyswy/chengyin-ime/releases/tag/v0.1.0-preview34)（target `7cd71ed`；Windows EXE/deb 取自 Actions 38051847693；Arch 包固定源码重建，容器内 CTest 10/10；隔离 pacman 生命周期因同机高负载下 Docker 守护进程无响应，改在宿主 bubblewrap 用户命名空间内以同一脚本通过；PKGBUILD 已 pin，归档 SHA256 `3c8ca424…` 两次下载一致）。仍为预发布，未做实机验收。
 
 （以下为执行方交付记录）
 
