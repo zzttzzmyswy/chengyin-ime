@@ -1,6 +1,11 @@
 # 项目状态
 
-## 迭代 I20 Fcitx 中/英文模式与中文标点（Shift 切换、状态栏动作、配置项） · 执行方交付记录（待评审）
+## 迭代 I20 Fcitx 中/英文模式与中文标点（Shift 切换、状态栏动作、配置项） · 2026-10-10 已合并（PR #39，随 preview32 发版）
+
+评审结论：通过（评审中删除一处遗留的调试日志 `DBG-ACT`，每次激活输入法都会写一条 WARN）。技术负责人亲自核对与重跑：`check.sh` 通过；全新构建 ctest 连续 3 次 9/9（含新增 `fcitx5-mode-punctuation`、`fcitx5-punctuation-parity`）；`taskset -c 0` 单核重复通过；真实 `fcitx5` 进程集合不变，`~/.local/share/fcitx5` 无 `chengyin/`；PR CI 6/6。认可执行方 4 处偏差（无组合标点走 Windows 的独立标点动作、不额外判 Shift、`'` 有组合时交给核心保持音节分隔、保存设置时重播种标点开关）及切换时“丢弃组合”的依据（`platforms/windows/service.cpp:1190,1224-1227`）；标点映射由 CTest 与 Windows 头逐字符对拍。
+已知差异：无切换提示窗；Ctrl+Space 由 Fcitx 全局控制；状态栏动作与配置工具界面、真实桌面未实测。
+
+（以下为执行方交付记录）
 
 分支 `codex/fcitx-mode-punctuation`。**本卡不发版**：`version.json` 未改，仍为 preview31。
 
