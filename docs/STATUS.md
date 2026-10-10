@@ -1,5 +1,10 @@
 # 项目状态
 
+## 迭代 I23 选词学习评估（算法 A4 评估阶段） · 2026-10-10 已合并（PR #46，仅评测与文档，未发版）
+
+评审结论：通过。技术负责人亲自核对与重跑：核心 `crates/ime-core/src/`、`platforms/`、`include/`、`version.json` 零改动；既有 532 行评测逐行（含顺序）与 `main` 相同；`quality_corpus` 5/5；`quality_report` 复现 `learn` 48 条（`ln1;word` 与 `ln3;decay` Top-1 100%，`ln2;context` 50.0%）；生成器幂等；PR CI 6/6。认可唯一偏差：生成器改为按文件既有顺序输出（I22 之后“只追加”契约在 main 上已失效，重跑会把 44 行 `alias` 搬到开头），仅改写出顺序。
+结论（详见 `docs/LEARNING_EVALUATION.md`）：调研所列“时间衰减 / 上限 / 竞争词惩罚”澄音**已具备**（`profile.rs` 的 epoch 衰减、8192 上限与命中率淘汰、`trials` 记录），无需移植 librime / libpinyin 公式；唯一真实差距是 libime 式**持久化二元上下文历史**（上下文只喂 `context_bonus` 与 `language::bonus`，不影响 profile 偏好）。判断**暂不值得做**：收益面窄且真实语料占比未核实、librime 自己也没做、代价落在 `MSWYUSR3` 新格式 / Windows-Linux 两端兼容 / 8192 上限被二元对挤占 / 隐私口径。`learn` 48 行作为回归基线保留，将来任何尝试必须把 `ln2;context` 从 50.0% 提上去且不使其余两类回退。
+
 ## 迭代 I21 Fcitx 多词库管理（附加词库列表） · 2026-10-10 已合并（PR #41，随 preview33 发版）
 
 评审结论：通过。技术负责人亲自核对 `dictionary_loader.cpp`（停用条目不读取不校验；任一启用条目失败整体失败并保留旧词库，提示只含条目显示名与固定原因、不含路径与内容；启用条目 ≤63 与合并上限 250000 明确报错；逐文件读取后立即释放字节，峰值为单文件字节加各句柄）并重跑：`check.sh` 通过；全新构建 ctest 连续 3 次 10/10（新增 `fcitx5-dictionary-library`）；`taskset -c 0` 单核重复通过；真实 `fcitx5` 进程集合不变，`~/.local/share/fcitx5` 无 `chengyin/`、`~/.config/fcitx5/conf` 无 `chengyin.conf`；PR CI 6/6。认可执行方 5 处偏差（基础/附加错误措辞分开、启用上限 63、`Enabled` 用列表项字段、新增只读访问器、成功日志仅在落盘加载时输出）。
