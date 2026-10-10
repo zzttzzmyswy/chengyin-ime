@@ -4,6 +4,7 @@
 
 评审结论：通过。技术负责人亲自核对 `dictionary_loader.cpp`（停用条目不读取不校验；任一启用条目失败整体失败并保留旧词库，提示只含条目显示名与固定原因、不含路径与内容；启用条目 ≤63 与合并上限 250000 明确报错；逐文件读取后立即释放字节，峰值为单文件字节加各句柄）并重跑：`check.sh` 通过；全新构建 ctest 连续 3 次 10/10（新增 `fcitx5-dictionary-library`）；`taskset -c 0` 单核重复通过；真实 `fcitx5` 进程集合不变，`~/.local/share/fcitx5` 无 `chengyin/`、`~/.config/fcitx5/conf` 无 `chengyin.conf`；PR CI 6/6。认可执行方 5 处偏差（基础/附加错误措辞分开、启用上限 63、`Enabled` 用列表项字段、新增只读访问器、成功日志仅在落盘加载时输出）。
 已知差异：按路径引用文件、无文件选择与条数显示、附加词库合计约 65,000 条上限、不支持 GBK 文本、真实配置工具界面未实测。
+发版：[v0.1.0-preview33](https://github.com/zzttzzmyswy/chengyin-ime/releases/tag/v0.1.0-preview33)（target `9ac488d`；Windows EXE/deb 取自 Actions 38033988911；Arch 包固定源码重建，容器内 CTest 10/10、隔离 pacman 生命周期通过；PKGBUILD 已 pin，归档 SHA256 `af39ac80…` 两次下载一致）。仍为预发布，未做实机验收。
 
 （以下为执行方交付记录）
 
