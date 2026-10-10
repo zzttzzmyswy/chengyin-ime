@@ -4,7 +4,10 @@
 # 列：category split flags input expected train bucket note
 # input：用户实际敲入的串（fuzzy/typo 类给出混淆后的串）；initials 为一字一首字母。
 # expected：期望的首选文字，取词库中该读音词频最高的读法（initials 取该键最高频词）。
-# train：空，或分号分隔的 `record:<拼音>=><文字>` 步骤，表示宿主已确认的选词，评测前写入 profile。
+# train：空，或分号分隔的步骤，表示评测前施加的状态。三种步骤：
+#   `record:<拼音>=><文字>` 宿主已确认的选词，直接写入 profile；
+#   `ctx:<拼音>=><文字>` 在真实会话上打字、选中、确认写入，其提交词成为后续的前一词上下文；
+#   `idle:<n>` n 次无关选词，只推进 profile 的事件时钟以模拟时间间隔。
 # bucket：难度分档（类别前缀）。note：来源/规则标记。
 fuzzy	dev	64	angpai	安排		fz;an->ang	freq-high
 fuzzy	dev	1024	anquang	安全		fz;uan->uang	freq-high

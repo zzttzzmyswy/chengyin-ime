@@ -22,10 +22,15 @@ Design rules
 * `expected` is the dictionary's own most frequent reading of the spelling, not a
   hand-picked rare homophone. Top-1 is then a real accuracy figure for "did the
   engine pick the reading this dictionary ranks first".
-* `train` cells are `record:<spelling>=><text>` steps: host-confirmed selections
-  already in the profile, which the evaluator applies before replaying the row.
-  (Selection-through-the-page cannot produce unattested text, so the profile is
-  built directly, the same way the platform adapter loads a saved profile.)
+* `train` cells are `;`-separated steps the evaluator applies before replaying the
+  row, so a row can state *when* something was learned:
+  - `record:<spelling>=><text>`: a host-confirmed selection written straight into
+    the profile. (Selection-through-the-page cannot produce unattested text, so the
+    profile is built directly, the same way the platform adapter loads a saved one.)
+  - `ctx:<spelling>=><text>`: the same selection replayed on the live session, so
+    its committed word becomes the preceding-word context for what follows.
+  - `idle:<n>`: `n` selections of an unrelated key, which advance the event clock
+    the profile's decay is measured against without touching the row's own key.
 * Inputs are unseparated ASCII pinyin (the dominant real typing style) except in
   the categories that explicitly require another form.
 * The set is append-only. A category already in the committed file is kept from
@@ -892,7 +897,10 @@ header = [
     "# 列：category split flags input expected train bucket note",
     "# input：用户实际敲入的串（fuzzy/typo 类给出混淆后的串）；initials 为一字一首字母。",
     "# expected：期望的首选文字，取词库中该读音词频最高的读法（initials 取该键最高频词）。",
-    "# train：空，或分号分隔的 `record:<拼音>=><文字>` 步骤，表示宿主已确认的选词，评测前写入 profile。",
+    "# train：空，或分号分隔的步骤，表示评测前施加的状态。三种步骤：",
+    "#   `record:<拼音>=><文字>` 宿主已确认的选词，直接写入 profile；",
+    "#   `ctx:<拼音>=><文字>` 在真实会话上打字、选中、确认写入，其提交词成为后续的前一词上下文；",
+    "#   `idle:<n>` n 次无关选词，只推进 profile 的事件时钟以模拟时间间隔。",
     "# bucket：难度分档（类别前缀）。note：来源/规则标记。",
 ]
 text = "\n".join(header + body) + "\n"
