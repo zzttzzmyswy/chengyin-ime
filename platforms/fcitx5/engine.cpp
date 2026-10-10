@@ -146,10 +146,27 @@ bool saveConfig(const EngineConfig &configuration) {
 }
 
 DictionaryPtr demoDictionary() {
-    auto dictionary = std::make_shared<DictionarySnapshot>(nullptr, "");
+    auto dictionary = std::make_shared<DictionarySnapshot>(nullptr, "", std::vector<DictionarySource>{}, 0, 0);
     dictionary->dictionary.reset(chengyin_dictionary_new_demo());
     if (!dictionary->dictionary) { throw std::runtime_error("Cannot load Chengyin demo dictionary"); }
     return dictionary;
+}
+
+// The attached list in the framework's own sub-config type, and back. The
+// conversion goes through the configuration only so the option's own defaults
+// (Enabled=true, an empty name) apply to a list built in code, exactly as they do
+// to one the config tool wrote.
+std::vector<DictionaryEntryConfig> entriesToConfig(const std::vector<DictionarySource> &entries) {
+    std::vector<DictionaryEntryConfig> configs;
+    configs.reserve(entries.size());
+    for (const auto &entry : entries) {
+        DictionaryEntryConfig config;
+        config.name.setValue(entry.name);
+        config.path.setValue(entry.path);
+        config.enabled.setValue(entry.enabled);
+        configs.push_back(std::move(config));
+    }
+    return configs;
 }
 
 std::string text(ChengyinSession *session, uint32_t field, size_t index = 0) {
@@ -334,28 +351,56 @@ void Engine::reloadConfig() {
     config_.chinesePunctuation.setValue(*config.chinesePunctuation);
     config_.fuzzy.setValue(*config.fuzzy);
     config_.correction.setValue(*config.correction);
+    // The attached list arrives from the same file. A profile that predates the
+    // option carries none, which reads back as the empty list and is exactly the
+    // "base lexicon only" behaviour this platform had before.
+    config_.dictionaries.setValue(*config.dictionaries);
     // Every path that re-reads settings also re-reads the profile: this is the one
     // entry point for `fcitx5-remote -r`, which is how a user clears learning (by
     // deleting the file) or imports one (by replacing it), even though the config
     // tool never displays either action.
     adoptReloadedProfile();
     if (adoptSettings()) { synchronizeAll(); }
-    loadDictionary(*config.dictionaryPath, false);
+    loadDictionary(*config.dictionaryPath, config.dictionarySources(), false);
 }
 
 void Engine::setConfig(const fcitx::RawConfig &config) {
+    // The submitted list is measured before anything is adopted. A list past the
+    // documented ceiling is refused as a whole, with a message, rather than trimmed:
+    // a save that silently dropped the entries past the 64th would lose work the user
+    // had already done and give no sign of it.
+    //
+    // Reading through a scratch EngineConfig is what makes this a measurement of the
+    // SUBMITTED config rather than of the running one; the engine's own config_ is
+    // left untouched when the save is refused, so the config tool re-reads what is
+    // actually in use.
+    EngineConfig submitted(config_.dictionaryPath.defaultValue());
+    submitted.load(config, true);
+    if (submitted.dictionaryCount() > kMaxEntries) {
+        reloadState_ = ReloadState::Failed;
+        dictionaryError_ = "附加词库最多 " + std::to_string(kMaxEntries) + " 个，本次保存未生效（当前 " +
+                          std::to_string(dictionary_->entries.size()) + " 个）";
+        FCITX_WARN() << "Chengyin IM: " << dictionaryError_;
+        synchronizeAll();
+        return;
+    }
     config_.load(config, true);
     const bool settingsChanged = adoptSettings();
-    // Only a save that changed a non-dictionary option *and* left DictionaryPath
-    // alone can skip the reload. Anything else — a new path, or a save that
-    // differs in no option at all — keeps the long-standing behaviour of
-    // re-reading the lexicon. That last case is what a repeated Apply and a
-    // hand-edited file followed by `fcitx5-remote -r` look like, and re-reading
-    // the same path is how a user replaces a TSV in place.
-    if (settingsChanged && *config_.dictionaryPath == dictionary_->path) {
+    // Whether the lexicon itself has to be rebuilt: a new base path, or a list that
+    // differs from the one the lexicon in use was built from -- an entry added,
+    // removed, renamed, re-pointed or flipped between enabled and disabled.
+    const bool dictionaryChanged =
+        *config_.dictionaryPath != dictionary_->path || config_.dictionarySources() != dictionary_->entries;
+    // Only a save that left both dictionary options alone can skip the reload.
+    // Anything else — a new path, a new entry, or a save that differs in no option at
+    // all — keeps the long-standing behaviour of re-reading the lexicon. That last
+    // case is what a repeated Apply and a hand-edited file followed by
+    // `fcitx5-remote -r` look like, and re-reading the same files is how a user
+    // replaces a TSV in place.
+    if (settingsChanged && !dictionaryChanged) {
         // Nothing but the settings moved, so the shipped lexicon is left alone:
-        // rebuilding the 184,173-entry vocabulary for a candidate-width change
-        // would cost about 0.4 s and buy nothing.
+        // rebuilding the vocabulary for a candidate-width change would cost about
+        // 0.4 s and buy nothing.
         if (saveConfig(config_)) {
             settingsError_.clear();
         } else {
@@ -366,7 +411,7 @@ void Engine::setConfig(const fcitx::RawConfig &config) {
         synchronizeAll();
         return;
     }
-    loadDictionary(*config_.dictionaryPath, true);
+    loadDictionary(*config_.dictionaryPath, config_.dictionarySources(), true);
 }
 
 bool Engine::adoptSettings() {
@@ -416,12 +461,20 @@ void Engine::synchronizeAll() {
     });
 }
 
-void Engine::loadDictionary(std::string path, bool persist) {
+void Engine::loadDictionary(std::string path, std::vector<DictionarySource> entries, bool persist) {
     config_.dictionaryPath.setValue(path);
+    config_.dictionaries.setValue(entriesToConfig(entries));
     reloadState_ = ReloadState::Loading;
     dictionaryError_.clear();
     persist_ = persist;
-    loader_->request(++request_, std::move(path));
+    loader_->request(++request_, std::move(path), std::move(entries));
+}
+
+// The row count of the lexicon actually in use, base and attached together. It is
+// asked of the core rather than kept as a field, because the union is the core's own
+// object and this is the only number that describes it.
+int32_t Engine::mergedEntryCount() const {
+    return dictionary_ ? chengyin_dictionary_entry_count(dictionary_->dictionary.get()) : 0;
 }
 
 void Engine::loaded(uint64_t request, DictionaryPtr dictionary, std::string error) {
@@ -430,13 +483,24 @@ void Engine::loaded(uint64_t request, DictionaryPtr dictionary, std::string erro
         // Retain old ownership on the worker before any idle session releases it.
         loader_->retire(std::move(dictionary_));
         dictionary_ = std::move(dictionary);
+        adoptedRequest_ = request;
         reloadState_ = ReloadState::Ready;
         if (persist_ && !saveConfig(config_)) {
             error = "词典已启用，但配置保存失败；重启后可能恢复旧设置";
+        } else if (persist_) {
+            // One line per successful load, and only when the outcome is durable: base
+            // rows, how many attached entries took part, and the merged total. No
+            // spelling and no text ever appears here.
+            FCITX_INFO() << "Chengyin IM: 基础 " << dictionary_->baseCount << " 条 + 附加 "
+                         << dictionary_->attachedCount << " 个，合计 " << mergedEntryCount() << " 条";
         }
     } else {
         reloadState_ = ReloadState::Failed;
+        // Both dictionary options fall back to what the lexicon still in use was
+        // built from, so a rejected save leaves the engine describing itself
+        // truthfully and the config tool re-reads what is actually in effect.
         config_.dictionaryPath.setValue(dictionary_->path);
+        config_.dictionaries.setValue(entriesToConfig(dictionary_->entries));
     }
     dictionaryError_ = std::move(error);
     if (!dictionaryError_.empty()) { FCITX_WARN() << "Chengyin IM: " << dictionaryError_; }

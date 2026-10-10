@@ -1,5 +1,22 @@
 # 项目状态
 
+## 迭代 I21 Fcitx 多词库管理（附加词库列表：增删 / 启用停用 / SCEL 与文本导入） · 2026-10-10 待评审
+
+分支 `codex/fcitx-dictionary-library`。**本卡不发版**：`version.json` 未改，仍为 preview32。
+
+**改动面**：`platforms/common/dictionary_loader.{h,cpp}` 的 `request` 由「单个路径」扩展为「基础路径 + 附加条目向量」，新增受限读取的共用函数、逐条 import、`merge_all` 合并、条目名错误格式 `附加词库“<Name>”：<原因>`、以及供测试观察的 `started()`；
+`platforms/fcitx5/config.h` 新增 `DictionaryEntryConfig`（Name/Path/Enabled）与 `Dictionaries` 列表选项，并入 `dictionarySources()`；
+`engine.h`/`engine.cpp` 的 `loadDictionary` 带上条目列表，`setConfig` 判定「词库项变化」（路径或列表逐项不同）才重载，新增 64 项上限与合并名额上限的拒绝路径、`dictionaryEntries()`/`loadedEntryCount()`/`baseEntryCount()`/`mergedEntryCount()`/`dictionaryRequests()`/`loadedRequest()` 访问器，加载成功后记录一行 `基础 N 条 + 附加 M 个，合计 K 条`；
+`CMakeLists.txt` 注册 `fcitx5-dictionary-library`；新增 `test_dictionary_library.cpp`（215 条断言）；`README.md` 的「词典配置与更新」一节重写并新增与 Windows 的差异清单。
+未改 `crates/`、`include/chengyin_ime.h`、`platforms/windows/`、`version.json`、`.github/workflows`。
+
+**关键实现说明**：
+- 基础词库与附加词库是**合并**关系；空列表时行为与本功能引入前完全一致（不建 union，直接沿用基础句柄）。
+- 任一启用条目失败即整体失败并保留旧词库；停用条目不读取、不校验。日志与提示只含显示名，不含路径、不含词条内容。
+- 合并上限 250,000 条来自核心，`merge_all` 返回 NULL 时归因到最后一条启用条目并报「合并后超过 250000 条」，不静默截断；测试里用相同两个句柄直接调 `chengyin_dictionary_merge_all` 对拍，证明该上限是核心的真实行为。
+- 核心 `merge_all` 只接受 1..=64 个句柄，基础词库占一个，因此最多 63 个条目可同时启用；第 64 个启用条目被拒绝并提示，列表本身允许 64 项。
+- 内存峰值：逐个 import 后立即释放原始字节，只保留已编译句柄到合并。
+
 ## 迭代 I20 Fcitx 中/英文模式与中文标点（Shift 切换、状态栏动作、配置项） · 2026-10-10 已合并（PR #39，随 preview32 发版）
 
 评审结论：通过（评审中删除一处遗留的调试日志 `DBG-ACT`，每次激活输入法都会写一条 WARN）。技术负责人亲自核对与重跑：`check.sh` 通过；全新构建 ctest 连续 3 次 9/9（含新增 `fcitx5-mode-punctuation`、`fcitx5-punctuation-parity`）；`taskset -c 0` 单核重复通过；真实 `fcitx5` 进程集合不变，`~/.local/share/fcitx5` 无 `chengyin/`；PR CI 6/6。认可执行方 4 处偏差（无组合标点走 Windows 的独立标点动作、不额外判 Shift、`'` 有组合时交给核心保持音节分隔、保存设置时重播种标点开关）及切换时“丢弃组合”的依据（`platforms/windows/service.cpp:1190,1224-1227`）；标点映射由 CTest 与 Windows 头逐字符对拍。

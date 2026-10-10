@@ -153,6 +153,23 @@ public:
     void setConfig(const fcitx::RawConfig &config) override;
     ReloadState reloadState() const { return reloadState_; }
     const std::string &dictionaryError() const { return dictionaryError_; }
+    // The attached list the lexicon actually in use was built from, disabled entries
+    // included, and the two row counts that describe it: the base lexicon alone and
+    // the merged whole. They are what the one line logged after a successful load
+    // reports, and what a test asserts instead of reaching into a snapshot.
+    const std::vector<DictionarySource> &dictionaryEntries() const { return dictionary_->entries; }
+    size_t loadedEntryCount() const { return dictionary_->attachedCount; }
+    int32_t baseEntryCount() const { return dictionary_->baseCount; }
+    int32_t mergedEntryCount() const;
+    // How many lexicon loads have been requested, and which of those produced the
+    // lexicon actually in use. The loader publishes only the newest generation, so a
+    // test can assert both halves of the cancel rule: several rapid saves really did
+    // become several requests, and only the last of them was adopted.
+    uint64_t dictionaryRequests() const { return request_; }
+    uint64_t loadedRequest() const { return adoptedRequest_; }
+    // The configuration's ceiling on the attached list, in entries. A save that
+    // exceeds it is refused with a message rather than silently trimmed.
+    static size_t dictionaryEntryLimit() { return kMaxEntries; }
     const std::string &settingsError() const { return settingsError_; }
     const std::string &dictionaryPath() const { return dictionary_->path; }
     // The settings every idle session has been told to use. Exposed so a test can
@@ -224,7 +241,9 @@ private:
     // Bring every context up to date with the published dictionary and settings,
     // and repaint the focused ones that have a composition on screen.
     void synchronizeAll();
-    void loadDictionary(std::string path, bool persist);
+    // The base lexicon plus the attached list; both are adopted into config_ as the
+    // lexicon being requested, so a rejected load falls back to the one in use.
+    void loadDictionary(std::string path, std::vector<DictionarySource> entries, bool persist);
     void loaded(uint64_t request, DictionaryPtr dictionary, std::string error);
     // Push the master profile into one session. Idle only, so a composition in
     // progress is never disturbed; the next call retries once it has ended.
@@ -285,6 +304,10 @@ private:
     std::string dictionaryError_;
     std::string settingsError_;
     uint64_t request_ = 0;
+    // The generation that produced the lexicon in use. loaded() compares it against
+    // request_ to drop a superseded answer, and a test reads it back to prove that
+    // the newest request is the one that won.
+    uint64_t adoptedRequest_ = 0;
     bool persist_ = false;
     // The single in-memory profile every context's session is handed a snapshot of.
     // Learning is applied here first and only then pushed to sessions, so several
