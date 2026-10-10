@@ -58,6 +58,13 @@ reset_tolerant、`initials_range`、`attests`、`corrected_pronunciation`、`fuz
 九个类别逐类逐字段**完全相同**（Top-1 93.4% / Top-9 98.6% / 可达 99.6% / 错误组合率 0.2%），
 新增 `alias` 44 条由改动前 Top-1 0.0% 提升至 **100.0%**。
 
+性能（同机交替 A/B×3 轮，`CHENGYIN_BENCH_ROUNDS=1000`）：20 个场景中**没有任何场景的 P99
+前后差超过其自身轮间波动**（轮间极差占中位数 16%–61%，前后差 0.1%–42%，无一例外被噪声淹没）。
+弱工具校验：32 个基准输入串**没有一个含 `v`**，故本次改动在全部被测按键上都走 `memchr`
+快路径直接返回原切片；`demo.lookup` / `synthetic.lookup` 调用的是未改动的
+`Dictionary::lookup`，其 P99 仍在 −8.4%/+4.8% 间摆动，与改动无关。本机为共享开发机，
+单轮数据不可用作劣化判据。
+
 ## 迭代 I20 Fcitx 中/英文模式与中文标点（Shift 切换、状态栏动作、配置项） · 2026-10-10 已合并（PR #39，随 preview32 发版）
 
 评审结论：通过（评审中删除一处遗留的调试日志 `DBG-ACT`，每次激活输入法都会写一条 WARN）。技术负责人亲自核对与重跑：`check.sh` 通过；全新构建 ctest 连续 3 次 9/9（含新增 `fcitx5-mode-punctuation`、`fcitx5-punctuation-parity`）；`taskset -c 0` 单核重复通过；真实 `fcitx5` 进程集合不变，`~/.local/share/fcitx5` 无 `chengyin/`；PR CI 6/6。认可执行方 4 处偏差（无组合标点走 Windows 的独立标点动作、不额外判 Shift、`'` 有组合时交给核心保持音节分隔、保存设置时重播种标点开关）及切换时“丢弃组合”的依据（`platforms/windows/service.cpp:1190,1224-1227`）；标点映射由 CTest 与 Windows 头逐字符对拍。
