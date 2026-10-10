@@ -44,6 +44,53 @@ pub(crate) fn contains(text: &str) -> bool {
         .binary_search_by(|&(start, end)| SOURCE[start as usize..end as usize].cmp(text))
         .is_ok()
 }
+/// The spelling the lexicon is queried with for `input`: the typed bytes with
+/// the `ü` variant spellings every common IME also accepts rewritten to the
+/// canonical spelling the syllable table and the dictionary are keyed by (I22).
+///
+/// Two rules, and only these:
+/// 1. a `v` directly after `j q x y` is `u` — `jv` `qve` `xvan` `yvn` `jvn`.
+///    Canonical pinyin writes the ü of these initials as `u`, so no canonical
+///    reading starts `jv`/`qv`/`xv`/`yv` and the rewrite is unambiguous.
+/// 2. a `v` directly after `l`/`n` immediately followed by `e` is `u` — `lve`,
+///    `nve` (= lüe/nüe). Here `lv`/`nv` *is* a canonical syllable (lü/nü), so
+///    the byte after the `v` decides: `nver` is 女儿 (nü + er) and keeps its `v`,
+///    while `lve`/`nve` have no `lv`/`nv` reading to protect. An explicit
+///    separator is never rewritten either (`lv'e` keeps its `v`, since the byte
+///    after it is `'`).
+///
+/// Writes the result into `out[..input.len()]` and reports whether any byte
+/// changed. `false` also covers an over-long input, which no query can use and
+/// which the caller's own validation rejects. Every rewrite is one byte for one
+/// byte, so byte offsets, the caret and the preedit positions stay valid in both
+/// spellings; callers keep showing and remembering what the user actually typed.
+pub(crate) fn canonicalize(input: &str, out: &mut [u8; crate::MAX_INPUT_BYTES]) -> bool {
+    let bytes = input.as_bytes();
+    // The single fast path for the overwhelming majority of keystrokes: no `v`
+    // anywhere means the caller's own slice is already the query spelling, so
+    // nothing is copied and nothing below runs.
+    if bytes.len() > out.len() || !bytes.contains(&b'v') {
+        return false;
+    }
+    out[..bytes.len()].copy_from_slice(bytes);
+    let mut rewritten = false;
+    for at in 0..bytes.len() {
+        if bytes[at] != b'v' {
+            continue;
+        }
+        let previous = at.checked_sub(1).and_then(|before| bytes.get(before));
+        // Rule 2 needs the `e` to end the syllable; a letter after it means the
+        // `lv`/`nv` reading is the live one instead, as in `nver` (nü + er).
+        let rule_two = matches!(previous, Some(b'l' | b'n'))
+            && bytes.get(at + 1) == Some(&b'e')
+            && !matches!(bytes.get(at + 2), Some(byte) if byte.is_ascii_alphabetic());
+        if matches!(previous, Some(b'j' | b'q' | b'x' | b'y')) || rule_two {
+            out[at] = b'u';
+            rewritten = true;
+        }
+    }
+    rewritten
+}
 // Count complete syllables with a bounded stack table, including explicit separators.
 pub(crate) fn count_spelling(input: &str) -> Option<u8> {
     let mut count = [u8::MAX; crate::MAX_INPUT_BYTES + 1];

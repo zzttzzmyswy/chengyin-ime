@@ -203,8 +203,58 @@ pub struct Session {
     initials_end: u32,
     initials_count: u8,
     single_syllable: bool,
+    /// The lexicon-query spelling of the whole `raw`: the bytes the user typed
+    /// with their `ü` variants canonicalised (I22). Valid only while
+    /// `canonicalized` is set.
+    canonical: [u8; MAX_INPUT_BYTES],
+    /// Whether `canonical` holds a rewritten spelling of `raw`. Clear for every
+    /// input that needs no rewrite — all of them but a `v` variant — and every
+    /// reader then slices `raw` itself, so those inputs pay nothing for this.
+    canonicalized: bool,
+}
+/// The spelling to query the lexicon with for `raw[start..end]` (I22): the typed
+/// bytes with their `ü` variants canonicalised when the input carries one, and
+/// the typed bytes themselves otherwise.
+///
+/// Free rather than a `&self` method so a caller can hold the result across a
+/// `&mut` borrow of another [`Session`] field — `cursor.reset(&dictionary, input)`
+/// is exactly that shape — because it borrows only `raw` and `canonical`.
+/// Slicing `canonical` at a `raw` offset is sound because every rewrite is one
+/// byte for one byte. `raw` is never rewritten: the preedit, the caret, the
+/// learning history and the stored composition keep what the user typed.
+fn query_spelling<'a>(
+    raw: &'a str,
+    canonical: &'a [u8; MAX_INPUT_BYTES],
+    canonicalized: bool,
+    start: usize,
+    end: usize,
+) -> &'a str {
+    if canonicalized {
+        std::str::from_utf8(&canonical[start..end]).expect("validated ASCII input")
+    } else {
+        &raw[start..end]
+    }
 }
 impl Session {
+    /// Recompute [`Session::canonical`] from `raw`. One bounded scan that returns
+    /// immediately when the input holds no `v`, which is what keeps this support
+    /// free for every other keystroke.
+    fn recompute_spelling(&mut self) {
+        self.canonicalized = crate::syllables::canonicalize(&self.raw, &mut self.canonical);
+    }
+    /// [`query_spelling`] over the live composition up to `end`, an absolute
+    /// offset. Only `&self` callers can use this: it borrows all of `self`, so a
+    /// site that also takes `&mut` of another field calls `query_spelling`
+    /// directly with the two input fields.
+    fn live_spelling_to(&self, end: usize) -> &str {
+        query_spelling(
+            &self.raw,
+            &self.canonical,
+            self.canonicalized,
+            self.offset,
+            end,
+        )
+    }
     pub fn new(dictionary: Arc<Dictionary>) -> Self {
         Self {
             dictionary,
@@ -254,6 +304,8 @@ impl Session {
             initials_end: 0,
             initials_count: 0,
             single_syllable: false,
+            canonical: [0; MAX_INPUT_BYTES],
+            canonicalized: false,
         }
     }
     pub fn preedit(&self) -> &str {
@@ -291,7 +343,13 @@ impl Session {
                     .dictionary
                     .corrected_pronunciation(
                         &r.text,
-                        &self.raw[self.offset..],
+                        query_spelling(
+                            &self.raw,
+                            &self.canonical,
+                            self.canonicalized,
+                            self.offset,
+                            self.raw.len(),
+                        ),
                         self.matching_options,
                     )
                     .or_else(|| {
@@ -329,7 +387,13 @@ impl Session {
                 pinyin: if self.decoder.sentences[item.id() as usize].corrected {
                     self.decoder.sentences[item.id() as usize].pinyin()
                 } else {
-                    &self.raw[self.offset..]
+                    query_spelling(
+                        &self.raw,
+                        &self.canonical,
+                        self.canonicalized,
+                        self.offset,
+                        self.raw.len(),
+                    )
                 },
                 text: self.decoder.sentences[item.id() as usize].text(),
                 frequency: 0,
@@ -366,20 +430,29 @@ impl Session {
                 }
                 self.prefix_end = (63 - self.prefix_ends.leading_zeros()) as u8;
                 self.prefix_ends &= !(1u64 << self.prefix_end);
+                let prefix = query_spelling(
+                    &self.raw,
+                    &self.canonical,
+                    self.canonicalized,
+                    self.offset,
+                    self.offset + self.prefix_end as usize,
+                );
                 self.cursor
-                    .reset(
-                        &self.dictionary,
-                        self.raw[self.offset..self.offset + self.prefix_end as usize]
-                            .trim_end_matches('\''),
-                    )
+                    .reset(&self.dictionary, prefix.trim_end_matches('\''))
                     .expect("validated prefix");
             }
             match self.cursor.next(&self.dictionary) {
                 Ok(Some(id)) => {
-                    let letters = self.raw[self.offset..self.offset + self.prefix_end as usize]
-                        .bytes()
-                        .filter(|&b| b != b'\'')
-                        .count();
+                    let letters = query_spelling(
+                        &self.raw,
+                        &self.canonical,
+                        self.canonicalized,
+                        self.offset,
+                        self.offset + self.prefix_end as usize,
+                    )
+                    .bytes()
+                    .filter(|&b| b != b'\'')
+                    .count();
                     if self
                         .dictionary
                         .entry(id)
@@ -425,7 +498,7 @@ impl Session {
         }
         Some(
             crate::fuzzy::annotations(
-                self.raw[self.offset..self.offset + item.consumed() as usize]
+                self.live_spelling_to(self.offset + item.consumed() as usize)
                     .trim_end_matches('\''),
                 candidate.pinyin,
                 self.matching_options,
@@ -437,7 +510,13 @@ impl Session {
         self.phase = 8;
         self.budget_limited |= self.cursor.reset_tolerant(
             &self.dictionary,
-            &self.raw[self.offset..],
+            query_spelling(
+                &self.raw,
+                &self.canonical,
+                self.canonicalized,
+                self.offset,
+                self.raw.len(),
+            ),
             self.matching_options,
         );
     }
@@ -500,6 +579,7 @@ impl Session {
         self.budget_limited = false;
         self.initials_count = 0;
         self.single_syllable = false;
+        self.canonicalized = false;
     }
     pub fn reset(&mut self) {
         self.clear_composition();
@@ -575,7 +655,13 @@ impl Session {
                     match self.cursor.next(&self.dictionary) {
                         Ok(Some(id)) => {
                             let word = self.dictionary.entry(id);
-                            let input = &self.raw[self.offset..];
+                            let input = query_spelling(
+                                &self.raw,
+                                &self.canonical,
+                                self.canonicalized,
+                                self.offset,
+                                self.raw.len(),
+                            );
                             // Canonical/input letter counts distinguish exact from prefix completion.
                             if word.pinyin.bytes().filter(|&b| b != b'\'').count()
                                 == input.bytes().filter(|&b| b != b'\'').count()
@@ -598,7 +684,13 @@ impl Session {
                         Ok(Some(id)) => {
                             let spelling = self.dictionary.entry(id).pinyin;
                             if crate::fuzzy::annotations(
-                                &self.raw[self.offset..],
+                                query_spelling(
+                                    &self.raw,
+                                    &self.canonical,
+                                    self.canonicalized,
+                                    self.offset,
+                                    self.raw.len(),
+                                ),
                                 spelling,
                                 self.matching_options,
                             )
@@ -615,7 +707,16 @@ impl Session {
                     self.budget_limited |= !self.decoder.full_coverage
                         && self
                             .cursor
-                            .reset_fast(&self.dictionary, &self.raw[self.offset..])
+                            .reset_fast(
+                                &self.dictionary,
+                                query_spelling(
+                                    &self.raw,
+                                    &self.canonical,
+                                    self.canonicalized,
+                                    self.offset,
+                                    self.raw.len(),
+                                ),
+                            )
                             .unwrap_or(true)
                         && self.decoder.primary_abbreviated;
                 }
@@ -655,7 +756,16 @@ impl Session {
                         if self.decoder.full_coverage {
                             self.budget_limited |= self
                                 .cursor
-                                .reset_fast(&self.dictionary, &self.raw[self.offset..])
+                                .reset_fast(
+                                    &self.dictionary,
+                                    query_spelling(
+                                        &self.raw,
+                                        &self.canonical,
+                                        self.canonicalized,
+                                        self.offset,
+                                        self.raw.len(),
+                                    ),
+                                )
                                 .unwrap_or(true);
                         }
                         continue;
@@ -672,7 +782,16 @@ impl Session {
                     if self.decoder.full_coverage {
                         self.budget_limited |= self
                             .cursor
-                            .reset_fast(&self.dictionary, &self.raw[self.offset..])
+                            .reset_fast(
+                                &self.dictionary,
+                                query_spelling(
+                                    &self.raw,
+                                    &self.canonical,
+                                    self.canonicalized,
+                                    self.offset,
+                                    self.raw.len(),
+                                ),
+                            )
                             .unwrap_or(true);
                     }
                 }
@@ -692,7 +811,13 @@ impl Session {
                             .decoder
                             .decode_alternates(
                                 &self.dictionary,
-                                &self.raw[self.offset..],
+                                query_spelling(
+                                    &self.raw,
+                                    &self.canonical,
+                                    self.canonicalized,
+                                    self.offset,
+                                    self.raw.len(),
+                                ),
                                 if self.completed.is_empty() {
                                     &self.context
                                 } else {
@@ -709,7 +834,16 @@ impl Session {
                     }
                     self.phase = 6;
                     self.cursor
-                        .reset(&self.dictionary, &self.raw[self.offset..])
+                        .reset(
+                            &self.dictionary,
+                            query_spelling(
+                                &self.raw,
+                                &self.canonical,
+                                self.canonicalized,
+                                self.offset,
+                                self.raw.len(),
+                            ),
+                        )
                         .expect("validated input");
                 }
                 6 => match self.cursor.next(&self.dictionary) {
@@ -727,7 +861,13 @@ impl Session {
         }
     }
     fn next_whole_word(&mut self, single: bool, recalled: bool, class: u8) -> Option<ResultRef> {
-        let input = &self.raw[self.offset..];
+        let input = query_spelling(
+            &self.raw,
+            &self.canonical,
+            self.canonicalized,
+            self.offset,
+            self.raw.len(),
+        );
         loop {
             match self.cursor.next(&self.dictionary) {
                 Ok(Some(id)) => {
@@ -829,7 +969,13 @@ impl Session {
                         }
                         self.budget_limited |= self.cursor.reset_tolerant(
                             &self.dictionary,
-                            &self.raw[self.offset..],
+                            query_spelling(
+                                &self.raw,
+                                &self.canonical,
+                                self.canonicalized,
+                                self.offset,
+                                self.raw.len(),
+                            ),
                             self.matching_options,
                         );
                     }
@@ -843,7 +989,16 @@ impl Session {
                         }
                     }
                     self.cursor
-                        .reset(&self.dictionary, &self.raw[self.offset..])
+                        .reset(
+                            &self.dictionary,
+                            query_spelling(
+                                &self.raw,
+                                &self.canonical,
+                                self.canonicalized,
+                                self.offset,
+                                self.raw.len(),
+                            ),
+                        )
                         .expect("validated input");
                     self.recalled_index = 0;
                     self.phase = if self.matching_options == 0 { 18 } else { 0 };
@@ -913,7 +1068,13 @@ impl Session {
                     }
                     self.budget_limited |= self.cursor.reset_tolerant(
                         &self.dictionary,
-                        &self.raw[self.offset..],
+                        query_spelling(
+                            &self.raw,
+                            &self.canonical,
+                            self.canonicalized,
+                            self.offset,
+                            self.raw.len(),
+                        ),
                         self.matching_options,
                     );
                     self.phase = 4;
@@ -942,7 +1103,16 @@ impl Session {
                     self.phase = 6;
                     self.recalled_index = 0;
                     self.cursor
-                        .reset(&self.dictionary, &self.raw[self.offset..])
+                        .reset(
+                            &self.dictionary,
+                            query_spelling(
+                                &self.raw,
+                                &self.canonical,
+                                self.canonicalized,
+                                self.offset,
+                                self.raw.len(),
+                            ),
+                        )
                         .expect("validated input");
                 }
                 6 => {
@@ -965,7 +1135,13 @@ impl Session {
                     }
                     self.budget_limited |= self.cursor.reset_tolerant(
                         &self.dictionary,
-                        &self.raw[self.offset..],
+                        query_spelling(
+                            &self.raw,
+                            &self.canonical,
+                            self.canonicalized,
+                            self.offset,
+                            self.raw.len(),
+                        ),
                         self.matching_options,
                     );
                     self.phase = 9;
@@ -990,7 +1166,16 @@ impl Session {
                     }
                     self.budget_limited |= self
                         .cursor
-                        .reset_fast(&self.dictionary, &self.raw[self.offset..])
+                        .reset_fast(
+                            &self.dictionary,
+                            query_spelling(
+                                &self.raw,
+                                &self.canonical,
+                                self.canonicalized,
+                                self.offset,
+                                self.raw.len(),
+                            ),
+                        )
                         .unwrap_or(true);
                     self.phase = 10;
                 }
@@ -1013,7 +1198,13 @@ impl Session {
                             .decoder
                             .decode_alternates(
                                 &self.dictionary,
-                                &self.raw[self.offset..],
+                                query_spelling(
+                                    &self.raw,
+                                    &self.canonical,
+                                    self.canonicalized,
+                                    self.offset,
+                                    self.raw.len(),
+                                ),
                                 if self.completed.is_empty() {
                                     &self.context
                                 } else {
@@ -1039,7 +1230,16 @@ impl Session {
                         }
                     }
                     self.cursor
-                        .reset(&self.dictionary, &self.raw[self.offset..])
+                        .reset(
+                            &self.dictionary,
+                            query_spelling(
+                                &self.raw,
+                                &self.canonical,
+                                self.canonicalized,
+                                self.offset,
+                                self.raw.len(),
+                            ),
+                        )
                         .expect("validated input");
                     self.phase = 12;
                 }
@@ -1091,20 +1291,47 @@ impl Session {
         }
     }
     fn refresh(&mut self) {
-        self.single_syllable =
-            crate::syllables::count_spelling(&self.raw[self.offset..]) == Some(1);
+        // The single point where the query spelling is produced: every lexicon
+        // read below goes through `spelling`, never through `raw` (I22).
+        self.recompute_spelling();
+        self.single_syllable = crate::syllables::count_spelling(query_spelling(
+            &self.raw,
+            &self.canonical,
+            self.canonicalized,
+            self.offset,
+            self.raw.len(),
+        )) == Some(1);
         (self.initials_index, self.initials_end, self.initials_count) = self
             .dictionary
-            .initials_range(&self.raw[self.offset..])
+            .initials_range(query_spelling(
+                &self.raw,
+                &self.canonical,
+                self.canonicalized,
+                self.offset,
+                self.raw.len(),
+            ))
             .unwrap_or((0, 0, 0));
+        let input = query_spelling(
+            &self.raw,
+            &self.canonical,
+            self.canonicalized,
+            self.offset,
+            self.raw.len(),
+        );
         self.cursor
-            .reset(&self.dictionary, &self.raw[self.offset..])
+            .reset(&self.dictionary, input)
             .expect("validated input");
         self.lexical_matches = self.cursor.has_matches();
         self.prefix_end = 0;
         self.prefix_ends = 0;
         self.early_prefix_done = false;
-        let input = &self.raw[self.offset..];
+        let input = query_spelling(
+            &self.raw,
+            &self.canonical,
+            self.canonicalized,
+            self.offset,
+            self.raw.len(),
+        );
         let complete = crate::syllables::count_spelling(input).is_some_and(|n| n >= 3);
         let mut exact_prefix = false;
         let mut prefix_limited = false;
@@ -1130,7 +1357,13 @@ impl Session {
         } else {
             match self.decoder.decode(
                 &self.dictionary,
-                &self.raw[self.offset..],
+                query_spelling(
+                    &self.raw,
+                    &self.canonical,
+                    self.canonicalized,
+                    self.offset,
+                    self.raw.len(),
+                ),
                 if self.completed.is_empty() {
                     &self.context
                 } else {
@@ -1165,10 +1398,17 @@ impl Session {
         self.exhausted = self.raw.len() == self.offset;
         if self.learning_enabled {
             let remaining = MAX_TEXT_BYTES - self.completed.len();
-            if let Some(cached) =
-                self.history_cache
-                    .get(&self.raw[self.offset..], self.matching_options, remaining)
-            {
+            if let Some(cached) = self.history_cache.get(
+                query_spelling(
+                    &self.raw,
+                    &self.canonical,
+                    self.canonicalized,
+                    self.offset,
+                    self.raw.len(),
+                ),
+                self.matching_options,
+                remaining,
+            ) {
                 self.exact_history = cached.exact;
                 self.recalled_history = cached.recalled;
                 self.exact_count = cached.exact_count.map(usize::from);
@@ -1179,13 +1419,26 @@ impl Session {
                 let mut previous = "";
                 let mut matches = false;
                 let range = if self.matching_options == 0 {
-                    self.profile.matching_range(&self.raw[self.offset..])
+                    self.profile.matching_range(query_spelling(
+                        &self.raw,
+                        &self.canonical,
+                        self.canonicalized,
+                        self.offset,
+                        self.raw.len(),
+                    ))
                 } else {
                     0..self.profile.rows.len()
                 };
                 for id in range {
                     let row = &self.profile.rows[id];
-                    let accurate = row.key.as_ref() == &self.raw[self.offset..];
+                    let accurate = row.key.as_ref()
+                        == query_spelling(
+                            &self.raw,
+                            &self.canonical,
+                            self.canonicalized,
+                            self.offset,
+                            self.raw.len(),
+                        );
                     if self.initials_count != 0
                         && (!accurate || row.text.chars().count() != self.initials_count as usize)
                     {
@@ -1196,7 +1449,13 @@ impl Session {
                         matches = !accurate
                             && self.matching_options != 0
                             && crate::fuzzy::complete_annotations(
-                                &self.raw[self.offset..],
+                                query_spelling(
+                                    &self.raw,
+                                    &self.canonical,
+                                    self.canonicalized,
+                                    self.offset,
+                                    self.raw.len(),
+                                ),
                                 &row.pinyin,
                                 self.matching_options,
                             )
@@ -1254,7 +1513,13 @@ impl Session {
                     }
                 }
                 self.history_cache.put(
-                    &self.raw[self.offset..],
+                    query_spelling(
+                        &self.raw,
+                        &self.canonical,
+                        self.canonicalized,
+                        self.offset,
+                        self.raw.len(),
+                    ),
                     self.matching_options,
                     remaining,
                     crate::profile_cache::HistorySelection {
@@ -1462,7 +1727,13 @@ impl Session {
                     {
                         f32::from(
                             crate::fuzzy::penalty(
-                                &self.raw[self.offset..],
+                                query_spelling(
+                                    &self.raw,
+                                    &self.canonical,
+                                    self.canonicalized,
+                                    self.offset,
+                                    self.raw.len(),
+                                ),
                                 word.pinyin,
                                 self.matching_options,
                             )
@@ -1507,7 +1778,13 @@ impl Session {
                     && self.matching_options != 0
                     && !self.dictionary.attests(
                         self.decoder.sentences[r.id() as usize].text(),
-                        &self.raw[self.offset..],
+                        query_spelling(
+                            &self.raw,
+                            &self.canonical,
+                            self.canonicalized,
+                            self.offset,
+                            self.raw.len(),
+                        ),
                         self.matching_options,
                     ),
             );
@@ -1555,7 +1832,16 @@ impl Session {
     fn after_commit(&mut self, chosen: Option<u32>) {
         if self.learning_enabled && crate::profile::chinese(&self.commit) && !self.raw.is_empty() {
             self.learning_key.clear();
-            self.learning_key.push_str(self.raw.trim_end_matches('\''));
+            self.learning_key.push_str(
+                query_spelling(
+                    &self.raw,
+                    &self.canonical,
+                    self.canonicalized,
+                    0,
+                    self.raw.len(),
+                )
+                .trim_end_matches('\''),
+            );
         }
         self.clear_composition();
         if !self.remember_commit(chosen) {
@@ -1650,7 +1936,18 @@ impl Session {
         if end > self.raw.len() {
             return;
         }
-        let key = self.raw[self.offset..end].trim_end_matches('\'');
+        // `end` is absolute, so the span runs from the composition offset to it.
+        // The learned key must be the spelling the query matched, which for a `ü`
+        // variant is the canonical one; the displayed and committed text above is
+        // untouched and stays exactly what the user typed.
+        let key = query_spelling(
+            &self.raw,
+            &self.canonical,
+            self.canonicalized,
+            self.offset,
+            end,
+        )
+        .trim_end_matches('\'');
         self.phrase.push(key, text);
         if end == self.raw.len() {
             self.phrase.finish();
@@ -1688,8 +1985,10 @@ impl Session {
                 self.commit.push_str(self.dictionary.entry(item.id()).text);
                 self.record_phrase_segment(item);
                 if self.learning_enabled {
-                    self.learning_key
-                        .push_str(self.raw[..consumed].trim_end_matches('\''));
+                    self.learning_key.push_str(
+                        query_spelling(&self.raw, &self.canonical, self.canonicalized, 0, consumed)
+                            .trim_end_matches('\''),
+                    );
                 }
                 self.remember_commit(Some(item.id()));
                 self.raw.drain(..consumed);
@@ -1873,7 +2172,13 @@ impl Session {
                         > MAX_TEXT_BYTES
                         || self
                             .dictionary
-                            .lookup(&self.raw[boundary.raw as usize..])
+                            .lookup(query_spelling(
+                                &self.raw,
+                                &self.canonical,
+                                self.canonicalized,
+                                boundary.raw as usize,
+                                self.raw.len(),
+                            ))
                             .is_err()
                     {
                         limited = true;
