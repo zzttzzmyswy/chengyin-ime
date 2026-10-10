@@ -79,11 +79,16 @@ pub(crate) fn canonicalize(input: &str, out: &mut [u8; crate::MAX_INPUT_BYTES]) 
             continue;
         }
         let previous = at.checked_sub(1).and_then(|before| bytes.get(before));
-        // Rule 2 needs the `e` to end the syllable; a letter after it means the
-        // `lv`/`nv` reading is the live one instead, as in `nver` (nü + er).
+        // Rule 2 applies only where the `l`/`n` can begin a syllable, which needs
+        // everything before it to be a complete syllable sequence. That is the
+        // narrowing the variant has to carry, because `lv`/`nv` is itself the
+        // canonical spelling of lü/nü and 女儿's own dictionary reading is
+        // `nv'er`: rewriting `nve` inside `xialnver` reaches `nue` and loses the
+        // word the tolerant walker was aligning. Where the prefix does not parse
+        // there is no syllable for rule 2 to rewrite, so the byte stays.
         let rule_two = matches!(previous, Some(b'l' | b'n'))
             && bytes.get(at + 1) == Some(&b'e')
-            && !matches!(bytes.get(at + 2), Some(byte) if byte.is_ascii_alphabetic());
+            && count_spelling(&input[..at - 1]).is_some();
         if matches!(previous, Some(b'j' | b'q' | b'x' | b'y')) || rule_two {
             out[at] = b'u';
             rewritten = true;
@@ -136,4 +141,112 @@ pub(crate) fn profile_spelling(key: &str) -> String {
         }
     }
     output
+}
+
+#[cfg(test)]
+mod canonicalize_tests {
+    use super::*;
+
+    /// `canonicalize` into a fresh buffer; `None` when it reports no rewrite, so a
+    /// test says which of the two outcomes it expects.
+    fn rewrite(input: &str) -> Option<String> {
+        let mut out = [0u8; crate::MAX_INPUT_BYTES];
+        canonicalize(input, &mut out)
+            .then(|| std::str::from_utf8(&out[..input.len()]).unwrap().to_owned())
+    }
+
+    #[test]
+    fn the_two_rules_rewrite_exactly_their_own_bytes() {
+        for (input, expected) in [
+            // Rule 1: a `v` after j/q/x/y is the ü those initials write as `u`.
+            ("jv", "ju"),
+            ("jve", "jue"),
+            ("jvan", "juan"),
+            ("jvn", "jun"),
+            ("qve", "que"),
+            ("qvan", "quan"),
+            ("qvn", "qun"),
+            ("xve", "xue"),
+            ("xvan", "xuan"),
+            ("xvn", "xun"),
+            ("yve", "yue"),
+            ("yvan", "yuan"),
+            ("yvn", "yun"),
+            ("jveding", "jueding"),
+            ("qvanqiuying", "quanqiuying"),
+            // Rule 2: `lve`/`nve` are lüe/nüe, whose canonical spelling is lue/nue.
+            ("lve", "lue"),
+            ("nve", "nue"),
+            ("lvequ", "luequ"),
+            ("nvedai", "nuedai"),
+        ] {
+            assert_eq!(rewrite(input).as_deref(), Some(expected), "{input}");
+        }
+    }
+
+    #[test]
+    fn spellings_that_must_not_be_touched_are_left_alone() {
+        for input in [
+            // `lv`/`nv` are canonical syllables (lü/nü), not variants.
+            "lv",
+            "nv",
+            "lvse",
+            "nvhai",
+            // An explicit separator is never rewritten, so `lv'e` stays lü + e.
+            "lv'e",
+            "nv'e",
+            "lv'e'se",
+            // Rule 2 needs its `e`; `lva`/`nvi` are simply not the variant.
+            "lva",
+            "nvi",
+            // No `v` at all: the overwhelmingly common case.
+            "ni",
+            "nihao",
+            "zhongguoren",
+            "xian",
+            "shi",
+            "",
+        ] {
+            assert_eq!(rewrite(input), None, "{input} must not be rewritten");
+        }
+    }
+
+    #[test]
+    fn a_spelling_without_v_is_neither_rewritten_nor_copied() {
+        // The hot path's contract: no `v` means the caller keeps its own bytes, so
+        // the buffer is never even written to. Seeding it with a sentinel proves
+        // `canonicalize` returned before its `copy_from_slice`.
+        let mut out = [0xAA; crate::MAX_INPUT_BYTES];
+        for input in ["ni", "nihao", "zhongguoren", "xian", ""] {
+            assert!(!canonicalize(input, &mut out), "{input}");
+            assert!(
+                out.iter().all(|&byte| byte == 0xAA),
+                "{input} wrote to the buffer despite needing no rewrite"
+            );
+        }
+        // And a rewrite does fill it, so the sentinel is a real signal.
+        assert!(canonicalize("jveding", &mut out));
+        assert_eq!(&out[..7], b"jueding");
+    }
+
+    #[test]
+    fn rule_two_yields_to_a_competing_lv_nv_reading() {
+        // `lv`/`nv` plus a following syllable is a real parse (`nver` is 女儿,
+        // nü + er), so the `v` stays whenever the prefix before it is itself a
+        // complete syllable sequence. The reported regression row is exactly this
+        // shape and is covered end to end in `tests/variants.rs`.
+        assert_eq!(rewrite("xialnver"), None);
+        assert_eq!(rewrite("nv'er"), None);
+        // Where the prefix does not parse, there is no `lv`/`nv` syllable to
+        // protect and the variant reading is the only one available.
+        assert_eq!(rewrite("nvedai").as_deref(), Some("nuedai"));
+    }
+
+    #[test]
+    fn over_long_input_is_rejected_without_writing() {
+        let mut out = [0xAA; crate::MAX_INPUT_BYTES];
+        let long = "jv".repeat(crate::MAX_INPUT_BYTES);
+        assert!(!canonicalize(&long, &mut out));
+        assert!(out.iter().all(|&byte| byte == 0xAA));
+    }
 }

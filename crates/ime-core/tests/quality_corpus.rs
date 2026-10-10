@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 const CORPUS: &str = include_str!("../../../data/eval/quality.tsv");
 
-const CATEGORIES: [&str; 9] = [
+const CATEGORIES: [&str; 10] = [
     "whole_word",
     "single_char",
     "long_sentence",
@@ -26,6 +26,7 @@ const CATEGORIES: [&str; 9] = [
     "initials",
     "prefix",
     "learning",
+    "alias",
 ];
 
 struct Row {

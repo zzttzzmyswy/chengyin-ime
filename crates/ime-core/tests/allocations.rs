@@ -75,6 +75,16 @@ fn initialized_key_path_does_not_allocate() {
         "xianzaikaishiba",
         "womenxianzaikaishiba",
         "mingtiankaishiba",
+        // I22 ü variants. Every one of these runs `syllables::canonicalize` on
+        // each refresh (and inside the tolerant walker under the full mask), so a
+        // heap spelling of the canonical buffer would show up as one allocation
+        // per keystroke here.
+        "jvn",
+        "jveding",
+        "xvan",
+        "lve",
+        "lvequ",
+        "nvedai",
     ] {
         for c in raw.chars() {
             real.process(Key::Character(c), Modifiers::default());
