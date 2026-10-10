@@ -4,7 +4,10 @@
 # 列：category split flags input expected train bucket note
 # input：用户实际敲入的串（fuzzy/typo 类给出混淆后的串）；initials 为一字一首字母。
 # expected：期望的首选文字，取词库中该读音词频最高的读法（initials 取该键最高频词）。
-# train：空，或分号分隔的 `record:<拼音>=><文字>` 步骤，表示宿主已确认的选词，评测前写入 profile。
+# train：空，或分号分隔的步骤，表示评测前施加的状态。三种步骤：
+#   `record:<拼音>=><文字>` 宿主已确认的选词，直接写入 profile；
+#   `ctx:<拼音>=><文字>` 在真实会话上打字、选中、确认写入，其提交词成为后续的前一词上下文；
+#   `idle:<n>` n 次无关选词，只推进 profile 的事件时钟以模拟时间间隔。
 # bucket：难度分档（类别前缀）。note：来源/规则标记。
 fuzzy	dev	64	angpai	安排		fz;an->ang	freq-high
 fuzzy	dev	1024	anquang	安全		fz;uan->uang	freq-high
@@ -538,3 +541,51 @@ alias	test	0	yvefa	越发		al;yv	freq-low
 alias	test	0	yvjiao	余角		al;yv	freq-low
 alias	test	0	yvntian	云天		al;yv	freq-low
 alias	test	0	yvyong	御用		al;yv	freq-low
+learn	dev	0	aba	阿坝	record:aba=>阿坝;record:aba=>阿坝;idle:4096;record:aba=>阿爸	ln3;decay	n=2-hold-after-idle
+learn	dev	0	aba	阿爸	record:aba=>阿爸	ln1;word	one-selection
+learn	dev	0	aba	阿爸	record:aba=>阿坝;record:aba=>阿坝;idle:4096;record:aba=>阿爸;record:aba=>阿爸	ln3;decay	n=2-flip-after-idle
+learn	dev	0	baozheng	保证	ctx:tie'zi=>帖子;record:baozheng=>保证;record:baozheng=>保证;record:baozheng=>保证;record:baozheng=>暴政;record:baozheng=>暴政;record:baozheng=>暴政;ctx:tie'zi=>帖子	ln2;context	after-帖子
+learn	dev	0	baozheng	暴政	ctx:tie'zi=>帖子;record:baozheng=>保证;record:baozheng=>保证;record:baozheng=>保证;record:baozheng=>暴政;record:baozheng=>暴政;record:baozheng=>暴政;ctx:na'jiu=>那就	ln2;context	after-那就
+learn	dev	0	dongtian	东田	record:dongtian=>东田	ln1;word	one-selection
+learn	dev	0	ganggang	刚刚	ctx:fang'an=>方案;record:ganggang=>刚刚;record:ganggang=>刚刚;record:ganggang=>刚刚;record:ganggang=>杠杠;record:ganggang=>杠杠;record:ganggang=>杠杠;ctx:fang'an=>方案	ln2;context	after-方案
+learn	dev	0	ganggang	杠杠	ctx:fang'an=>方案;record:ganggang=>刚刚;record:ganggang=>刚刚;record:ganggang=>刚刚;record:ganggang=>杠杠;record:ganggang=>杠杠;record:ganggang=>杠杠;ctx:mei'ci=>每次	ln2;context	after-每次
+learn	dev	0	huoyuan	火源	record:huoyuan=>火源	ln1;word	one-selection
+learn	dev	0	huoyuan	火源	record:huoyuan=>货源;record:huoyuan=>货源;record:huoyuan=>货源;record:huoyuan=>货源;record:huoyuan=>货源;idle:4096;record:huoyuan=>火源;record:huoyuan=>火源;record:huoyuan=>火源;record:huoyuan=>火源;record:huoyuan=>火源	ln3;decay	n=5-flip-after-idle
+learn	dev	0	huoyuan	货源	record:huoyuan=>货源;record:huoyuan=>货源;record:huoyuan=>货源;record:huoyuan=>货源;record:huoyuan=>货源;idle:4096;record:huoyuan=>火源;record:huoyuan=>火源;record:huoyuan=>火源;record:huoyuan=>火源	ln3;decay	n=5-hold-after-idle
+learn	dev	0	jingshen	景深	ctx:shi'a=>是啊;record:jingshen=>精神;record:jingshen=>精神;record:jingshen=>精神;record:jingshen=>景深;record:jingshen=>景深;record:jingshen=>景深;ctx:pian'yi=>便宜	ln2;context	after-便宜
+learn	dev	0	jingshen	精神	ctx:shi'a=>是啊;record:jingshen=>精神;record:jingshen=>精神;record:jingshen=>精神;record:jingshen=>景深;record:jingshen=>景深;record:jingshen=>景深;ctx:shi'a=>是啊	ln2;context	after-是啊
+learn	dev	0	meiguo	没过	record:meiguo=>没过	ln1;word	one-selection
+learn	dev	0	qizhong	其中	ctx:wo'shi=>我是;record:qizhong=>其中;record:qizhong=>其中;record:qizhong=>其中;record:qizhong=>期中;record:qizhong=>期中;record:qizhong=>期中;ctx:wo'shi=>我是	ln2;context	after-我是
+learn	dev	0	qizhong	期中	ctx:wo'shi=>我是;record:qizhong=>其中;record:qizhong=>其中;record:qizhong=>其中;record:qizhong=>期中;record:qizhong=>期中;record:qizhong=>期中;ctx:lai'shuo=>来说	ln2;context	after-来说
+learn	dev	0	shuifen	水份	record:shuifen=>水份	ln1;word	one-selection
+learn	dev	0	shuifen	水份	record:shuifen=>水分;record:shuifen=>水分;record:shuifen=>水分;idle:4096;record:shuifen=>水份;record:shuifen=>水份;record:shuifen=>水份	ln3;decay	n=3-flip-after-idle
+learn	dev	0	shuifen	水分	record:shuifen=>水分;record:shuifen=>水分;record:shuifen=>水分;idle:4096;record:shuifen=>水份;record:shuifen=>水份	ln3;decay	n=3-hold-after-idle
+learn	dev	0	tupian	图片	ctx:mei'ti=>媒体;record:tupian=>图片;record:tupian=>图片;record:tupian=>图片;record:tupian=>涂片;record:tupian=>涂片;record:tupian=>涂片;ctx:mei'ti=>媒体	ln2;context	after-媒体
+learn	dev	0	tupian	涂片	ctx:mei'ti=>媒体;record:tupian=>图片;record:tupian=>图片;record:tupian=>图片;record:tupian=>涂片;record:tupian=>涂片;record:tupian=>涂片;ctx:na'shi=>那是	ln2;context	after-那是
+learn	dev	0	xunyu	鲟鱼	record:xunyu=>鲟鱼	ln1;word	one-selection
+learn	dev	0	yiqian	一千	ctx:wang'luo=>网络;record:yiqian=>以前;record:yiqian=>以前;record:yiqian=>以前;record:yiqian=>一千;record:yiqian=>一千;record:yiqian=>一千;ctx:yan'jiu=>研究	ln2;context	after-研究
+learn	dev	0	yiqian	以前	ctx:wang'luo=>网络;record:yiqian=>以前;record:yiqian=>以前;record:yiqian=>以前;record:yiqian=>一千;record:yiqian=>一千;record:yiqian=>一千;ctx:wang'luo=>网络	ln2;context	after-网络
+learn	test	0	aiai	爱爱	record:aiai=>爱爱;record:aiai=>爱爱;idle:4096;record:aiai=>皑皑	ln3;decay	n=2-hold-after-idle
+learn	test	0	aiai	皑皑	record:aiai=>皑皑	ln1;word	one-selection
+learn	test	0	aiai	皑皑	record:aiai=>爱爱;record:aiai=>爱爱;idle:4096;record:aiai=>皑皑;record:aiai=>皑皑	ln3;decay	n=2-flip-after-idle
+learn	test	0	banfa	办法	ctx:zi'jin=>资金;record:banfa=>办法;record:banfa=>办法;record:banfa=>办法;record:banfa=>颁发;record:banfa=>颁发;record:banfa=>颁发;ctx:zi'jin=>资金	ln2;context	after-资金
+learn	test	0	banfa	颁发	ctx:zi'jin=>资金;record:banfa=>办法;record:banfa=>办法;record:banfa=>办法;record:banfa=>颁发;record:banfa=>颁发;record:banfa=>颁发;ctx:bu'dao=>不到	ln2;context	after-不到
+learn	test	0	diyi	敌意	ctx:mei'ge=>每个;record:diyi=>第一;record:diyi=>第一;record:diyi=>第一;record:diyi=>敌意;record:diyi=>敌意;record:diyi=>敌意;ctx:wo'xiang=>我想	ln2;context	after-我想
+learn	test	0	diyi	第一	ctx:mei'ge=>每个;record:diyi=>第一;record:diyi=>第一;record:diyi=>第一;record:diyi=>敌意;record:diyi=>敌意;record:diyi=>敌意;ctx:mei'ge=>每个	ln2;context	after-每个
+learn	test	0	duita	对她	record:duita=>对她	ln1;word	one-selection
+learn	test	0	jianmian	减免	record:jianmian=>减免	ln1;word	one-selection
+learn	test	0	jianmian	减免	record:jianmian=>见面;record:jianmian=>见面;idle:4096;record:jianmian=>减免;record:jianmian=>减免	ln3;decay	n=2-flip-after-idle
+learn	test	0	jianmian	见面	record:jianmian=>见面;record:jianmian=>见面;idle:4096;record:jianmian=>减免	ln3;decay	n=2-hold-after-idle
+learn	test	0	jieshou	接受	ctx:yin'yue=>音乐;record:jieshou=>接受;record:jieshou=>接受;record:jieshou=>接受;record:jieshou=>接收;record:jieshou=>接收;record:jieshou=>接收;ctx:yin'yue=>音乐	ln2;context	after-音乐
+learn	test	0	jieshou	接收	ctx:yin'yue=>音乐;record:jieshou=>接受;record:jieshou=>接受;record:jieshou=>接受;record:jieshou=>接收;record:jieshou=>接收;record:jieshou=>接收;ctx:she'bei=>设备	ln2;context	after-设备
+learn	test	0	mingzhong	明中	record:mingzhong=>明中	ln1;word	one-selection
+learn	test	0	nage	哪个	ctx:jue'de=>觉得;record:nage=>那个;record:nage=>那个;record:nage=>那个;record:nage=>哪个;record:nage=>哪个;record:nage=>哪个;ctx:xu'yao=>需要	ln2;context	after-需要
+learn	test	0	nage	那个	ctx:jue'de=>觉得;record:nage=>那个;record:nage=>那个;record:nage=>那个;record:nage=>哪个;record:nage=>哪个;record:nage=>哪个;ctx:jue'de=>觉得	ln2;context	after-觉得
+learn	test	0	suiyi	虽已	record:suiyi=>虽已	ln1;word	one-selection
+learn	test	0	suiyi	虽已	record:suiyi=>随意;record:suiyi=>随意;idle:4096;record:suiyi=>虽已;record:suiyi=>虽已	ln3;decay	n=2-flip-after-idle
+learn	test	0	suiyi	随意	record:suiyi=>随意;record:suiyi=>随意;idle:4096;record:suiyi=>虽已	ln3;decay	n=2-hold-after-idle
+learn	test	0	wenzhang	文章	ctx:bao'gao=>报告;record:wenzhang=>文章;record:wenzhang=>文章;record:wenzhang=>文章;record:wenzhang=>蚊帐;record:wenzhang=>蚊帐;record:wenzhang=>蚊帐;ctx:bao'gao=>报告	ln2;context	after-报告
+learn	test	0	wenzhang	蚊帐	ctx:bao'gao=>报告;record:wenzhang=>文章;record:wenzhang=>文章;record:wenzhang=>文章;record:wenzhang=>蚊帐;record:wenzhang=>蚊帐;record:wenzhang=>蚊帐;ctx:jia'qiang=>加强	ln2;context	after-加强
+learn	test	0	yangjiang	杨绛	record:yangjiang=>杨绛	ln1;word	one-selection
+learn	test	0	yitian	一天	ctx:dao'di=>到底;record:yitian=>一天;record:yitian=>一天;record:yitian=>一天;record:yitian=>倚天;record:yitian=>倚天;record:yitian=>倚天;ctx:dao'di=>到底	ln2;context	after-到底
+learn	test	0	yitian	倚天	ctx:dao'di=>到底;record:yitian=>一天;record:yitian=>一天;record:yitian=>一天;record:yitian=>倚天;record:yitian=>倚天;record:yitian=>倚天;ctx:lao'gong=>老公	ln2;context	after-老公

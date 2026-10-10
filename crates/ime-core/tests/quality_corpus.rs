@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 const CORPUS: &str = include_str!("../../../data/eval/quality.tsv");
 
-const CATEGORIES: [&str; 10] = [
+const CATEGORIES: [&str; 11] = [
     "whole_word",
     "single_char",
     "long_sentence",
@@ -27,6 +27,7 @@ const CATEGORIES: [&str; 10] = [
     "prefix",
     "learning",
     "alias",
+    "learn",
 ];
 
 struct Row {
@@ -168,12 +169,15 @@ fn every_row_is_playable() {
         );
         let mut profile = Profile::default();
         for step in row.train.split(';').filter(|step| !step.is_empty()) {
-            let body = step.strip_prefix("record:").unwrap_or_else(|| {
-                panic!(
-                    "{}: only record: steps are supported, got {step:?}",
-                    row.input
-                )
-            });
+            // Only the profile-only steps are replayed here; the structural gate
+            // checks that a row is playable, and a `ctx:` step needs the live
+            // session, which `quality_report` already exercises end to end.
+            if step.starts_with("ctx:") || step.starts_with("idle:") {
+                continue;
+            }
+            let body = step
+                .strip_prefix("record:")
+                .unwrap_or_else(|| panic!("{}: unknown train step kind, got {step:?}", row.input));
             let (spelling, text) = body.split_once("=>").expect("train step");
             // Each train step is a selection the host already confirmed, recorded
             // through the same API the platform adapter uses for a saved profile.
@@ -192,5 +196,54 @@ fn every_row_is_playable() {
         assert!(!limited, "{}: input hit the ambiguity budget", row.input);
         assert_eq!(session.preedit(), row.input, "preedit mismatch");
         assert!(!row.expected.is_empty(), "{}: empty expectation", row.input);
+    }
+}
+
+/// The `learn` category's context scenario is a proof, not a sample, and this test
+/// is what keeps it one.
+///
+/// Each context pair is two rows for one key with byte-identical training whose
+/// trailing `ctx:` step differs and whose expectations differ. An engine that does
+/// not condition on the preceding word answers both from the same state, so it
+/// returns one word for the two and can match at most one — which is exactly the
+/// 50% Top-1 the baseline reports. If a regeneration, a hand edit or a re-split
+/// ever separated a pair's halves, or made the trained halves differ, the rows would
+/// still look plausible while the property they exist to demonstrate was gone.
+#[test]
+fn learn_context_pairs_are_byte_identical_but_for_the_trailing_context() {
+    let rows = load();
+    let mut pairs: HashMap<(String, String), Vec<&Row>> = HashMap::new();
+    for row in rows.iter().filter(|row| row.bucket == "ln2;context") {
+        // The training half is everything before the trailing context step, which
+        // is the pair's only intended difference.
+        let steps: Vec<&str> = row.train.split(';').collect();
+        let (trailing, trained) = steps.split_last().expect("ln2 row has steps");
+        assert!(
+            trailing.starts_with("ctx:"),
+            "{}: the trailing step must be the context, got {trailing:?}",
+            row.input
+        );
+        pairs
+            .entry((row.split.clone(), trained.join(";")))
+            .or_default()
+            .push(row);
+    }
+    assert!(!pairs.is_empty(), "no ln2;context pairs found");
+    for ((split, trained), mut halves) in pairs {
+        assert_eq!(
+            halves.len(),
+            2,
+            "{split}/{trained}: a context pair lost a half ({:?})",
+            halves.iter().map(|row| &row.expected).collect::<Vec<_>>()
+        );
+        halves.sort_by(|a, b| a.expected.cmp(&b.expected));
+        assert_ne!(
+            halves[0].expected, halves[1].expected,
+            "{split}/{trained}: both halves expect the same word, so the pair proves nothing"
+        );
+        assert_ne!(
+            halves[0].train, halves[1].train,
+            "{split}/{trained}: the two halves must differ in their trailing context"
+        );
     }
 }
