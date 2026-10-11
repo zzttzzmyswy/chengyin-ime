@@ -30,19 +30,26 @@
   实测被跳过的调用数为 **0**（`fast_ready` 已先行挡住），收益 0；而占整句首页槽位 99%+ 的
   「全规则 + 无精确组合」状态一经门控即改首页。把 eager 缩写趟推迟的变体已被 `diff` 证明改
   首页（`woxihuanzhongwen×4`、`womenmtj` 各 1 行）。
-- **A3 不合入**：逐单元复用率 77%~90% 看着高，但按代价加权后收益落在低位置——全规则六纠错里
-  start 0..3 占 `compute` 体 60.5%，而位置 0 复用率仅 0.9%~32%。同时需要一份约 16 KB 的
-  「上一键束快照」内联，而 `Session` 内联+堆已是 65,341 B（预算 64 KiB 仅余 195 B），需要结构性
-  缩减既有内联；预估收益低于交替 A/B 的判读区间。
+- **A3 不合入**：按代价加权的可跳过耗时上界只有 **5%~6% of wall**（只计非空束；含天然相等的
+  空束会虚高到 50%）。决定 P99 的低位置最贵且几乎每键都变——全规则六纠错里 start 0..3 占
+  `compute` 体 62.0%，其非空复用率仅 0%~16%（s0 16%、s1 12%、s2 起 0%）。同时需要一份约
+  16 KB 的「上一键束快照」内联，而 `Session` 内联+堆已是 65,341 B（预算 64 KiB 仅余 195 B），
+  需结构性缩减既有内联；上界低于交替 A/B 的判读区间。
 
 **验收命令与结果**
 1. `bash scripts/check.sh` → 退出 0；`python3 scripts/version.py --check` 通过且版本不变。
 2. `quality_report` 普通与 `--incremental` 对 `data/eval/quality.tsv` 全部类别逐行 `diff` 为空。
 3. `cargo test -p chengyin-core --test first_page_baseline` 通过（5,160 行首页摘要逐行相同）。
 4. `cargo test -p chengyin-core --test allocations` 通过。
-5. 交替 A/B 四个轮次（`CHENGYIN_BENCH_ROUNDS=300`），目标场景 P99 中位数与区间见回贴。
+5. 同机交替 A/B（`CHENGYIN_BENCH_ROUNDS=300`，两侧各 4 轮逐轮交替）：因两项都不合入、
+   两侧同码，这实际是**空实验**，量出的是判读区间——两个目标场景 P99 中位数偏差 ±1% 以内
+   （`target-correction` 13,055,038→13,048,373 ns、`target-daily` 3,555,641→3,525,616 ns），
+   `corpus-prefix` 因单轮离群不收敛（−28%、区间重叠）。顺带修掉 `bench_ab.sh` 第一版
+   「两侧各跑成块而非交替」的缺陷（该缺陷会让同一份代码报出 +25.6% 的假劣化）。
 6. `cargo clippy --workspace --all-targets -- -D warnings` 与 `cargo fmt --check` 通过；PR CI 状态见回贴。
-7. 阴性对照：A2 门控放宽到「存在精确词即跳过」→ 首页基线测试失败；A3 漏失效条件的对照见回贴。
+7. 阴性对照（本地临时变体，不提交）：
+   - A2：把门控放宽为「存在全输入精确词即跳过 eager 缩写趟」→ `first_page_baseline` **23 行首页摘要改变**、报 FAILED（`all-rules kong`、`touzhele`、`kongtoujingtushanghaishuimitao` 等）。
+   - A3：增量复用漏掉 `matching_options` 失效条件 → `incremental_equiv` 的 `reused_state_survives_a_matching_option_change` FAILED（`angpai` 在 no-rules 下的页面被当成 all-rules 的结果返回）。
 
 **不发版**：本卡未 bump 版本，发版由技术负责人在合并后处理。
 

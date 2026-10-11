@@ -678,6 +678,13 @@ A2 想去门控的状态；但它同时是**句子候选唯一可能进首页**�
 - **按 `exact_available` 跳过 `decode_alternates`**：首页逐行不变（0 处差异），但
   实测被跳过的调用为 **0**——`fast_ready` 已先行挡住同一批，收益为 0。
 - **按 `protected_word` 跳过**：同样 0 处差异、同样 0 收益。
+- **「存在全输入精确词即跳过」的另一半——跳过 eager 缩写趟**：这是把门控真正落地
+  （跳过会填充位置 0 束的那一趟）。用 `tests/first_page_baseline.rs` 作对照，
+  **23 行首页摘要改变**（例如 `all-rules kong`、`touzhele`、
+  `kongtoujingtushanghaishuimitao`），测试报 FAILED。注意：只加「跳过 `decode_alternates`」
+  的判定而**不**跳过 eager 趟时，首页 0 处差异——说明 `decode_alternates` 那一侧早已被
+  `fast_ready` 挡住，任务卡设想的「省下整句 DP」在图里并不存在，真正被省掉的只能是
+  eager 趟，而它一省就改首页。
 
 ### 四、A3 设计：为什么「只重算受影响后缀」在本实现里拿不到收益
 
