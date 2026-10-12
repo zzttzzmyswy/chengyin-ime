@@ -1,5 +1,58 @@
 # 项目状态
 
+## 迭代 I24 解码热路径 A2/A3（剖析优先，输出不变） · 2026-10-11 交付待验收（未发版）
+
+**结论：A2、A3 两项均未达本迭代的合入门槛，都不合入实现；核心 `crates/ime-core/src/` 零改动。**
+交付的是剖析数据、统计表、A3 设计文档、语料生成器、统计程序与首页回归基线。本节仅记录交付
+事实，评审结论由技术负责人填写。
+
+**分支** `codex/decoder-a2-a3`（基线 `main` @ `018fdee`）。`version.json` 未改，仍 preview34。
+
+**改动面**
+- 新增 `scripts/generate_prefix_corpus.py` 与 `data/eval/prefix.tsv`（固定种子 20261011，
+  2,000 条由 `data/daily.tsv` 词条拼写拼接的 1~4 词输入，≤63 B，纯小写无分隔符）。
+- 新增 `crates/ime-core/examples/decode_census.rs`：A2 统计（整输入精确词占比、首页整句槽位、
+  门控上限、按状态的每键均值）。
+- 新增 `crates/ime-core/examples/latency_scenarios.rs`：目标场景 A/B 计时（可命令行选场景）。
+- 新增 `crates/ime-core/tests/first_page_baseline.rs` 与 `data/eval/first_page.txt`：
+  对两套语料的**每个前缀**、两种 matching 配置，首页 9 条（文字|拼音|频次，含前缀长度）
+  的 FNV-1a 摘要基线，5,160 行。
+- `docs/PERFORMANCE.md` 新增「迭代 I24」一节（剖析、统计、A3 设计、阴性对照、结论），
+  并在「待办：两项热路径候选」末尾标注已评估、不合入。
+
+未改 `include/chengyin_ime.h`、`platforms/`、`data/daily.tsv`、`data/syllables.txt`、
+`version.json`、`.github/workflows`。
+
+**关键结论与依据**（完整数据见 `docs/PERFORMANCE.md`「迭代 I24」）
+- 延迟几乎全在 `compute` 的边展开（`render` 仅 0.06% self）；`transition` 12,609,935 次调用中
+  26.0% 落到字符串谓词慢路径。目标场景「全规则 + 无精确组合」状态占 `compute` 的 98.8%。
+- **A2 不合入**：`protected_word` / `exact_available` 两个可门控状态下，`decode_alternates`
+  实测被跳过的调用数为 **0**（`fast_ready` 已先行挡住），收益 0；而占整句首页槽位 99%+ 的
+  「全规则 + 无精确组合」状态一经门控即改首页。把 eager 缩写趟推迟的变体已被 `diff` 证明改
+  首页（`woxihuanzhongwen×4`、`womenmtj` 各 1 行）。
+- **A3 不合入**：按代价加权的可跳过耗时上界只有 **5%~6% of wall**（只计非空束；含天然相等的
+  空束会虚高到 50%）。决定 P99 的低位置最贵且几乎每键都变——全规则六纠错里 start 0..3 占
+  `compute` 体 62.0%，其非空复用率仅 0%~16%（s0 16%、s1 12%、s2 起 0%）。同时需要一份约
+  16 KB 的「上一键束快照」内联，而 `Session` 内联+堆已是 65,341 B（预算 64 KiB 仅余 195 B），
+  需结构性缩减既有内联；上界低于交替 A/B 的判读区间。
+
+**验收命令与结果**
+1. `bash scripts/check.sh` → 退出 0；`python3 scripts/version.py --check` 通过且版本不变。
+2. `quality_report` 普通与 `--incremental` 对 `data/eval/quality.tsv` 全部类别逐行 `diff` 为空。
+3. `cargo test -p chengyin-core --test first_page_baseline` 通过（5,160 行首页摘要逐行相同）。
+4. `cargo test -p chengyin-core --test allocations` 通过。
+5. 同机交替 A/B（`CHENGYIN_BENCH_ROUNDS=300`，两侧各 4 轮逐轮交替）：因两项都不合入、
+   两侧同码，这实际是**空实验**，量出的是判读区间——两个目标场景 P99 中位数偏差 ±1% 以内
+   （`target-correction` 13,055,038→13,048,373 ns、`target-daily` 3,555,641→3,525,616 ns），
+   `corpus-prefix` 因单轮离群不收敛（−28%、区间重叠）。顺带修掉 `bench_ab.sh` 第一版
+   「两侧各跑成块而非交替」的缺陷（该缺陷会让同一份代码报出 +25.6% 的假劣化）。
+6. `cargo clippy --workspace --all-targets -- -D warnings` 与 `cargo fmt --check` 通过；PR CI 状态见回贴。
+7. 阴性对照（本地临时变体，不提交）：
+   - A2：把门控放宽为「存在全输入精确词即跳过 eager 缩写趟」→ `first_page_baseline` **23 行首页摘要改变**、报 FAILED（`all-rules kong`、`touzhele`、`kongtoujingtushanghaishuimitao` 等）。
+   - A3：增量复用漏掉 `matching_options` 失效条件 → `incremental_equiv` 的 `reused_state_survives_a_matching_option_change` FAILED（`angpai` 在 no-rules 下的页面被当成 all-rules 的结果返回）。
+
+**不发版**：本卡未 bump 版本，发版由技术负责人在合并后处理。
+
 ## 迭代 I23 选词学习评估（算法 A4 评估阶段） · 2026-10-10 已合并（PR #46，仅评测与文档，未发版）
 
 评审结论：通过。技术负责人亲自核对与重跑：核心 `crates/ime-core/src/`、`platforms/`、`include/`、`version.json` 零改动；既有 532 行评测逐行（含顺序）与 `main` 相同；`quality_corpus` 5/5；`quality_report` 复现 `learn` 48 条（`ln1;word` 与 `ln3;decay` Top-1 100%，`ln2;context` 50.0%）；生成器幂等；PR CI 6/6。认可唯一偏差：生成器改为按文件既有顺序输出（I22 之后“只追加”契约在 main 上已失效，重跑会把 44 行 `alias` 搬到开头），仅改写出顺序。
