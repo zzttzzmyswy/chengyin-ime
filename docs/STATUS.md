@@ -1,5 +1,12 @@
 # 项目状态
 
+## MYS-2208 中文模式下 CapsLock 直接输入大写字母 · preview35
+
+- Fcitx 5（`platforms/fcitx5/engine.cpp` `keyEvent`）：中文模式下 CapsLock 开启（或按下 Caps Lock 键本身）时，按键不再进入核心，原样交给应用，因此输出大写字母；已有组合先结束——已显示的拼音按原样上屏、会话清空、不学习；单独的修饰键不受影响。此前该状态位被忽略，按键仍当小写拼音处理。
+- Windows：`planKey()` 在 Caps Lock 开启时本就返回 pass/finish，行为不变；新增 `test_keymap.cpp` 回归断言（空闲放行、有组合先结束、Caps Lock 键本身、单独 Shift 不结束）。
+- 测试：`test_instance` 用例 15 改为规格断言（15.4–15.18）；Fcitx 10/10 CTest 本地通过；Windows 原生 CTest 由 PR CI 验证。均为自动化结果，未做真实桌面/Windows 应用矩阵实机验收。
+- 版本 preview35；AUR `fcitx5-chengyin` 同步 pkgver。
+
 ## 迭代 I24 解码热路径 A2 整句门控 / A3 逐键增量复用（剖析优先） · 2026-10-11 已合并（PR #48，两项均不合入实现，未发版）
 
 评审结论：通过（结论为“两项都不合入”，门槛下是正确结果）。技术负责人亲自核对：`crates/ime-core/src/`、`platforms/`、`include/`、`version.json`、`packaging/` 零改动；`first_page_baseline`（5,160 行首页摘要）、`allocations` 通过，`incremental_equiv` 的 3 个属性测试按设计标 `#[ignore]`（需 `--ignored`，不合入实现时两侧同码恒等，仅作后续重试守门）；PR CI 6/6（两个 commit 各 6/6）。认可执行方对测量缺陷的自查修正（A3 标记时序写在“键之前”、把空束计入、`bench_ab.sh` 把两侧各自成块而非逐轮交替导致同码 +25.6% 假劣化），且作废数据未再引用。

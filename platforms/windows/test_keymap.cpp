@@ -35,6 +35,17 @@ int main() {
     require(planKey('N', 'n', true, false, false).action == Action::pass, "idle Ctrl bypass");
     require(planKey('N', 'n', true, false, true).action == Action::finish, "finish before Ctrl shortcut");
     require(planKey('N', 'n', false, true, false).action == Action::pass, "Caps Lock English");
+    // Caps Lock on: letters are capitals for the application and never reach the core;
+    // a composition on screen is finished first (the old pinyin state is not kept).
+    for (char letter : {'N', 'M', 'Z'})
+        require(planKey(static_cast<uint32_t>(letter), letter, false, true, false).action == Action::pass,
+                "Caps Lock idle letter is left to the application");
+    for (char letter : {'N', 'A', 'Z'})
+        require(planKey(static_cast<uint32_t>(letter), letter, false, true, true).action == Action::finish,
+                "Caps Lock finishes the composition before a capital");
+    require(planKey(0x14, 0, false, false, true).action == Action::finish, "Caps Lock key finishes the composition");
+    require(planKey(0x14, 0, false, false, false).action == Action::pass, "Caps Lock key idle passes");
+    require(planKey(0x10, 0, false, true, true).action == Action::pass, "Shift alone under Caps Lock keeps the composition");
     require(planKey('N', 'n', false, false, false, true).action == Action::pass, "English mode bypass");
     require(planKey(0x10, 0, false, false, true).action == Action::pass, "Shift alone preserves composition");
     require(planKey(0x09, 0, false, false, true).action == Action::finish, "Tab finishes raw text");

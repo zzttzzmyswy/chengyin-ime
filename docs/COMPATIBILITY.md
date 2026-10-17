@@ -41,7 +41,7 @@ Fcitx 5 的插件可复用其前端和候选 UI，但 compositor 是否实现协
 | --- | --- |
 | 输入 `nihao`、退格、数字或空格选词 | 组合/候选同步，只上屏一次 |
 | `xian` 对比 `xi'an`，部分音节分隔 | 分隔约束正确，未匹配时可原文上屏 |
-| Ctrl/Alt/Super、Shift、Caps Lock、AltGr、长按 | 不吞系统/应用快捷键；当前 Caps Lock 模式尚待设计验证 |
+| Ctrl/Alt/Super、Shift、Caps Lock、AltGr、长按 | 不吞系统/应用快捷键；中文模式下 Caps Lock 开启时字母直接以大写输入、不进入拼音（Windows 与 Fcitx 一致，preview35 起 Fcitx 补齐；自动化覆盖，实机待验收） |
 | Enter/Esc/Tab/左右/Home/End/鼠标改插入点 | 不把残留组合带到错误位置；核心和 Windows 已实现中间编辑及选段撤回 |
 | 两窗口轮换、同应用多输入框、失焦/切换输入法 | 状态隔离，不重复提交或意外泄漏组合 |
 | 候选鼠标点击、陈旧候选列表回调 | 只提交当前会话当前版本的候选 |

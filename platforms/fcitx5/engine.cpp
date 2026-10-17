@@ -776,6 +776,23 @@ void Engine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &event) {
         // English mode forwards everything, letters included, untouched.
         return;
     }
+    // Caps Lock on is the user asking for capitals, not pinyin: the key goes to the
+    // application untouched (Fcitx reports the capital keysym) and no composition
+    // is started or continued. This is Windows' planKey(), where `caps` turns every
+    // key into finish-or-pass (platforms/windows/keymap.h:72), including the Caps
+    // Lock key itself (VK_CAPITAL), whose press still reports the old lock state.
+    // A composition already on screen is finished the way Windows' EndComposition
+    // leaves it: its text stays in the document, so the pinyin typed so far is
+    // committed as it is displayed and the session is retired. A bare modifier is
+    // not a typed key and changes nothing.
+    if ((capsLock(event) || sym == FcitxKey_Caps_Lock) && !event.key().isModifier()) {
+        if (active(*state)) {
+            const auto shown = text(state->session.get(), CHENGYIN_TEXT_PREEDIT);
+            if (!shown.empty()) { ic->commitString(shown); }
+            resetSession(ic);
+        }
+        return;
+    }
     // Windows' conversion conditions in full: Chinese mode, no shortcut, no Caps
     // Lock, the punctuation switch on, and the character in the shared table
     // (platforms/windows/service.cpp:236). The Shift bit is deliberately not
