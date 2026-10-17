@@ -5,7 +5,7 @@
 - Fcitx 5（`platforms/fcitx5/engine.cpp` `keyEvent`）：中文模式下 CapsLock 开启（或按下 Caps Lock 键本身）时，按键不再进入核心，原样交给应用，因此输出大写字母；已有组合先结束——已显示的拼音按原样上屏、会话清空、不学习；单独的修饰键不受影响。此前该状态位被忽略，按键仍当小写拼音处理。
 - Windows：`planKey()` 在 Caps Lock 开启时本就返回 pass/finish，行为不变；新增 `test_keymap.cpp` 回归断言（空闲放行、有组合先结束、Caps Lock 键本身、单独 Shift 不结束）。
 - 测试：`test_instance` 用例 15 改为规格断言（15.4–15.18）；Fcitx 10/10 CTest 本地通过；Windows 原生 CTest 由 PR CI 验证。均为自动化结果，未做真实桌面/Windows 应用矩阵实机验收。
-- 版本 preview35；AUR `fcitx5-chengyin` 同步 pkgver。
+- 发版：[v0.1.0-preview35](https://github.com/zzttzzmyswy/chengyin-ime/releases/tag/v0.1.0-preview35)（target `d2eb7ea`，PR #51；Windows EXE/deb 取自 Actions 39019430753，6/6 成功；Arch 包由固定源码 `makepkg` 重建，`check()` 内 CTest 10/10，隔离 pacman 生命周期通过；PKGBUILD 已 pin，归档 SHA256 `2e9b46c9…` 多次下载一致）。AUR `fcitx5-chengyin` 已推送 `aa11dd6`（PKGBUILD + .SRCINFO）。仍为预发布，未做实机验收。
 
 ## 迭代 I24 解码热路径 A2 整句门控 / A3 逐键增量复用（剖析优先） · 2026-10-11 已合并（PR #48，两项均不合入实现，未发版）
 
