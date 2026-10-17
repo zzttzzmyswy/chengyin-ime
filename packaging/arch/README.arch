@@ -6,7 +6,7 @@ Fcitx、不写用户主目录、不设置全局环境变量。
 ## 安装
 
 ```sh
-sudo pacman -U ./fcitx5-chengyin-0.1.0.preview34-1-x86_64.pkg.tar.zst
+sudo pacman -U ./fcitx5-chengyin-0.1.0.preview35-1-x86_64.pkg.tar.zst
 ```
 
 已有旧版本时同一条命令即为升级；降级同样用 `sudo pacman -U` 指定旧包。
