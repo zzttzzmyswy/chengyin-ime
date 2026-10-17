@@ -740,10 +740,11 @@ void case_dictionary_reload_finish(Session &session, const CommitRecorder &recor
     checkCount(recorder.all().size(), 0, "14.4 the reload itself commits nothing");
 }
 
-// Case 15: a behaviour snapshot, not a specification. Shifted letters and the
-// Caps Lock state are recorded exactly as the adapter and core behave today; the
-// roadmap still lists Caps Lock as awaiting design verification, so these
-// assertions exist so a future change is noticed rather than to bless it.
+// Case 15: shifted letters and Caps Lock. Shift+letter is a behaviour snapshot
+// recorded as the adapter and core behave today. Caps Lock is specified: with the
+// lock on, a key is the user asking for a capital, so it must reach the
+// application and must never start or extend a pinyin composition (Windows
+// planKey() does the same). Fcitx reports the capital keysym plus the lock bit.
 void case_uppercase_snapshot(fcitx::Instance &instance, fcitx::AddonInstance *frontend,
                              CommitRecorder &recorder) {
     Session session(instance, frontend, "uppercase");
@@ -759,14 +760,45 @@ void case_uppercase_snapshot(fcitx::Instance &instance, fcitx::AddonInstance *fr
     checkCount(recorder.all().size(), 0, "15.3 Shift+N commits nothing (observed)");
     session.send(fcitx::Key("Escape"));
 
-    // Caps Lock while idle: the framework keeps the letter keysym and reports the
-    // lock as a state bit, so the adapter sees an ordinary 'n'.
+    // Caps Lock while idle: the key is left to the application, no composition.
     session.send(fcitx::Key("Escape"));
     recorder.clear();
-    const bool capsAccepted = session.send(fcitx::Key(FcitxKey_n, fcitx::KeyState::CapsLock));
-    checkEqual(session.preedit(), "n", "15.4 Caps Lock + n composes as 'n' (observed)");
-    check(capsAccepted, "15.5 Caps Lock + n is accepted (observed)");
-    checkCount(recorder.all().size(), 0, "15.6 Caps Lock + n commits nothing (observed)");
+    const bool capsAccepted = session.send(fcitx::Key(FcitxKey_N, fcitx::KeyState::CapsLock));
+    checkEqual(session.preedit(), "", "15.4 Caps Lock + N starts no composition");
+    check(!capsAccepted, "15.5 Caps Lock + N is left to the application");
+    checkCount(recorder.all().size(), 0, "15.6 Caps Lock + N commits nothing itself");
+
+    // Caps Lock with a composition on screen: the pinyin typed so far stays in the
+    // document as displayed (Windows' EndComposition) and the capital follows it.
+    session.type("ni");
+    recorder.clear();
+    const bool midCaps = session.send(fcitx::Key(FcitxKey_H, fcitx::KeyState::CapsLock));
+    checkEqual(session.preedit(), "", "15.10 Caps Lock + H ends the composition");
+    check(!midCaps, "15.11 and the capital is left to the application");
+    checkEqual(recorder.joined(), "ni",
+               "15.12 the pinyin typed so far is committed as displayed");
+
+    // Pressing the Caps Lock key itself (still reporting the old lock state) with
+    // a composition on screen finishes it the same way.
+    session.type("ni");
+    recorder.clear();
+    const bool lockKey = session.send(fcitx::Key(FcitxKey_Caps_Lock));
+    checkEqual(session.preedit(), "", "15.13 the Caps Lock key ends the composition");
+    check(!lockKey, "15.14 and is left to the application");
+    checkEqual(recorder.joined(), "ni",
+               "15.15 committing the displayed pinyin");
+
+    // A bare modifier under the lock changes nothing.
+    session.type("ni");
+    recorder.clear();
+    session.send(fcitx::Key(FcitxKey_Control_L, fcitx::KeyState::CapsLock));
+    checkEqual(session.preedit(), "ni", "15.16 a bare modifier does not end the composition");
+    checkCount(recorder.all().size(), 0, "15.17 and commits nothing");
+    session.send(fcitx::Key("Escape"));
+
+    // With the lock off the next letter composes again.
+    session.type("n");
+    checkEqual(session.preedit(), "n", "15.18 lock off: pinyin composes again");
 
     // Shift+letter in the middle of a composition.
     session.send(fcitx::Key("Escape"));
