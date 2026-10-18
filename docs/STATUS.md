@@ -1,6 +1,6 @@
 # 项目状态
 
-## MYS-2223 词库外组合的字符回退 · 待评审（未发版）
+## MYS-2223 词库外组合的字符回退 · preview36
 
 - **现象与根因**：词库完全没有写下的组合（典型是生僻人名）此前没有任何候选覆盖整串输入。句图对每个词边界查 `transition`，两侧都是单字又无搭配证据时 `Pair.allowed == false`，路径被跳过；即便放行，`unsupported > 1` 也会剪掉第二个未见证边界。于是「张|泽|涛」三段全无见证时 `lengths[0] == 0`，首页只剩前缀词与首字。实测 `zhangzetao` 改动前首页为 漳州/长子/张嘴…，无任何三字候选。
 - **机制**：仅在「没有任何全拼解析到达输入末尾」（`lengths[0] == 0`，且在缩写重试**之前**取值）时，用**仅单字边**重建一次句图并允许无见证相邻。`transition` 照常计 −6.0 未见证罚分。四道闸门：零全拼解析、`parses_completely`、音节数 ≥ 2、非 `protected_word`。模糊/纠错/缩写/预测车道不放宽。
@@ -11,8 +11,9 @@
   变化形态是回退串**排到了第 1 位**，而非追加在末尾。判据：Top-1 改变的 954 组里，新 Top-1 全部是词频 0 且**拼写完整覆盖输入**的直读串；旧 Top-1 只有 1 组能覆盖整串（`yuangshengzhi` 的等分词对调），其余 953 组本就是**前缀补全词**（`lajiu` 垃圾只覆盖 `laji`+补全、`qingpeng` 请只覆盖 `qing`+补全），并未覆盖用户输入的整串。因此这不是「有词频的词被无词频的词顶掉」，而是「不覆盖的补全词让位给覆盖整串的直读串」。
   仍成立的不变量：没有任何**已见证且拼写覆盖整串输入**的候选被词频 0 的候选压过（0 例）；没有丢失覆盖能力（0 例）。唯一例外是 `yuangshengzhi` 丢失 3 条词频 0 候选（`元公升职`/`元公生殖`/`元高升职`）、`元高升值`/`元高升至` 同频等分对调。
 - **副作用面**：全部 961 组改动里，真正属于用户报告症状（页面候选 < 10 条且无覆盖整串的候选）的只有 **102 组中的 9 组**；其余 952 组页面本来候选充足（长的多词输入由补全词领衔，改动后换成直读串）。`quality.tsv` 的 Top-1 正确率变化为 0 正 0 负。
-- **测试**：新增 `crates/ime-core/tests/unattested.rs`（9 例，6 例用小型手写词库逐条钉住约束）；新增 `crates/ime-core/tests/unattested_position.rs`，钉住「回退串不得压过已见证且拼写覆盖整串的候选」这条位置不变量。`scripts/check.sh` 全套通过。
-- **未做**：未做实机（Windows TSF / Fcitx5）验证；未 bump 版本号，发版由技术负责人合并后处理。调研结论补充见 `docs/PINYIN_MATCHING_SURVEY.md` 第七节。
+- **测试**：新增 `crates/ime-core/tests/unattested.rs`（9 例，6 例用小型手写词库逐条钉住约束）；新增 `crates/ime-core/tests/unattested_position.rs`（4 例，全部用小型手写词库，钉住「整串已见证词压制回退」与「partial 已见证词让位给全覆盖」两种位置形态，并做过负控：关掉回退时其中 2 例会失败）。`scripts/check.sh` 全套通过，`cargo test --workspace --locked --release` 160 通过 / 0 失败。
+- **发版**：`version.json` bump 到 `0.1.0-preview36`（`platforms/windows/version_generated.h` 同步生成，`packaging/arch/PKGBUILD` 与 `README.arch` 已 pin），`python3 scripts/version.py --check` 通过。合并提交 `a733876`（PR #53），CI 6/6 × 2 个 run 全绿。
+- **未做**：未做实机（Windows TSF / Fcitx5）验证——本机无法构建 TSF，Windows 侧由 PR CI 覆盖；自动化结果不等于实机兼容性验收。调研结论补充见 `docs/PINYIN_MATCHING_SURVEY.md` 第七节。
 
 ## MYS-2208 中文模式下 CapsLock 直接输入大写字母 · preview35
 
