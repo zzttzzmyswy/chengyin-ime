@@ -113,6 +113,36 @@ pub(crate) fn count_spelling(input: &str) -> Option<u8> {
     }
     (count[0] != u8::MAX).then_some(count[0])
 }
+/// Whether every byte of `input` belongs to some complete syllable sequence,
+/// explicit separators included. The decoder's character fallback uses this to
+/// tell a composition the user could have meant from a prefix of one: a half-typed
+/// syllable has no complete parse, so it must not manufacture a whole phrase.
+pub(crate) fn parses_completely(input: &str) -> bool {
+    let mut reachable = [false; crate::MAX_INPUT_BYTES + 1];
+    reachable[0] = true;
+    for at in 0..input.len() {
+        if !reachable[at] {
+            continue;
+        }
+        if input.as_bytes()[at] == b'\'' {
+            reachable[at + 1] = true;
+            continue;
+        }
+        for end in at + 1..=(at + 6).min(input.len()) {
+            if !contains(&input[at..end]) {
+                continue;
+            }
+            // A separator after the syllable belongs to it, exactly as `matches`
+            // consumes it, so `ni'hao` reaches the end past its apostrophe.
+            let next = end + usize::from(input.as_bytes().get(end) == Some(&b'\''));
+            if next <= input.len() {
+                reachable[next] = true;
+            }
+        }
+    }
+    reachable[input.len()]
+}
+
 // Profile construction only: choose a complete syllable parse, preserving
 // explicit separators. Failed parses retain the original shortcut/typo key.
 pub(crate) fn profile_spelling(key: &str) -> String {

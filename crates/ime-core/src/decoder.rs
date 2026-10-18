@@ -263,6 +263,7 @@ impl Decoder {
         context: &str,
         fast: bool,
         options: u32,
+        characters_only: bool,
     ) -> Result<bool, LookupError> {
         self.lengths.fill(0);
         self.primary_abbreviated = false;
@@ -299,6 +300,13 @@ impl Decoder {
                 continue;
             }
             d.matches(input, start, BEAM, |id, end| {
+                // The character fallback reads the input out character by
+                // character. A multi-character word would instead be a lexical
+                // claim spanning an unattested boundary, which is what the
+                // boundary rules exist to refuse.
+                if characters_only && d.entry(id).text.chars().nth(1).is_some() {
+                    return;
+                }
                 let cost = d.word_cost(id);
                 // The context bonus depends on this word and `context` only, never
                 // on the rank it is reached at, so it is hoisted out of the loop
@@ -316,14 +324,20 @@ impl Decoder {
                     };
                     let unsupported =
                         self.paths[end][rank].unsupported + u8::from(pair.unsupported);
-                    if !pair.allowed
+                    // The character fallback may join two characters with no
+                    // attested boundary: spelling out two characters is not a
+                    // lexical claim about them, and `transition` still charges
+                    // the ordinary -6.0 unattested penalty, so such a sentence
+                    // ranks below every attested one.
+                    if !(pair.allowed || characters_only)
                         || (pair.terminal_only && self.paths[end][rank].next as usize != size)
                         || (pair.exact_only
                             && (self.paths[end][rank].corrected
                                 || self.paths[end][rank].abbreviated
                                 || self.paths[end][rank].predicted))
-                        || unsupported > 1
+                        || (!characters_only && unsupported > 1)
                         || (unsupported != 0
+                            && !characters_only
                             && (self.paths[end][rank].corrected
                                 || self.paths[end][rank].abbreviated
                                 || self.paths[end][rank].predicted))
@@ -568,12 +582,46 @@ impl Decoder {
         // Protect an accurate multi-syllable lexical prefix before generating
         // locally corrected paths that replace it. Whole-word recall is separate.
         let graph_options = if exact_prefix { 0 } else { options };
-        let mut limited = self.compute(d, input, context, false, graph_options)?;
+        let mut limited = self.compute(d, input, context, false, graph_options, false)?;
         self.full_coverage = self.paths[0][..self.lengths[0] as usize]
             .iter()
             .any(|p| !p.predicted);
-        if self.lengths[0] == 0 && !input.is_empty() {
-            limited |= self.compute(d, input, context, true, graph_options)?;
+        // Recorded before the abbreviation retry: an abbreviation fills
+        // `lengths[0]` with paths covering the input as initials, which is not the
+        // same thing as a full spelling reaching it. 昂拍 typed `angpai` is that
+        // case, and it is exactly the one the character fallback must catch.
+        let no_full_parse = self.lengths[0] == 0;
+        if no_full_parse && !input.is_empty() {
+            limited |= self.compute(d, input, context, true, graph_options, false)?;
+            self.fast_ready = true;
+        }
+        // A composition the dictionary never wrote down has no graph: the rules
+        // above reject even one unattested join, so 张泽涛 typed `zhangzetao` and
+        // 昂拍 typed `angpai` reach here with nothing and the page holds only
+        // prefix words plus the first character. Fill that gap the way every other
+        // IME does — read the input out character by character — by re-running the
+        // graph over single-character edges only, with unattested joins allowed.
+        //
+        // Confined on four sides, each of which the alternatives lacked:
+        //   * it runs only when no full spelling parsed at all, so an input with a
+        //     real parse keeps its own graph and its page byte for byte;
+        //   * `parses_completely` keeps a half-typed syllable from becoming a
+        //     phrase;
+        //   * at least two syllables, because a single syllable already has its
+        //     own character lane;
+        //   * character edges only, so the retry cannot chain whole words across
+        //     unattested boundaries — the "allow any join" variants produced
+        //     garbage like 乳癌你红海鸥 for ruanhong, which this cannot express;
+        //   * the tolerant and abbreviation lanes still refuse unattested joins,
+        //     and `render` still emits one weak sentence at most, behind every
+        //     attested one, because it reads that same `unsupported` counter.
+        if no_full_parse
+            && !input.is_empty()
+            && !self.protected_word
+            && crate::syllables::count_spelling(input).is_some_and(|n| n >= 2)
+            && crate::syllables::parses_completely(input)
+        {
+            limited |= self.compute(d, input, context, true, graph_options, true)?;
             self.fast_ready = true;
         }
         limited |= self.render(d, input, 0, options);
@@ -620,7 +668,7 @@ impl Decoder {
         }
         let base = self.count;
         let graph_options = if self.exact_prefix { 0 } else { options };
-        let limited = self.compute(d, input, context, true, graph_options)?
+        let limited = self.compute(d, input, context, true, graph_options, false)?
             | self.render(d, input, base, options);
         self.fast_ready = true;
         Ok(limited)
