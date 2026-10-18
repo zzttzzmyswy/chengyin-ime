@@ -12,7 +12,7 @@
 # version text with a legal separator, and vercmp keeps it monotonic (and orders
 # every preview before a later plain 0.1.0).
 pkgname=fcitx5-chengyin
-pkgver=0.1.0.preview35
+pkgver=0.1.0.preview36
 pkgrel=1
 pkgdesc="Chengyin IME (preview) - Fcitx 5 full-pinyin input method with a bundled lexicon"
 arch=('x86_64')
