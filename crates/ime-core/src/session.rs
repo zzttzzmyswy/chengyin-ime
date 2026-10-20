@@ -1530,6 +1530,7 @@ impl Session {
                         if accurate
                             && !self.single_syllable
                             && self.profile.provisional(row, attested)
+                            && self.dictionary.composes_by_characters(&row.text, &row.key)
                         {
                             let better = self
                                 .provisional

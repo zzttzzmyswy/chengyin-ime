@@ -271,3 +271,26 @@ fn a_single_syllable_keeps_its_own_lane() {
         assert_eq!(after[1..], rest[..], "{name}");
     }
 }
+
+#[test]
+fn a_row_that_does_not_read_character_by_character_stays_off_the_page() {
+    // Only a phrase the lexicon can read out one character per syllable is the
+    // shape segment-by-segment selection produces. A word that only a detached
+    // lexicon spelled (the Fcitx library tests' 注册表 on `zhuce`) must not come
+    // back after a single use. The control row proves the record path itself
+    // reaches the page, so the absence is the composition gate's doing.
+    for (incremental, options, name) in configurations() {
+        for (text, expected) in [(PHRASE, true), ("全家桶桶", false)] {
+            let mut profile = Profile::default();
+            assert!(profile.record(RAW, text));
+            let mut reopened = session(incremental, options, Some(Arc::new(profile)));
+            input(&mut reopened, RAW);
+            let rows = page(&reopened);
+            assert_eq!(
+                rows.get(1).map(String::as_str) == Some(text),
+                expected,
+                "{name}: {text} on {rows:?}"
+            );
+        }
+    }
+}
