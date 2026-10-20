@@ -1,5 +1,19 @@
 # 项目状态
 
+## MYS-2270 阶段 2：连选组词一次即入首页第 2 位 · 待发版
+
+- **现象与根因**：连续分段选出的词库外组合（`quanjiatong` 选 `全家` + `桶` → `全家桶`）**选过 1 次后**重打同一拼音，首页**没有** `全家桶`；第 3 次选完后才出现并排第 1。`learn_commit` 早已把整串 `quanjiatong => 全家桶` 写入 profile（`PhraseBuffer`），但 `全家桶` 不在词库属「未见证」文本，`Profile::reliable` 要求 `has_repeated_evidence`（`count >= 3` 且近期命中 ≥ 3），于是第 1、2 次的证据被完全丢弃、界面上不可见。
+- **机制**：`Profile` 新增 `pub(crate) fn provisional(row, attested)`，表达「已确认、词库未见证、尚未取得重复证据」这一中间态：`!attested && count >= 1 && 近期命中 >= 1 && !has_repeated_evidence`，并且与 `reliable` 共用同一条质量地板（`survives_recent_misses`：`trials >= 8` 且命中不足三分之一即淘汰，原判断原样提取为自由函数，`reliable` 语义零变化）。`refresh` 的 profile 扫描在「`reliable` 不通过」时不再直接丢弃，而是挑出 `(count, sequence)` 最大的 1 条记为 `Session::provisional`；页面取完并 `rank_first_results()` 之后由 `insert_provisional()` 插到**第 2 位**（若原本没有候选则第 1 位）。因此可靠条目的既有位置、既有排序一律不动，首页变化形态是「插入一条、其余顺序不变」。
+- **偏差一 · `hits >= 1` 的必要性**：v1 遗留行只有累计次数、没有近期命中证据，若把 `count` 当「已确认」就会让老词库里的未见证行整体复活——实测会直接打破 `photo_quality.rs` 的 `legacy_pairs_cannot_promote_through_typo_recall`（v1 行 `paizhao => 拍找` 挤进首页）。同理，命中已被 epoch 衰减归零的行也继续不出，与既有「衰减后须重新积累命中」的规则一致。
+- **偏差二 · 只认精确匹配**：暂定条目只考虑 `accurate`（行 key 与当前输入完全相同）的行。任务卡写的是「暂定学习条目」，未限定匹配方式；若把模糊/纠错召回的行走同一条通道，用户为**另一个拼音**做过的一次确认会被搬到眼前这个拼音的首页——实测 `quality.rs` 的 `lizi` 用例里，为 `nizi` 记录过一次的 `拟字` 借 n/l 规则跳到 `lizi` 首页第 2 位。普通模糊召回（走 `exact_history`/`recalled_history` 的既有通道）不受影响。
+- **偏差三 · 须逐字可读（合并前由技术负责人补）**：暂定条目还要求 `Dictionary::composes_by_characters(text, key)` 为真——每个字都能在词库里作为单字、按顺序对应 key 的一个音节读出。连续分段选出的组合天然满足；只由**已移除的附加词库**拼出的词（Fcitx `test_dictionary_library` 里 `zhuce => 注册表`）不满足。缺这道闸时，附加词库里的词被用过一次后，词库移除了它仍出现在第 2 位，PR CI 的 Fcitx 5 `fcitx5-dictionary-library` 7 条断言失败（B.3/C.10/F.9/F.10/F.13/G.8/G.11）；加闸后本机 Fcitx CTest 10/10 通过。
+- **适用范围**：暂定条目在 `matching_options` 为 0 与非 0、增量与非增量四种组合下都生效（同一段代码）；单音节（`single_syllable`）不参与——单字车道本就是「一次命中即领衔」，无需暂定位。多条候选时取 `(count, sequence)` 最大者。
+- **缓存一致性**：`profile_cache::HistorySelection` 增加 `provisional: Option<u32>`，命中缓存时与未命中走同一份暂定判定，`cargo test --test history_cache` 通过。Profile 二进制格式未改，`to_binary` 前后逐字节相同。
+- **质量门禁零回退**：`quality_report` 默认与 `--incremental` 两种模式，`main@002fab7` 与本分支各 72 行汇总输出（580 条语料）逐行逐字段完全相同（Top-1 92.4%、Top-9 98.8%、可达 99.7%），仅首行 `load=` 墙钟时间不同。Top-1 正确率未下降。
+- **首页变化形态**（逐行对照，580 条语料 × 两种模式）：非 learn 类别（`fuzzy`/`homophone`/`initials`/`long_sentence`/`prefix`/`single_char`/`typo`/`whole_word`/`alias`/`learn`）**逐字相同**；`learning` 类别共 **20 行**变化，两种模式各 20 行、集合相同。每一行的形态都是「Top-1 不变、第 2 位插入一条此前不在首页的未见证文本、其余顺序不变、第 9 位被挤出首页」，20 行全部符合，0 例例外。这 20 行正是 `quality.tsv` 里构造的「一次选词即应上首页」负例（`ln;reject_one_off`），此前它们的期望文本只能靠词库里的同音词命中，现在未见证的误选文本按设计出现在第 2 位——但**期望文本仍是 Top-1**，因此该类别各项指标不变。
+- **测试**：新增 `crates/ime-core/tests/provisional_phrase.rs`（7 例，每例覆盖 incremental × matching 四种组合，使用 `data/daily.mswydict`）：一轮后 `全家桶` 到第 2 位且 `全家童` 仍第 1；未学习时首页无 `全家桶`；第 2 轮仍第 2 位；第 3 轮提升到第 1 位（与改动前一致）；已见证词 `quanjia => 劝架` 选 1 次后的位置与 `main` 实测一致；单音节车道不受影响；无法逐字读出的未见证行（`全家桶桶`）选过 1 次也不出现，对照行 `全家桶` 出现在第 2 位。负控：在 `main@002fab7` 上同一文件为 3 通过 / 3 失败（三条关于暂定条目的用例全部失败）。`crates/ime-core/tests/quality.rs` 的 `word_and_character_pipelines_have_separate_history_and_accuracy_tiers` 两处断言随新语义更新：原先要求「只选过一次的未见证行 `利兹` 必须不出现」，该夹具词库没有 `兹`，`利兹` 无法逐字读出，因此仍不出现（与改动前一致），断言改为 `例子`、`李子` 领衔且 `利兹` 不在页面；保留「为 `nizi` 确认的 `拟字` 不得出现在 `lizi` 首页」这条更强的断言。其余断言与 `data/eval/first_page.txt` 未动。
+- **未做**：未在 Fcitx 5 / Windows 实机验证；自动化结果不等于实机兼容性验收。未发版——按设计两阶段合并后统一发 preview37。
+
 ## MYS-2270 阶段 1：非增量模式补齐前缀候选车道 · 待发版
 
 - **现象与根因**：非增量（legacy）模式是 Fcitx 5 现行路径，多音节输入只给整句/整词，缺少二字/单字前缀候选。实测 `data/daily.mswydict`：`quanjiatong` 在非增量 + 任一模糊音/纠错开启时首页只有 `全家童`；`nihaoma` 在非增量下（选项全关亦然）只有 `你好吗`。根因在 `crates/ime-core/src/session.rs`：`prefix_ends` 的收集（原 `:1338`）、普通车道 phase 3（原 `:751`）、匹配车道 phase 13（原 `:1157`）都被 `self.incremental` 门控；非增量改走 `Decoder::decode` 填的 `segments`，而该函数在 `options != 0` 时提前返回（`decoder.rs`），`nihaoma` 这类有整词的输入又被 `decoder.count > 0 || !lexical_matches` 挡掉。

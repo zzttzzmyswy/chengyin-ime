@@ -996,6 +996,43 @@ impl Dictionary {
                 crate::fuzzy::complete_annotations(input, self.entry(id).pinyin, flags).is_some()
             })
     }
+    /// Whether `text` reads character by character along `key`: each character is
+    /// attested as a single character on its own syllable span. A phrase built by
+    /// selecting segments in a row (全家+桶 on `quanjiatong`) always has this shape;
+    /// a word that only a since-detached lexicon spelled does not.
+    pub(crate) fn composes_by_characters(&self, text: &str, key: &str) -> bool {
+        if key.len() >= 64 {
+            return false;
+        }
+        let mut reachable = 1u64;
+        let mut buffer = [0u8; 4];
+        for c in text.chars() {
+            let character = c.encode_utf8(&mut buffer);
+            let mut next = 0u64;
+            for start in 0..key.len() {
+                if reachable & (1 << start) == 0 {
+                    continue;
+                }
+                let start = if key.as_bytes()[start] == b'\'' {
+                    start + 1
+                } else {
+                    start
+                };
+                for end in start + 1..=(start + 6).min(key.len()) {
+                    let syllable = &key[start..end];
+                    if crate::syllables::contains(syllable) && self.attests(character, syllable, 0)
+                    {
+                        next |= 1 << end;
+                    }
+                }
+            }
+            if next == 0 {
+                return false;
+            }
+            reachable = next;
+        }
+        reachable & (1 << key.len()) != 0
+    }
     /// A lexical witness must cross the boundary, not merely occur on one side.
     pub(crate) fn attests_boundary(&self, left: &str, right: &str) -> bool {
         // Every probe below joins a suffix of `left` to a prefix of `right`, so the

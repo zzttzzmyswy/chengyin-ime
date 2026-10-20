@@ -378,12 +378,17 @@ fn word_and_character_pipelines_have_separate_history_and_accuracy_tiers() {
         }
         session.process(Key::PageDown, Modifiers::default());
     }
-    assert_eq!(&rows[..3], ["例子", "李子", "栗子"]);
+    // Two promotions per tier still hold. The row typed once (`利兹`, key `lizi`)
+    // lacks repeated evidence, and this lexicon cannot read it character by
+    // character (no 兹), so MYS-2270's provisional slot does not offer it either.
+    assert_eq!(&rows[..2], ["例子", "李子"]);
     assert!(
-        !rows
-            .iter()
-            .any(|text| ["利兹", "拟字"].contains(&text.as_str())),
-        "only two promotions from each history tier"
+        !rows.iter().any(|text| text == "利兹"),
+        "an unattested row that does not compose by characters stays off: {rows:?}"
+    );
+    assert!(
+        !rows.iter().any(|text| text == "拟字"),
+        "a row confirmed for another spelling (n/l recall) is not offered here: {rows:?}"
     );
     let at = |text: &str| rows.iter().position(|row| row == text).unwrap();
     // Prefix characters stay out of whole-word *recall* (the history tiers above),

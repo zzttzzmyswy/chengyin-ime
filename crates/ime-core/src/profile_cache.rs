@@ -6,6 +6,10 @@ pub(crate) struct HistorySelection {
     pub recalled: [u32; 4],
     pub exact_count: [u8; 2],
     pub recalled_count: [u8; 2],
+    /// The composition's one provisional row, as a profile row index, so a cached
+    /// query answers with the same page an uncached one does. `None` when no row
+    /// qualifies.
+    pub provisional: Option<u32>,
 }
 
 #[cfg(test)]
