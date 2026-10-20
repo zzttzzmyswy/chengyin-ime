@@ -388,17 +388,20 @@ fn word_and_character_pipelines_have_separate_history_and_accuracy_tiers() {
     let at = |text: &str| rows.iter().position(|row| row == text).unwrap();
     // Prefix characters stay out of whole-word *recall* (the history tiers above),
     // but the prefix lane offers them after every whole-input candidate — the same
-    // lane the incremental adapter has always read (MYS-2270 stage 1).
-    let words_end = rows
+    // lane the incremental adapter has always read (MYS-2270 stage 1). Pin the order
+    // against fixed words rather than against "the first prefix character": a page
+    // that moved 黎/梨/… to the top would otherwise still satisfy a self-referential
+    // bound.
+    let first_exact_char = rows
         .iter()
         .position(|row| exact_chars.contains(&row.as_str()))
-        .unwrap_or(rows.len());
-    assert!(
-        rows[..words_end]
-            .iter()
-            .all(|row| !exact_chars.contains(&row.as_str())),
-        "prefix characters must not precede whole words: {rows:?}"
-    );
+        .unwrap_or_else(|| panic!("prefix characters missing from {rows:?}"));
+    for word in ["例子", "李子", "栗子", "妮子", "逆子", "腻子"] {
+        assert!(
+            at(word) < first_exact_char,
+            "{word} must precede the prefix characters: {rows:?}"
+        );
+    }
     assert!(at("妮子") < at("逆子") && at("逆子") < at("腻子"));
     assert!(!rows.iter().any(|r| ["你", "尼"].contains(&r.as_str())));
     assert_eq!(

@@ -87,37 +87,47 @@ fn nihaoma_first_page_reaches_phrase_prefixes() {
     }
 }
 
-/// The legacy adapter stages a prefix selection: the chosen word is held in the
-/// preedit with the rest of the spelling behind it, and nothing is committed until
-/// the composition finishes. Incremental mode commits immediately instead — that
-/// interaction is deliberately unchanged, so the two are asserted separately.
+/// The two adapters stage a prefix selection differently, and neither is changed
+/// here. The legacy adapter stages: the chosen word is held in the preedit with the
+/// rest of the spelling behind it, and nothing is committed until the composition
+/// finishes. The incremental adapter commits the chosen word at once and leaves only
+/// the remainder in the preedit. Both are asserted, under all four configurations,
+/// because the page itself must be the same either way.
 #[test]
-fn legacy_prefix_selection_stages_and_resumes() {
-    for options in [0, OPTIONS_MASK] {
-        let mut session = session(false, options);
+fn prefix_selection_stages_in_legacy_and_commits_in_incremental() {
+    for (incremental, options, name) in configurations() {
+        let mut session = session(incremental, options);
         input(&mut session, "quanjiatong");
         let index = page(&session)
             .iter()
             .position(|w| w == "全家")
-            .unwrap_or_else(|| panic!("全家 missing from {:?}", page(&session)));
+            .unwrap_or_else(|| panic!("{name}: 全家 missing from {:?}", page(&session)));
         assert!(
             session
                 .process(Key::Select(index), Modifiers::default())
                 .handled
         );
-        assert_eq!(session.preedit(), "全家tong", "options={options}");
-        assert_eq!(session.commit(), "", "options={options}");
         let rest = page(&session);
-        assert!(
-            rest.iter().any(|w| w == "桶"),
-            "options={options}: {rest:?}"
-        );
+        assert!(rest.iter().any(|w| w == "桶"), "{name}: {rest:?}");
         let barrel = rest.iter().position(|w| w == "桶").unwrap();
-        assert!(
-            session
-                .process(Key::Select(barrel), Modifiers::default())
-                .handled
-        );
-        assert_eq!(session.commit(), "全家桶", "options={options}");
+        if incremental {
+            assert_eq!(session.preedit(), "tong", "{name}");
+            assert_eq!(session.commit(), "全家", "{name}");
+            assert!(
+                session
+                    .process(Key::Select(barrel), Modifiers::default())
+                    .handled
+            );
+            assert_eq!(session.commit(), "桶", "{name}");
+        } else {
+            assert_eq!(session.preedit(), "全家tong", "{name}");
+            assert_eq!(session.commit(), "", "{name}");
+            assert!(
+                session
+                    .process(Key::Select(barrel), Modifiers::default())
+                    .handled
+            );
+            assert_eq!(session.commit(), "全家桶", "{name}");
+        }
     }
 }
