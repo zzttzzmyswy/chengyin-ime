@@ -771,6 +771,8 @@ impl Session {
                         continue;
                     }
                     // Segmentation is useful for continuous input with a complete decode.
+                    // The legacy page keeps these first: they are what it showed before
+                    // the prefix lane reached this adapter, so the page only grows.
                     if (self.decoder.count > 0 || !self.lexical_matches)
                         && self.segment_index < self.decoder.segment_count
                     {
@@ -852,10 +854,23 @@ impl Session {
                     }
                     Err(_) => {
                         self.budget_limited = true;
+                        self.phase = 19;
+                    }
+                    Ok(None) => self.phase = 19,
+                },
+                // The legacy adapter's prefix lane runs last, after its own
+                // whole-input candidates are exhausted, so its page can only grow.
+                // `next_prefix` drains `prefix_ends`, so the next pass finds the
+                // guard false and finishes the pipeline.
+                19 => {
+                    if !self.prefix_lane_after_legacy() {
                         return None;
                     }
-                    Ok(None) => return None,
-                },
+                    if let Some(prefix) = self.next_prefix() {
+                        return Some(prefix);
+                    }
+                    self.phase = 0;
+                }
                 _ => return None,
             }
         }
@@ -1015,6 +1030,12 @@ impl Session {
             }
         }
     }
+    /// The legacy adapter reads the prefix lane only in its final phase (19), and
+    /// only when `refresh` collected prefix ends for it: the incremental adapter
+    /// already drained the lane in phases 3 and 13.
+    fn prefix_lane_after_legacy(&self) -> bool {
+        !self.incremental && (self.prefix_ends != 0 || self.prefix_end != 0)
+    }
     fn completion_in_line(&self, id: u32) -> bool {
         if !self.word_line && !self.character_line {
             return true;
@@ -1154,6 +1175,8 @@ impl Session {
                     self.phase = 13;
                 }
                 13 => {
+                    // The incremental adapter reads the lane here; the legacy one
+                    // reads it in phase 19 so its own candidates keep their order.
                     if self.incremental {
                         if let Some(prefix) = self.next_prefix() {
                             return Some(prefix);
@@ -1250,10 +1273,13 @@ impl Session {
                     Ok(Some(_)) => (),
                     Err(_) => {
                         self.budget_limited = true;
-                        return None;
+                        self.phase = 19;
                     }
-                    Ok(None) => return None,
+                    Ok(None) => self.phase = 19,
                 },
+                // The legacy adapter's prefix lane runs last, after its own
+                // whole-input candidates are exhausted, so its page only grows.
+                19 => return self.next_prefix(),
                 _ => return None,
             }
         }
@@ -1335,13 +1361,18 @@ impl Session {
         let complete = crate::syllables::count_spelling(input).is_some_and(|n| n >= 3);
         let mut exact_prefix = false;
         let mut prefix_limited = false;
-        if self.initials_count == 0 && self.incremental && !self.single_syllable {
+        // Both adapters read the same prefix lane. Only `exact_prefix` stays
+        // incremental: it rewrites the decoder's sentence graph (`graph_options`),
+        // which would move the whole-input candidates the legacy page is pinned
+        // against.
+        if self.initials_count == 0 && !self.single_syllable {
             prefix_limited = self
                 .dictionary
                 .matches(input, 0, 1, |id, end| {
                     if end < input.len() {
                         self.prefix_ends |= 1u64 << end;
-                        exact_prefix |= complete
+                        exact_prefix |= self.incremental
+                            && complete
                             && self.dictionary.entry(id).pinyin.contains('\'')
                             && self.dictionary.entry(id).text.chars().nth(1).is_some()
                             && crate::syllables::count_spelling(&input[end..]).is_some();
@@ -1745,8 +1776,15 @@ impl Session {
                     - self.dictionary.context_bonus(context, word.text)
                     - recent
             };
-            let single = if self.incremental && r.consumed() < (self.raw.len() - self.offset) as u8
-            {
+            // A result shorter than the typed spelling is a prefix-lane entry, and
+            // both adapters defer that lane behind every candidate covering the whole
+            // input — which is what makes the legacy page's change an append rather
+            // than a reorder. Without matching rules the legacy adapter also filled
+            // `consumed < len` from the decoder's segments, which sat in that order
+            // before the prefix lane reached it; those keep their place, so the
+            // deferral applies there only to the incremental adapter, as before.
+            let defer_prefix = self.incremental || self.matching_options != 0;
+            let single = if defer_prefix && r.consumed() < (self.raw.len() - self.offset) as u8 {
                 2
             } else if self.matching_options == 0 && !self.single_syllable {
                 0

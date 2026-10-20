@@ -1,5 +1,15 @@
 # 项目状态
 
+## MYS-2270 阶段 1：非增量模式补齐前缀候选车道 · 待发版
+
+- **现象与根因**：非增量（legacy）模式是 Fcitx 5 现行路径，多音节输入只给整句/整词，缺少二字/单字前缀候选。实测 `data/daily.mswydict`：`quanjiatong` 在非增量 + 任一模糊音/纠错开启时首页只有 `全家童`；`nihaoma` 在非增量下（选项全关亦然）只有 `你好吗`。根因在 `crates/ime-core/src/session.rs`：`prefix_ends` 的收集（原 `:1338`）、普通车道 phase 3（原 `:751`）、匹配车道 phase 13（原 `:1157`）都被 `self.incremental` 门控；非增量改走 `Decoder::decode` 填的 `segments`，而该函数在 `options != 0` 时提前返回（`decoder.rs`），`nihaoma` 这类有整词的输入又被 `decoder.count > 0 || !lexical_matches` 挡掉。
+- **机制**：两种模式共用同一条 `next_prefix()` 前缀车道。`prefix_ends` 在两种模式下都收集；增量模式照旧在普通车道 phase 3 与匹配车道 phase 13 读它，非增量模式改在**两条车道的最后一个 phase（19）**读——即整句、整词、字符、补全全部出完之后。这样非增量页面只会「追加」，不会因为前缀候选提前插入而挤掉它原有的候选（实测若插在 phase 3，无模糊音格的 1,199 个首页会丢词）。`exact_prefix` 保持仅增量计算：它会改写 `decoder.decode` 的整句图（`graph_options`）并触发 phase 13 的提前前缀逻辑，非增量下必须为 `false`，整句/整词候选才与改动前逐字相同。选中前缀后的交互语义不变：非增量仍是「暂存、可回退」（选 `全家` 后 preedit 为 `全家tong`、`commit()` 为空、剩余部分继续出候选）；增量模式行为不变。
+- **排序（与设计的偏差之一）**：`rank_first_results` 里「前缀类候选让位给覆盖整串输入的候选」这条规则原先以 `self.incremental` 为前置条件。前缀车道对非增量生效后，若不加这条前置，非增量 + 全规则下 `全家童` 会被 `全家` 挤到第 6 位（`全家童` 是模糊匹配出的整句，`unsupported_join=1`，排序键先比 origin class 再比该标志）。因此把前置条件改为「`incremental || matching_options != 0`」：与旧的 `incremental` 相比只多覆盖「非增量 + 有模糊音」这一格，其余三格是恒等变换。**不能**只按「`consumed() < 整串长度`」判定——无模糊音时非增量的旧 `segments` 补全词同样短于整串，那样会把 293 个原本就有的补全词挪位（实测）。
+- **质量门禁零回退**：`quality_report` 默认与 `--incremental` 两种模式，`main@330e234` 与本分支的 580 行输出逐行逐字段完全相同（Top-1 92.4%、Top-9 98.8%、可达 99.7%），仅首行 `load=` 墙钟时间不同。
+- **非增量首页变化形态**：`crates/ime-core/examples/legacy_first_page_diff.rs` 对 `data/eval/quality.tsv` + `data/eval/prefix.tsv` 全部输入、非增量 × matching ∈ {0, 全掩码} 各取首页 9 条，比对 `main@330e234` 与本分支（2,580 输入 × 2 配置 = 5,160 组）：**Top-1 改变 0 组、重排 0 组**。no-rules 1,821 组完全相同 / 707 组仅追加；all-rules 502 组完全相同 / 1,075 组仅追加 / 951 组「由空到有」（该格原首页为空——`Decoder::decode` 在 `options != 0` 时直接返回，整句也未解码成功——新页面的每条都是新增）。
+- **测试**：新增 `crates/ime-core/tests/prefix_lane_legacy.rs`（3 例，`quanjiatong`/`nihaoma` 的首条与首页归属、非增量分段选择后 `全家tong` → `全家桶`；前两例各覆盖 incremental×matching 四种组合）。负控：在 `main@330e234` 上跑同一文件为 0 通过 / 3 失败。`crates/ime-core/tests/quality.rs` 两处断言随新语义更新（前缀字符可以出现在整词候选**之后**、整串候选仍须是已见证词），其余断言未动。增量模式首页基线 `data/eval/first_page.txt`（5,160 行摘要）零变化。
+- **未做**：未做 Fcitx 5 实机验证；自动化结果不等于实机兼容性验收。连选组词记忆（同一组合需选满 3 次才上首页）属阶段 2，本阶段未改 `profile.rs`。
+
 ## MYS-2223 词库外组合的字符回退 · preview36
 
 - **现象与根因**：词库完全没有写下的组合（典型是生僻人名）此前没有任何候选覆盖整串输入。句图对每个词边界查 `transition`，两侧都是单字又无搭配证据时 `Pair.allowed == false`，路径被跳过；即便放行，`unsupported > 1` 也会剪掉第二个未见证边界。于是「张|泽|涛」三段全无见证时 `lengths[0] == 0`，首页只剩前缀词与首字。实测 `zhangzetao` 改动前首页为 漳州/长子/张嘴…，无任何三字候选。
