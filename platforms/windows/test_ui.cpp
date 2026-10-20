@@ -627,8 +627,14 @@ int wmain(int argc, wchar_t **argv) {
     require(chengyin_session_text(session, CHENGYIN_TEXT_CANDIDATE, 0, firstRegex, sizeof(firstRegex)) > 0
         && std::strcmp(reinterpret_cast<const char *>(firstRegex), "正则表达式") == 0,
         "technical term wins despite one wrong historical selection");
-    require(chengyin_session_candidate_count(session) > 1, "complete term plus manual prefix choices");
-    for (size_t i = 1; i < chengyin_session_candidate_count(session); ++i)
+    require(chengyin_session_candidate_count(session) > 2, "complete term plus manual prefix choices");
+    // MYS-2270: a phrase selected once is offered behind the leader, never ahead of it.
+    uint8_t secondRegex[257]{};
+    require(chengyin_session_text(session, CHENGYIN_TEXT_CANDIDATE, 1, secondRegex, sizeof(secondRegex)) > 0
+        && std::strcmp(reinterpret_cast<const char *>(secondRegex), wrongRegex) == 0
+        && chengyin_session_candidate_consumed(session, 1) == static_cast<int>(sizeof(regexRaw) - 1),
+        "one-off history phrase sits second, behind the technical term");
+    for (size_t i = 2; i < chengyin_session_candidate_count(session); ++i)
         require(chengyin_session_candidate_consumed(session, i) < static_cast<int>(sizeof(regexRaw) - 1),
                 "extra regex choices consume only an initial dictionary prefix");
     {
