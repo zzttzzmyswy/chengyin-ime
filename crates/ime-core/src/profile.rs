@@ -99,6 +99,52 @@ mod tests {
         assert!(Profile::from_binary(&invalid).is_none());
     }
     #[test]
+    fn provisional_covers_exactly_the_confirmed_unrepeated_unwitnessed_row() {
+        let mut p = Profile::default();
+        p.record("quanjiatong", "全家桶");
+        let row = &p.rows[0];
+        // One confirmation, no lexicon witness, no repetition: the state stage 2
+        // offers behind the leader.
+        assert!(p.provisional(row, false));
+        // A witnessed row is `reliable` instead; the two answers never overlap.
+        assert!(!p.provisional(row, true));
+        assert!(p.reliable(row, true));
+        // Repeating it three times hands it to `reliable`, and the provisional
+        // answer retires rather than offering the row twice.
+        for _ in 0..2 {
+            p.record("quanjiatong", "全家桶");
+        }
+        let row = &p.rows[0];
+        assert!(p.reliable(row, false) && !p.provisional(row, false));
+        // A v1 row has lifetime counts but no recent hit, so it is neither: the
+        // legacy bands must not be revived by this change.
+        let mut legacy = b"MSWYUSR1".to_vec();
+        for n in [1u32, 1, 0] {
+            legacy.extend_from_slice(&n.to_le_bytes());
+        }
+        legacy.extend_from_slice(&3u16.to_le_bytes());
+        legacy.extend_from_slice(&3u16.to_le_bytes());
+        for n in [9u32, 1] {
+            legacy.extend_from_slice(&n.to_le_bytes());
+        }
+        legacy.extend_from_slice("shi是".as_bytes());
+        let crc = crate::dictionary::crc32(&legacy[20..]);
+        legacy[16..20].copy_from_slice(&crc.to_le_bytes());
+        let legacy = Profile::from_binary(&legacy).unwrap();
+        assert!(!legacy.provisional(&legacy.rows[0], false));
+        // A row the profile has learnt to distrust is offered by neither, however
+        // often it was confirmed: 8 opportunities with a single hit is below the
+        // floor both answers share.
+        let mut poor = Profile::default();
+        poor.record("shi", "是");
+        for _ in 0..7 {
+            poor.record_selection("shi", "试", 0);
+        }
+        let row = &poor.rows[0];
+        assert!(!poor.provisional(row, false), "trials={} ", row.trials);
+        assert!(!poor.reliable(row, false));
+    }
+    #[test]
     fn maximum_strings_at_8192_records_round_trip_above_old_byte_limit() {
         let mut p = Profile::default();
         let key = "shi".repeat(21);
@@ -149,6 +195,12 @@ impl Preference {
         self.epoch = sequence / 256;
     }
 }
+/// The quality floor every offered learned row passes, `reliable` and
+/// `provisional` alike: once a row has been offered enough times (`trials >= 8`),
+/// under a third of those opportunities being confirmed drops it.
+fn survives_recent_misses(hits: u16, trials: u16) -> bool {
+    !(trials >= 8 && (u32::from(hits) + 1) * 2 < u32::from(trials) + 2)
+}
 impl Profile {
     /// Lifetime counts from v1 cannot establish the quality of unattested text:
     /// they may include the old decoder's unsupported character combinations.
@@ -160,8 +212,31 @@ impl Profile {
     /// legacy habits stay usable; sufficiently observed poor habits lose promotion.
     pub(crate) fn reliable(&self, row: &Preference, attested: bool) -> bool {
         let (hits, trials) = row.recent(self.sequence);
-        (attested || self.has_repeated_evidence(row))
-            && !(trials >= 8 && (u32::from(hits) + 1) * 2 < u32::from(trials) + 2)
+        (attested || self.has_repeated_evidence(row)) && survives_recent_misses(hits, trials)
+    }
+
+    /// A row the user has confirmed but that no lexicon attests and that has not
+    /// yet accumulated repeated evidence. `reliable` keeps it off the page, so a
+    /// single wrong pick cannot take the first slot; a word built by selecting two
+    /// segments in a row (`quanjia`+`tong` => 全家桶) is exactly such a row, and it
+    /// would otherwise take three rounds to reappear at all.
+    ///
+    /// `hits >= 1` is what makes "confirmed" mean *recently*: a v1 legacy row
+    /// carries lifetime counts and no recent evidence, and a row whose few
+    /// confirmations have since decayed carries none either. Both stay off the page
+    /// until a new selection renews them, which is the rule the unattested-decay
+    /// tests pin.
+    ///
+    /// `reliable` and `provisional` are disjoint by construction, and the quality
+    /// floor below applies to both, so a row the profile has learnt to distrust is
+    /// offered by neither.
+    pub(crate) fn provisional(&self, row: &Preference, attested: bool) -> bool {
+        let (hits, trials) = row.recent(self.sequence);
+        !attested
+            && row.count >= 1
+            && hits >= 1
+            && !self.has_repeated_evidence(row)
+            && survives_recent_misses(hits, trials)
     }
     pub fn entry_count(&self) -> usize {
         self.rows.len()

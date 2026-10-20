@@ -197,6 +197,11 @@ pub struct Session {
     recalled_history: [u32; 4],
     recalled_count: [usize; 2],
     recalled_index: usize,
+    /// The one unattested-but-confirmed learned row this composition offers, as a
+    /// profile row index. It is deliberately *not* part of `exact_history`: without
+    /// repeated evidence it never competes for the leading slot, it is placed
+    /// behind the leader once the page is ranked.
+    provisional: Option<u32>,
     word_line: bool,
     character_line: bool,
     initials_index: u32,
@@ -298,6 +303,7 @@ impl Session {
             recalled_history: [0; 4],
             recalled_count: [0; 2],
             recalled_index: 0,
+            provisional: None,
             word_line: false,
             character_line: false,
             initials_index: 0,
@@ -1425,6 +1431,7 @@ impl Session {
         self.word_line = false;
         self.character_line = false;
         self.recalled_index = 0;
+        self.provisional = None;
 
         self.exhausted = self.raw.len() == self.offset;
         if self.learning_enabled {
@@ -1444,6 +1451,7 @@ impl Session {
                 self.recalled_history = cached.recalled;
                 self.exact_count = cached.exact_count.map(usize::from);
                 self.recalled_count = cached.recalled_count.map(usize::from);
+                self.provisional = cached.provisional;
             } else {
                 let mut exact = [[(0usize, 0u32, 0u32); 2]; 2];
                 let mut recalled = exact;
@@ -1497,13 +1505,43 @@ impl Session {
                     {
                         continue;
                     }
-                    if !self.profile.reliable(
-                        row,
-                        !self.profile.has_repeated_evidence(row)
-                            && self
-                                .dictionary
-                                .attests(&row.text, &row.key, self.matching_options),
-                    ) {
+                    // Only a row that already has repeated evidence can skip the
+                    // lexicon probe: `reliable` accepts such a row regardless, so the
+                    // probe's answer cannot change the outcome. Every other row needs
+                    // it, and the two answers below are read from the same result.
+                    let repeated = self.profile.has_repeated_evidence(row);
+                    let attested = repeated
+                        || self
+                            .dictionary
+                            .attests(&row.text, &row.key, self.matching_options);
+                    if !self.profile.reliable(row, attested && !repeated) {
+                        // A confirmed row the lexicon does not witness is offered
+                        // as soon as it has any evidence, instead of waiting for
+                        // the repetition `reliable` demands. It never leads; see
+                        // where `provisional` is placed after ranking. At most one
+                        // per composition, the best-evidenced one.
+                        //
+                        // Only an *accurate* row qualifies: the user must have
+                        // typed this spelling and picked this text. A row reached
+                        // through a correction was typed as something else, so its
+                        // single confirmation says nothing about this reading — the
+                        // n/l rule would otherwise put 拟字 (recorded for `nizi`)
+                        // behind the leader of `lizi`. Ordinary recall is unchanged.
+                        if accurate
+                            && !self.single_syllable
+                            && self.profile.provisional(row, attested)
+                        {
+                            let better = self
+                                .provisional
+                                .map(|best| {
+                                    let best = &self.profile.rows[best as usize];
+                                    (row.count, row.sequence) > (best.count, best.sequence)
+                                })
+                                .unwrap_or(true);
+                            if better {
+                                self.provisional = Some(id as u32);
+                            }
+                        }
                         continue;
                     }
                     let lane = usize::from(row.text.chars().nth(1).is_none());
@@ -1558,6 +1596,7 @@ impl Session {
                         recalled: self.recalled_history,
                         exact_count: self.exact_count.map(|n| n as u8),
                         recalled_count: self.recalled_count.map(|n| n as u8),
+                        provisional: self.provisional,
                     },
                 );
             }
@@ -1591,7 +1630,40 @@ impl Session {
         if !self.context.is_empty() || self.recent_len > 0 || self.matching_options != 0 {
             self.rank_first_results();
         }
+        self.insert_provisional();
         self.update_preedit();
+    }
+    /// Put the composition's one provisional learned row directly behind the
+    /// leader, so it is visible on the first page while it still has too little
+    /// evidence to take the leading slot. Everything else keeps its order, which is
+    /// what makes the page change an insertion rather than a reorder.
+    ///
+    /// The page is never made longer: filling stops one candidate past the first
+    /// page, so the tail this displaces is a candidate that was not visible
+    /// anyway. The one case skipped is a row already on the page — the same
+    /// `spelling => text` pair can be reached by several keys, and offering it
+    /// twice would clutter the page for no gain.
+    fn insert_provisional(&mut self) {
+        let Some(id) = self.provisional else {
+            return;
+        };
+        let item = ResultRef::new(
+            LEARNED | id,
+            (self.raw.len() - self.offset) as u8,
+            false,
+            false,
+            EXACT_HISTORY,
+        );
+        let text = self.result_candidate(item).text;
+        if self
+            .results
+            .iter()
+            .any(|&old| self.result_candidate(old).text == text)
+        {
+            return;
+        }
+        let at = self.results.len().min(1);
+        self.results.insert(at, item);
     }
     /// Apply preferences only outside an active composition. Profiles are shared
     /// immutable snapshots; disk I/O belongs to the platform adapter.
